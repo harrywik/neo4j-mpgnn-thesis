@@ -2,3 +2,27 @@ InMemoryGNNExample/__pycache__/
 InMemoryGNNExample/data/
 data/
 __pycache__/
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Build/dist folders
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# Virtual Env
+.venv/
+
