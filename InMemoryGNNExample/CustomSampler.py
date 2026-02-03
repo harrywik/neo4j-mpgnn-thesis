@@ -12,7 +12,7 @@ class InMemorySampler(BaseSampler):
         self.layout = layout
         self.undirected = undirected
 
-    def sample_from_nodes(self, index: NodeSamplerInput, k_hops: List[int] = [10, 5]) -> SamplerOutput:
+    def sample_from_nodes(self, index: NodeSamplerInput, k_hops: List[int] = [10]) -> SamplerOutput:
         seeds: Tensor = index.node.to(torch.long)  # global node ids
         seed_time = getattr(index, "time", None)  # may be None for non-temporal data
 

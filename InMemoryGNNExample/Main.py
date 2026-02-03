@@ -1,3 +1,4 @@
+import sys
 from torch_geometric.datasets import Planetoid
 from torch_geometric.transforms import NormalizeFeatures
 import torch.nn as nn
@@ -12,6 +13,7 @@ from CustomSampler import InMemorySampler
 from torch_geometric.utils import mask_to_index
 from torch_geometric.sampler import NodeSamplerInput
 from torch_geometric.utils import subgraph
+import time
 
 def main():
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
@@ -48,21 +50,25 @@ def main():
     test_mask = graph.test_mask
     val_mask = graph.val_mask
     targets = graph.y
+    number_workers = 1
 
     model.train()
-
+    training_time_start = time.time()
     for epoch in range(300):
-        seed_nodes = torch.nonzero(train_mask, as_tuple=False).view(-1)
-
-        batches = NodeLoader(
+        seed_nodes = torch.nonzero(train_mask, as_tuple=False).view(-1) 
+        
+        batches = NodeLoader(   # At construction time, NodeLoader does not fetch features/edges
             data=(fstore, gstore),
             node_sampler=sampler,
             input_nodes=seed_nodes,
-            batch_size=10,
+            batch_size=500,
             shuffle=True,
+            # num_workers=number_workers,            # <-- parallel workers
+            # persistent_workers=True,  # <-- keep workers alive across epochs
+            # prefetch_factor=2,        # <-- batches prefetched per worker (PyTorch)
         )
-
-        for step, batch in enumerate(batches):
+        
+        for step, batch in enumerate(batches): # PyTorch’s DataLoader picks 10 integers from range(len(seed_nodes)) (shuffled)
             optimizer.zero_grad()
 
             edge_index_sub = batch.edge_index              # [2, E_sub]
@@ -81,6 +87,7 @@ def main():
 
             loss.backward()
             optimizer.step()
+    training_duration = time.time() - training_time_start
 
 
     # evaluate
@@ -89,7 +96,12 @@ def main():
         logits = model(graph.x, graph.edge_index)
         pred = logits.argmax(dim=1)
         test_acc = (pred[test_mask] == graph.y[test_mask]).float().mean().item()
-    print(test_acc)
+    
+    print("nbr workers      :")
+    print(f"accuracy         : {test_acc:.2f}")
+    print(f"training duration: {training_duration:.2f}")
 
 if __name__ == "__main__":
+    # import torch.multiprocessing as mp
+    # mp.set_start_method("spawn", force=True)  # good default on macOS
     main()
