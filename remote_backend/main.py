@@ -1,5 +1,7 @@
+from typing import Dict
 from Neo4jConnection import Neo4jConnection
-from feature_stores.v001 import Neo4jFeatureStore
+from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
+from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
 from torch_geometric.loader import NodeLoader
@@ -51,10 +53,17 @@ def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> 
         cnts /= cnts.sum()
         print(split.capitalize(), "accuracy:", cnts  @ np.array(partial_accuracies))
         
-def main():
+def main(version_dict: Dict[str, str]):
     # Demo local user with unsecure passwd
     driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
-    feature_store = Neo4jFeatureStore(driver)
+    match version_dict.get("feature_store", "001"):
+        case "000":
+            feature_store = Neo4jFeatureStore000(driver)
+        case "001":
+            feature_store = Neo4jFeatureStore001(driver)
+        case _:
+            raise Exception("Must know which impl of `FeatureStore` to use.")
+        
     graph_store = Neo4jGraphStore(driver) # Sampler handles all topology
     sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
@@ -91,22 +100,34 @@ def main():
 
 
 if __name__ == "__main__":
-    write = True
-    if write:
+    parser = argparse.ArgumentParser(description="Provide profiling versions for this experiment.")
+
+    parser.add_argument("--profile", action="store_true", help="Wheather or not to run cProfile")
+    parser.add_argument("--feature-store", 
+                        type=str, 
+                        default="001",
+                        choices=["000", "001"],
+                        help="Feature store version")
+    
+    args = parser.parse_args()
+    main_args = {
+        "feature_store": args.feature_store
+    }
+
+    if args.profile:
         BASE_DIR = Path(__file__).resolve().parent                  # folder containing Main.py
         profiles_dir = BASE_DIR.parent / "profiles"                 # sibling folder named "profile"
         profiles_dir.mkdir(parents=True, exist_ok=True)
 
         folder_name = BASE_DIR.name                                # e.g. "InMemoryGNNExample"
-        file_name = Path(__file__).stem                            # e.g. "Main"
-        base = f"{folder_name}_{file_name}"
+        ver = f"feat_store_v{main_args['feature_store']}"
 
-        prof_path = profiles_dir / f"{base}.prof"
-        txt_path  = profiles_dir / f"{base}.txt"
+        prof_path = profiles_dir / folder_name /f"{ver}.prof"
+        txt_path  = profiles_dir / folder_name / f"{ver}.txt"
 
         pr = cProfile.Profile()
         pr.enable()
-        main()
+        main(main_args)
         pr.disable()
 
         stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
@@ -117,5 +138,5 @@ if __name__ == "__main__":
 
         print(f"wrote {prof_path} and {txt_path}")
     else:
-        main()
+        main(main_args)
 
