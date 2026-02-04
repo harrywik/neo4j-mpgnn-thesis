@@ -56,7 +56,7 @@ def main():
     driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
     feature_store = Neo4jFeatureStore(driver)
     graph_store = Neo4jGraphStore(driver) # Sampler handles all topology
-    sampler = Neo4jSampler(driver, num_neighbors=[10, 5])
+    sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)

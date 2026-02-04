@@ -7,7 +7,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
-
+.DS_Store
 # Build/dist folders
 build/
 develop-eggs/
