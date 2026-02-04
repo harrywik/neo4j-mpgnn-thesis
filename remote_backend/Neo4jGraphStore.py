@@ -36,16 +36,21 @@ class Neo4jGraphStore(GraphStore):
         with self.driver.session() as session:
             session.run(query, train_tresh=t, val_tresh=v)
 
-    def get_random_split(self, n: int, split: str = "train") -> torch.Tensor:
+    def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
+        shuffle_clause = "ORDER BY rand()" if shuffle else "ORDER BY n.id ASC"
+
+        assert not shuffle or (shuffle and offset is None), "Offset together with shuffle does not make sense"
+
         query = """
         MATCH (n { split: $split })
-        ORDER BY rand()
-        LIMIT $n
+        """ + shuffle_clause + """
+        LIMIT toInteger(coalesce($n, 9223372036854775807))
+        SKIP toInteger(coalesce($offset, 0))
         RETURN n.id AS id
         """
 
         with self.driver.session() as session:
-            result = session.run(query, n=n, split=split)
+            result = session.run(query, n=n, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)

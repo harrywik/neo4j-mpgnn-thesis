@@ -5,11 +5,50 @@ from Neo4jSampler import Neo4jSampler
 from torch_geometric.loader import NodeLoader
 from Model import GCN
 import torch
+import numpy as np
+
+def evaluate(model, graph_store, split: str = "val") -> None:
+    model.eval()
+    with torch.no_grad():
+        N: int = 2**8
+        i: int = 0
+
+        counts = []
+        partial_accuracies = []
+
+        while True:
+            node_ids = graph_store.get_split(N, offset=i, split=split, shuffle=False)
+            
+            if node_ids.numel() == 0:
+                break
+
+            i += node_ids.numel()
+
+            val_loader = NodeLoader(
+                data=(feature_store, graph_store), 
+                node_sampler=sampler,
+                input_nodes=node_ids,
+                batch_size=N,
+                shuffle=False
+            )
+            for data in val_loader:
+                break
+
+            out: torch.Tensor = model(data.x, data.edge_index)
+            seed_mask = torch.isin(data.n_id, data.input_id)
+            targets = data.y[seed_mask]
+            preds = out[seed_mask].argmax(dim=1)
+
+            counts.append(i)
+            partial_accuracies.append((targets == preds).sum().item() / targets.numel())
+
+        cnts = np.array(counts, dtype=np.float32)
+        cnts /= cnts.sum()
+        print(split.capitalize(), "accuracy:", cnts  @ np.array(partial_accuracies))
 
 if __name__ == "__main__":
     # Demo local user with unsecure passwd
     driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
-
     feature_store = Neo4jFeatureStore(driver)
     graph_store = Neo4jGraphStore(driver) # Sampler handles all topology
     sampler = Neo4jSampler(driver, num_neighbors=[10, 5])
@@ -19,8 +58,8 @@ if __name__ == "__main__":
     criterion = torch.nn.CrossEntropyLoss()
     model.train()
 
-    for pe in range(10):
-        train_indices = graph_store.get_random_split(1000)
+    for epoch in range(10):
+        train_indices = graph_store.get_split(256, split="train", shuffle=True)
 
         train_loader = NodeLoader(
             data=(feature_store, graph_store), 
@@ -30,13 +69,18 @@ if __name__ == "__main__":
             shuffle=False
         )
 
-        for _, batch in enumerate(train_loader):
+        for bi, batch in enumerate(train_loader):
             optimizer.zero_grad()
-            print(batch)
             out = model(batch.x, batch.edge_index)
             seed_mask = torch.isin(batch.n_id, batch.input_id)
             loss = criterion(out[seed_mask], batch.y[seed_mask])
 
             loss.backward()
             optimizer.step()
-            print(f"Loss: {loss:5f}")
+            print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
+
+
+    evaluate(model, graph_store, "train")
+    evaluate(model, graph_store, "val")
+    evaluate(model, graph_store, "test")
+
