@@ -3,6 +3,7 @@ from torch_geometric.typing import FeatureTensorType
 from torch_geometric.data.feature_store import FeatureStore, TensorAttr, NodeType
 from neo4j import Driver
 from typing import Optional, List, Tuple, Dict
+import numpy as np
 
 class Neo4jFeatureStore(FeatureStore):
     def __init__(self, driver: Driver) -> None:
@@ -14,10 +15,9 @@ class Neo4jFeatureStore(FeatureStore):
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
 
-        prop = "subject" if attr.attr_name == "y" else "features"
-        dtype = torch.int64 if attr.attr_name == "y" else torch.float
+        prop = "subject" if attr.attr_name == "y" else "embedding"
 
-        # subject is hardcoded as the categorical target for now
+        # `subject` is hardcoded as the categorical target for now
         query = f"""
         MATCH (n)
         WHERE n.id IN $node_ids
@@ -26,20 +26,31 @@ class Neo4jFeatureStore(FeatureStore):
         """
         with self.driver.session() as session:
             result = session.run(query, node_ids=node_ids)
-            if prop == "features":
-                data_map = {r["id"]: r["value"] for r in result}
+            data_map = {}
+            if prop == "embedding":
+                for record in result:
+                    raw_blob = record["value"]
+                    
+                    # Asumption embedding is saved as float32 in DB
+                    feat = np.frombuffer(raw_blob, dtype=np.float32).copy()
+                    data_map[record["id"]] = feat
             else:
-                data_map = {}
-                for r in result:
-                    label_str = r["value"]
+                for record in result:
+                    label_str = record["value"]
                     if label_str not in self._labels:
                         self._labels[label_str] = len(self._labels)
                     num_label = self._labels[label_str]
-                    data_map[r["id"]] = num_label
+                    data_map[record["id"]] = num_label
                 
         # Reconstruct in correct order
-        tensor_data = [data_map[nid] for nid in node_ids]
-        return torch.tensor(tensor_data, dtype=dtype)
+        ordered_list = [data_map[i] for i in node_ids]
+        if prop == "embedding":
+            # np.stack is faster than torch.stack for numpy inputs
+            final_array = np.stack(ordered_list)
+            
+            return torch.from_numpy(final_array)
+        
+        return torch.tensor(ordered_list, dtype=torch.int64)
 
     @staticmethod
     def _key(attr: TensorAttr) -> Tuple[Optional[NodeType], str]:
