@@ -1,5 +1,5 @@
 from Neo4jConnection import Neo4jConnection
-from Neo4jFeatureStore import Neo4jFeatureStore
+from feature_stores.v001 import Neo4jFeatureStore
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
 from torch_geometric.loader import NodeLoader
@@ -8,6 +8,7 @@ import torch
 import numpy as np
 import cProfile
 import pstats
+import argparse
 from pathlib import Path
 
 def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> None:
