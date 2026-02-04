@@ -6,8 +6,12 @@ from torch_geometric.loader import NodeLoader
 from Model import GCN
 import torch
 import numpy as np
+import cProfile
+import pstats
+from pathlib import Path
 
-def evaluate(model, graph_store, split: str = "val") -> None:
+def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> None:
+    
     model.eval()
     with torch.no_grad():
         N: int = 2**8
@@ -45,8 +49,8 @@ def evaluate(model, graph_store, split: str = "val") -> None:
         cnts = np.array(counts, dtype=np.float32)
         cnts /= cnts.sum()
         print(split.capitalize(), "accuracy:", cnts  @ np.array(partial_accuracies))
-
-if __name__ == "__main__":
+        
+def main():
     # Demo local user with unsecure passwd
     driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
     feature_store = Neo4jFeatureStore(driver)
@@ -80,7 +84,39 @@ if __name__ == "__main__":
             print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
 
 
-    evaluate(model, graph_store, "train")
-    evaluate(model, graph_store, "val")
-    evaluate(model, graph_store, "test")
+    evaluate(model, graph_store, feature_store, sampler, "train")
+    evaluate(model, graph_store, feature_store, sampler, "val")
+    evaluate(model, graph_store, feature_store, sampler, "test")
+
+
+if __name__ == "__main__":
+    
+    write = True
+    if write:
+
+        BASE_DIR = Path(__file__).resolve().parent                 # folder containing Main.py
+        profiles_dir = BASE_DIR.parent / "profiles"                 # sibling folder named "profile"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        folder_name = BASE_DIR.name                                # e.g. "InMemoryGNNExample"
+        file_name = Path(__file__).stem                            # e.g. "Main"
+        base = f"{folder_name}_{file_name}"
+
+        prof_path = profiles_dir / f"{base}.prof"
+        txt_path  = profiles_dir / f"{base}.txt"
+
+        pr = cProfile.Profile()
+        pr.enable()
+        main()
+        pr.disable()
+
+        stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
+        stats.dump_stats(str(prof_path))                           # overwrites
+        with txt_path.open("w") as f:                              # overwrites
+            stats.stream = f
+            stats.print_stats(50)
+
+        print(f"wrote {prof_path} and {txt_path}")
+    else:
+        main()
 
