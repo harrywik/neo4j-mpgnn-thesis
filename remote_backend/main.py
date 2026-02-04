@@ -90,11 +90,9 @@ def main():
 
 
 if __name__ == "__main__":
-    
     write = True
     if write:
-
-        BASE_DIR = Path(__file__).resolve().parent                 # folder containing Main.py
+        BASE_DIR = Path(__file__).resolve().parent                  # folder containing Main.py
         profiles_dir = BASE_DIR.parent / "profiles"                 # sibling folder named "profile"
         profiles_dir.mkdir(parents=True, exist_ok=True)
 
