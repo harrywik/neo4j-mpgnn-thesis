@@ -27,11 +27,12 @@ if __name__ == "__main__":
             node_sampler=sampler,
             input_nodes=train_indices,
             batch_size=32,
-            shuffle=True
+            shuffle=False
         )
 
         for _, batch in enumerate(train_loader):
             optimizer.zero_grad()
+            print(batch)
             out = model(batch.x, batch.edge_index)
             seed_mask = torch.isin(batch.n_id, batch.input_id)
             loss = criterion(out[seed_mask], batch.y[seed_mask])

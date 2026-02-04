@@ -6,6 +6,7 @@ class Neo4jSampler(BaseSampler):
     def __init__(self, driver, num_neighbors: list):
         self.driver = driver
         self.num_neighbors = num_neighbors # e.g., [10, 5] for 2 hops
+        self.id_mapper = {}
 
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
         seeds = ns_input.node.to(torch.int64)
@@ -13,6 +14,9 @@ class Neo4jSampler(BaseSampler):
         seed_time = getattr(ns_input, "time", None)
         # For a 2-hop sampler, num_neighbors would be [n, m]
         total_hops = len(self.num_neighbors)
+        limit = 1
+        for n in self.num_neighbors:
+            limit *= n
 
         # We use APOC to expand the paths and return the edges
         # Assumption:
@@ -23,7 +27,8 @@ class Neo4jSampler(BaseSampler):
             relationshipFilter: "<>",
             minLevel: 1,
             maxLevel: $hops,
-            uniqueness: "RELATIONSHIP_PATH"
+            uniqueness: "RELATIONSHIP_PATH",
+            limit: $limit
         }) YIELD path
         WITH nodes(path) AS ns
         UNWIND range(0, size(ns)-2) AS i
@@ -31,21 +36,21 @@ class Neo4jSampler(BaseSampler):
         """
 
         with self.driver.session() as session:
-            result = session.run(query, seed_ids=seeds_list, hops=total_hops)
+            result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
             
             # Extract edges and format for PyG
             edges = [[r["src"], r["dst"]] for r in result]
-            edge_index = torch.tensor(edges, dtype=torch.long).t().contiguous()
-            
-        # Get unique nodes involved in this sampled subgraph
-        nodes = torch.unique(edge_index)
-
+            edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        
+        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)    
+        edge_index_local = local_indices.view(2, -1)
+        
         return SamplerOutput(
-            node=nodes,
-            row=edge_index[0],
-            col=edge_index[1],
+            node=unique_nodes,               # These Global IDs go to the FeatureStore
+            row=edge_index_local[0],         # Local source indices (0 to N-1)
+            col=edge_index_local[1],         # Local target indices (0 to N-1)
             edge=None,
-            batch=None, 
+            batch=None,
             metadata=(seeds, seed_time)
         )
     
