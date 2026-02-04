@@ -1,9 +1,11 @@
 import torch
-from typing import Optional
+from typing import List, Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
 from torch_geometric.typing import NodeType
 from neo4j import Driver
 from typing import Dict, Tuple
+from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
+
 
 class Neo4jGraphStore(GraphStore):
     def __init__(self, driver: Driver):
@@ -54,6 +56,23 @@ class Neo4jGraphStore(GraphStore):
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)
+    
+    def sample_from_nodes(self, seeds_list:List[int], total_hops:int, limit:int, query:str):
+        # We use APOC to expand the paths and return the edges
+        # Assumption:
+        # .id is a property that is unique on every node
+
+        with self.driver.session() as session:
+            result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
+            
+            # Extract edges and format for PyG
+            edges = [[r["src"], r["dst"]] for r in result]
+            edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        
+        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)    
+        edge_index_local = local_indices.view(2, -1)
+        return unique_nodes, edge_index_local
+            
     
     def _put_edge_index(self):
         pass
