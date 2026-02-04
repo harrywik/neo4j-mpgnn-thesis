@@ -14,6 +14,9 @@ from torch_geometric.utils import mask_to_index
 from torch_geometric.sampler import NodeSamplerInput
 from torch_geometric.utils import subgraph
 import time
+import cProfile
+import pstats
+from pathlib import Path
 
 def main():
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
@@ -101,9 +104,6 @@ def main():
     print(f"accuracy         : {test_acc:.2f}")
     print(f"training duration: {training_duration:.2f}")
 if __name__ == "__main__":
-    import cProfile
-    import pstats
-    from pathlib import Path
     
     write = True
     if write:
