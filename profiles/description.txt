@@ -1,0 +1,23 @@
+ncalls
+  Number of times the function was called.
+  If shown as A/B, A = total calls, B = primitive (non-recursive) calls.
+
+tottime
+  Total time spent in the function itself.
+  Does NOT include time spent in functions it calls.
+
+percall (tottime)
+  Average self time per call.
+  Computed as tottime / ncalls.
+
+cumtime
+  Total time spent in the function AND all functions it calls.
+  This is the most useful column for finding bottlenecks.
+
+percall (cumtime)
+  Average cumulative time per call.
+  Roughly cumtime divided by number of calls.
+
+filename:lineno(function)
+  Source location of the function.
+  Built-in or C/C++ functions appear in braces.
