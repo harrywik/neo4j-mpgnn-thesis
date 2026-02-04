@@ -100,8 +100,36 @@ def main():
     print("nbr workers      :")
     print(f"accuracy         : {test_acc:.2f}")
     print(f"training duration: {training_duration:.2f}")
-
 if __name__ == "__main__":
-    # import torch.multiprocessing as mp
-    # mp.set_start_method("spawn", force=True)  # good default on macOS
-    main()
+    import cProfile
+    import pstats
+    from pathlib import Path
+    
+    write = True
+    if write:
+
+        BASE_DIR = Path(__file__).resolve().parent                 # folder containing Main.py
+        profiles_dir = BASE_DIR.parent / "profiles"                 # sibling folder named "profile"
+        profiles_dir.mkdir(parents=True, exist_ok=True)
+
+        folder_name = BASE_DIR.name                                # e.g. "InMemoryGNNExample"
+        file_name = Path(__file__).stem                            # e.g. "Main"
+        base = f"{folder_name}_{file_name}"
+
+        prof_path = profiles_dir / f"{base}.prof"
+        txt_path  = profiles_dir / f"{base}.txt"
+
+        pr = cProfile.Profile()
+        pr.enable()
+        main()
+        pr.disable()
+
+        stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
+        stats.dump_stats(str(prof_path))                           # overwrites
+        with txt_path.open("w") as f:                              # overwrites
+            stats.stream = f
+            stats.print_stats(50)
+
+        print(f"wrote {prof_path} and {txt_path}")
+    else:
+        main()
