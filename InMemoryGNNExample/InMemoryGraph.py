@@ -100,3 +100,61 @@ class InMemoryGraphStore(GraphStore):
         row, col = data.edge_index[0].to(torch.long), data.edge_index[1].to(torch.long)
         store.put_edge_index((row, col), edge_type=edge_type, layout=EdgeLayout.COO)
         return store
+
+    def sample_from_nodes(
+        self,
+        seeds_list: List[int],
+        total_hops: int,
+        limit: int,
+        edge_type: EdgeType,
+        layout: EdgeLayout = EdgeLayout.COO,
+        undirected: bool = True,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Enumerate paths up to total_hops and return edges from adjacent path nodes.
+        Mirrors the remote APOC expansion with a per-seed path limit.
+        """
+        edges: List[Tuple[int, int]] = []
+
+        for seed in seeds_list:
+            paths_emitted = 0
+            # stack holds (node, depth, path_nodes, used_edges_in_path)
+            stack: List[Tuple[int, int, List[int], set]] = [(seed, 0, [seed], set())]
+
+            while stack and paths_emitted < limit:
+                node, depth, path, used_edges = stack.pop()
+
+                # Emit this path if it has at least one edge (depth >= 1)
+                if depth >= 1:
+                    for i in range(len(path) - 1):
+                        edges.append((path[i], path[i + 1]))
+                    paths_emitted += 1
+                    if paths_emitted >= limit:
+                        break
+
+                if depth >= total_hops:
+                    continue
+
+                neigh = self.neighbors(node, edge_type=edge_type, layout=layout, undirected=undirected)
+                if neigh.numel() == 0:
+                    continue
+
+                for v in neigh.tolist():
+                    # Enforce relationship uniqueness per path (approx. RELATIONSHIP_PATH)
+                    edge = (min(node, v), max(node, v)) if undirected else (node, v)
+                    if edge in used_edges:
+                        continue
+                    new_used = set(used_edges)
+                    new_used.add(edge)
+                    stack.append((v, depth + 1, path + [v], new_used))
+
+        if not edges:
+            return (
+                torch.empty(0, dtype=torch.long),
+                torch.empty((2, 0), dtype=torch.long),
+            )
+
+        edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)
+        edge_index_local = local_indices.view(2, -1)
+        return unique_nodes, edge_index_local

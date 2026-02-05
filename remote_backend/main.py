@@ -1,3 +1,4 @@
+import time
 from typing import Dict
 from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
 from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
@@ -94,6 +95,7 @@ def main(version_dict: Dict[str, str]):
     for epoch in range(10):
         train_indices = graph_store.get_split(256, split="train", shuffle=True)
 
+        time0 = time.time()
         train_loader = NodeLoader(
             data=(feature_store, graph_store), 
             node_sampler=sampler,
@@ -101,11 +103,13 @@ def main(version_dict: Dict[str, str]):
             batch_size=32,
             shuffle=False,
             num_workers=4,
-            persistent_workers=True,
+            persistent_workers=False,
             # prefetch_factor=2
         )
+        print("load time:", time.time() - time0)
 
         for bi, batch in enumerate(train_loader):
+            time0 = time.time()
             optimizer.zero_grad()
             out = model(batch.x, batch.edge_index)
             seed_mask = torch.isin(batch.n_id, batch.input_id)
@@ -113,7 +117,9 @@ def main(version_dict: Dict[str, str]):
 
             loss.backward()
             optimizer.step()
-            print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
+            print("step time:", time.time() - time0)
+
+            # print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
 
 
     evaluate(model, graph_store, feature_store, sampler, "train")
