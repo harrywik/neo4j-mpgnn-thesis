@@ -1,7 +1,3 @@
-InMemoryGNNExample/__pycache__/
-InMemoryGNNExample/data/
-data/
-__pycache__/
 # Python bytecode
 __pycache__/
 *.pyc
