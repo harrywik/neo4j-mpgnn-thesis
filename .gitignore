@@ -19,6 +19,7 @@ var/
 wheels/
 *.egg-info/
 
+random_notes.txt
 # Virtual Env
 .venv/
 data/Planetoid/Cora/*

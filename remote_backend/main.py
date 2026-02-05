@@ -92,6 +92,7 @@ def main(version_dict: Dict[str, str]):
     criterion = torch.nn.CrossEntropyLoss()
     model.train()
 
+    time1 = time.time()
     for epoch in range(10):
         train_indices = graph_store.get_split(256, split="train", shuffle=True)
 
@@ -107,8 +108,10 @@ def main(version_dict: Dict[str, str]):
             # prefetch_factor=2
         )
         print("load time:", time.time() - time0)
-
+        time1 = time.time()
+        total_batches = 0
         for bi, batch in enumerate(train_loader):
+            total_batches += 1
             time0 = time.time()
             optimizer.zero_grad()
             out = model(batch.x, batch.edge_index)
@@ -120,7 +123,8 @@ def main(version_dict: Dict[str, str]):
             print("step time:", time.time() - time0)
 
             # print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
-
+        print('epoch', time.time() - time1)
+        print("total batches:", total_batches)
 
     evaluate(model, graph_store, feature_store, sampler, "train")
     evaluate(model, graph_store, feature_store, sampler, "val")
