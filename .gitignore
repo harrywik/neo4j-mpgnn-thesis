@@ -21,4 +21,4 @@ wheels/
 
 # Virtual Env
 .venv/
-
+data/Planetoid/Cora/*
