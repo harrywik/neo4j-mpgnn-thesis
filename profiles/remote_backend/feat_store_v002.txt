@@ -1,0 +1,58 @@
+         5248266 function calls (5232364 primitive calls) in 2.474 seconds
+
+   Ordered by: cumulative time
+   List reduced from 1325 to 50 due to restriction <50>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.004    0.004    2.474    2.474 main.py:57(main)
+       93    0.001    0.000    2.080    0.022 dataloader.py:736(__next__)
+       93    0.000    0.000    2.075    0.022 dataloader.py:799(_next_data)
+       83    0.000    0.000    2.074    0.025 fetch.py:49(fetch)
+       83    0.001    0.000    2.074    0.025 node_loader.py:143(collate_fn)
+    47644    0.014    0.000    1.757    0.000 _common.py:191(inner)
+    46568    0.032    0.000    1.754    0.000 result.py:392(__iter__)
+    46840    0.032    0.000    1.716    0.000 _bolt.py:849(fetch_message)
+    46840    0.038    0.000    1.372    0.000 _common.py:76(pop)
+    46840    0.038    0.000    1.211    0.000 _common.py:47(_buffer_one_chunk)
+       83    0.002    0.000    1.160    0.014 Neo4jSampler.py:29(sample_from_nodes)
+       83    0.014    0.000    1.158    0.014 Neo4jGraphStore.py:60(sample_from_nodes)
+    93680    0.069    0.000    1.154    0.000 _common.py:334(receive_into_buffer)
+    93680    0.036    0.000    1.067    0.000 _bolt_socket.py:460(recv_into)
+    93687    0.040    0.000    1.025    0.000 _bolt_socket.py:389(_wait_for_read)
+    93961    0.038    0.000    0.990    0.000 _bolt_socket.py:409(_wait_for_io)
+       83    0.001    0.000    0.911    0.011 node_loader.py:154(filter_fn)
+       83    0.001    0.000    0.907    0.011 utils.py:209(filter_custom_store)
+       83    0.000    0.000    0.902    0.011 feature_store.py:344(multi_get_tensor)
+       83    0.001    0.000    0.895    0.011 feature_store.py:337(_multi_get_tensor)
+      166    0.018    0.000    0.894    0.005 v002.py:18(_get_tensor)
+    93680    0.892    0.000    0.892    0.000 {method 'recv_into' of '_socket.socket' objects}
+        3    0.000    0.000    0.323    0.108 main.py:17(evaluate)
+    46840    0.032    0.000    0.306    0.000 _bolt6.py:504(_process_message)
+      266    0.002    0.000    0.254    0.001 session.py:254(run)
+    46302    0.019    0.000    0.238    0.000 _common.py:241(on_records)
+      266    0.001    0.000    0.233    0.001 result.py:180(_run)
+48442/47640    0.017    0.000    0.224    0.000 util.py:102(callback)
+      266    0.000    0.000    0.197    0.001 result.py:434(_attach)
+    46302    0.019    0.000    0.194    0.000 result.py:240(on_records)
+    48446    0.033    0.000    0.190    0.000 _common.py:185(__getattr__)
+    46989    0.016    0.000    0.176    0.000 {method 'extend' of 'collections.deque' objects}
+    92604    0.041    0.000    0.159    0.000 result.py:250(<genexpr>)
+       16    0.001    0.000    0.150    0.009 Neo4jGraphStore.py:41(get_split)
+    47644    0.016    0.000    0.143    0.000 inspect.py:427(iscoroutinefunction)
+    91334    0.040    0.000    0.138    0.000 _data.py:124(__getitem__)
+    46302    0.054    0.000    0.104    0.000 _data.py:59(__new__)
+    46840    0.017    0.000    0.080    0.000 __init__.py:456(unpack_structure_header)
+    47644    0.034    0.000    0.071    0.000 inspect.py:391(_has_code_flag)
+  744/163    0.001    0.000    0.063    0.000 module.py:1772(_wrapped_call_impl)
+  744/163    0.002    0.000    0.063    0.000 module.py:1780(_call_impl)
+    91334    0.033    0.000    0.056    0.000 _data.py:158(index)
+    47644    0.025    0.000    0.056    0.000 inspect.py:412(_has_coroutine_mark)
+792472/792231    0.054    0.000    0.055    0.000 {built-in method builtins.isinstance}
+       80    0.001    0.000    0.054    0.001 optimizer.py:505(wrapper)
+       83    0.000    0.000    0.054    0.001 Model.py:11(forward)
+      166    0.002    0.000    0.050    0.000 gcn_conv.py:227(forward)
+       80    0.001    0.000    0.050    0.001 optimizer.py:60(_use_grad)
+       80    0.000    0.000    0.049    0.001 adam.py:214(step)
+    93964    0.047    0.000    0.047    0.000 {method 'settimeout' of '_socket.socket' objects}
+
+
