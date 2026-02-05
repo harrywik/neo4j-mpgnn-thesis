@@ -1,5 +1,5 @@
 from typing import Dict
-from Neo4jConnection import Neo4jConnection
+from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
 from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
 from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
@@ -12,6 +12,7 @@ import cProfile
 import pstats
 import argparse
 from pathlib import Path
+
 
 def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> None:
     
@@ -53,19 +54,37 @@ def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> 
         cnts /= cnts.sum()
         print(split.capitalize(), "accuracy:", cnts  @ np.array(partial_accuracies))
         
+def build_label_map(uri, user, pwd) -> dict[str, int]:
+    from neo4j import GraphDatabase
+    driver = GraphDatabase.driver(uri, auth=(user, pwd))
+    q = "MATCH (n) RETURN DISTINCT n.subject AS s ORDER BY s ASC"
+    with driver.session() as session:
+        labels = [r["s"] for r in session.run(q)]
+    driver.close()
+    return {s: i for i, s in enumerate(labels)}
+
+        
 def main(version_dict: Dict[str, str]):
     # Demo local user with unsecure passwd
-    driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
-    match version_dict.get("feature_store", "001"):
+    
+    uri = "bolt://localhost:7687"
+    user = "neo4j"
+    pwd = "thesis-db-0-pw"
+    label_map = build_label_map(uri, user, pwd)
+
+    match version_dict.get("feature_store", "002"):
         case "000":
-            feature_store = Neo4jFeatureStore000(driver)
+            feature_store = Neo4jFeatureStore000(uri, user, pwd, label_map=label_map)
+
         case "001":
-            feature_store = Neo4jFeatureStore001(driver)
+            feature_store = Neo4jFeatureStore001(uri, user, pwd, label_map=label_map)
+        case "002":
+            feature_store = Neo4jFeatureStore002(uri, user, pwd, label_map=label_map)
         case _:
             raise Exception("Must know which impl of `FeatureStore` to use.")
-        
-    graph_store = Neo4jGraphStore(driver) # Sampler handles all topology
-    sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
+    
+    graph_store   = Neo4jGraphStore(uri, user, pwd)
+    sampler       = Neo4jSampler(graph_store, [10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
@@ -80,7 +99,10 @@ def main(version_dict: Dict[str, str]):
             node_sampler=sampler,
             input_nodes=train_indices,
             batch_size=32,
-            shuffle=False
+            shuffle=False,
+            num_workers=4,
+            persistent_workers=True,
+            # prefetch_factor=2
         )
 
         for bi, batch in enumerate(train_loader):
@@ -105,8 +127,8 @@ if __name__ == "__main__":
     parser.add_argument("--profile", action="store_true", help="Wheather or not to run cProfile")
     parser.add_argument("--feature-store", 
                         type=str, 
-                        default="001",
-                        choices=["000", "001"],
+                        default="002",
+                        choices=["000", "002"],
                         help="Feature store version")
     
     args = parser.parse_args()
