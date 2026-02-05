@@ -5,14 +5,18 @@ from torch_geometric.data.graph_store import GraphStore
 
 
 class Neo4jSampler(BaseSampler):
+    """This class defines a samlping method for generating sub-graphs around the seed"""
     def __init__(self, graph_store: GraphStore, num_neighbors: List[int]):
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors # e.g., [10, 5] for 2 hops
+        # We use APOC to expand the paths and return the edges
+        # Assumption:
+        # .id is a property that is unique on every node
         self.query = """
             MATCH (n) WHERE n.id IN $seed_ids
             CALL apoc.path.expandConfig(n, {
                 relationshipFilter: "<>",
-                minLevel: 1,
+                minLevel: 0,
                 maxLevel: $hops,
                 uniqueness: "RELATIONSHIP_PATH",
                 limit: $limit
@@ -47,4 +51,4 @@ class Neo4jSampler(BaseSampler):
             raise NotImplementedError("Neo4jSampler.sample_from_nodes: GraphStore lacks 'sample_from_nodes'.")
         
     def sample_from_edges(self, index, neg_sampling = None):
-        pass
+        raise NotImplementedError("Neo4jSampler.sample_from_edges isnt implemented")

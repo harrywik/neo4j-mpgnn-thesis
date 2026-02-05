@@ -58,10 +58,6 @@ class Neo4jGraphStore(GraphStore):
         return torch.tensor(seed_ids, dtype=torch.int64)
     
     def sample_from_nodes(self, seeds_list:List[int], total_hops:int, limit:int, query:str):
-        # We use APOC to expand the paths and return the edges
-        # Assumption:
-        # .id is a property that is unique on every node
-
         with self.driver.session() as session:
             result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
             
