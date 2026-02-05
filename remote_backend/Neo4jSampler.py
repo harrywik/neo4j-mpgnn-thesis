@@ -5,6 +5,7 @@ from torch_geometric.data.graph_store import GraphStore
 
 
 class Neo4jSampler(BaseSampler):
+    """This class defines a samlping method for generating sub-graphs around the seed"""
     def __init__(self, graph_store: GraphStore, num_neighbors: List[int]):
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors # e.g., [10, 5] for 2 hops
