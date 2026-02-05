@@ -1,5 +1,6 @@
 from typing import Dict
 from Neo4jConnection import Neo4jConnection
+from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
 from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
 from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
@@ -61,6 +62,8 @@ def main(version_dict: Dict[str, str]):
             feature_store = Neo4jFeatureStore000(driver)
         case "001":
             feature_store = Neo4jFeatureStore001(driver)
+        case "002":
+            feature_store = Neo4jFeatureStore002(driver)
         case _:
             raise Exception("Must know which impl of `FeatureStore` to use.")
         
@@ -105,8 +108,8 @@ if __name__ == "__main__":
     parser.add_argument("--profile", action="store_true", help="Wheather or not to run cProfile")
     parser.add_argument("--feature-store", 
                         type=str, 
-                        default="001",
-                        choices=["000", "001"],
+                        default="002",
+                        choices=["000", "001", "002"],
                         help="Feature store version")
     
     args = parser.parse_args()
