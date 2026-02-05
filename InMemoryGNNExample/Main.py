@@ -21,9 +21,7 @@ from pathlib import Path
 def main():
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
     graph = dataset[0]
-    train_idx = torch.where(graph.test_mask)[0]
-    print(train_idx)
-    
+    train_idx = torch.where(graph.test_mask)[0]    
     
     fstore = InMemoryFeatureStore() # no edge features to store here
     fstore["node", "x", None] = graph.x
