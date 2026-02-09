@@ -1,0 +1,17 @@
+[project]
+name = "neo4j-mpgnn-thesis"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "graphdatascience>=1.19",
+    "neo4j-rust-ext>=6.1.0.0",
+    "notebook>=7.5.3",
+    "ogb>=1.3.6",
+    "pyarrow>=22.0.0",
+    "scipy>=1.17.0",
+    "torch>=2.10.0",
+    "torch-geometric>=2.7.0",
+    "tqdm>=4.67.2",
+]

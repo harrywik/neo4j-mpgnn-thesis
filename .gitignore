@@ -1,0 +1,24 @@
+# Python bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.DS_Store
+# Build/dist folders
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+
+# Virtual Env
+.venv/
+
