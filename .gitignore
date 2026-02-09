@@ -22,3 +22,6 @@ wheels/
 # Virtual Env
 .venv/
 
+# data
+data/Planetoid/
+random_notes.txt
