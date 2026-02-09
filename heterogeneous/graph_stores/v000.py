@@ -3,50 +3,46 @@ from typing import List, Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
 from neo4j import Driver
 
+from typing import List, Tuple
+from torch_geometric.data.graph_store import EdgeAttr, EdgeLayout
 
-class Neo4jGraphStore(GraphStore):
-    def __init__(self, driver: Driver):
+class Neo4jHeteroGraphStore(GraphStore):
+    def __init__(self, driver, database="dblp"):
         super().__init__()
         self.driver = driver
+        self.database = database
+        self.meta = self._discover_schema()
 
-    def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
-        pass
+    def _discover_schema(self) -> Tuple[List[str], List[Tuple[str, str, str]]]:
+        node_types = set()
+        edge_triplets = []
 
-    def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
-        shuffle_clause = "ORDER BY rand()" if shuffle else "ORDER BY n.id ASC"
-
-        assert not shuffle or (shuffle and offset is None), "Offset together with shuffle does not make sense"
-
+        # This query gets all relationship definitions
         query = """
-        MATCH (n { split: $split })
-        """ + shuffle_clause + """
-        LIMIT toInteger(coalesce($n, 9223372036854775807))
-        SKIP toInteger(coalesce($offset, 0))
-        RETURN n.id AS id
+        CALL apoc.meta.data() 
+        YIELD label, property, type, other
+        WHERE type = 'RELATIONSHIP'
+        RETURN label AS src, property AS rel, other AS dst_list
         """
 
-        with self.driver.session() as session:
-            result = session.run(query, n=n, split=split, offset=offset)
-            seed_ids = [record["id"] for record in result]
-
-        return torch.tensor(seed_ids, dtype=torch.int64)
-    
-    def sample_from_nodes(self, seeds_list:List[int], total_hops:int, limit:int, query:str):
-        with self.driver.session() as session:
-            result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
-            
-            # Extract edges and format for PyG
-            edges = [[r["src"], r["dst"]] for r in result]
-            edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        with self.driver.session(database=self.database) as session:
+            result = session.run(query)
+            for record in result:
+                src = record["src"]
+                rel = record["rel"]
+                # 'other' is a list of labels the relationship connects to
+                for dst in record["dst_list"]:
+                    node_types.add(src)
+                    node_types.add(dst)
+                    edge_triplets.append((src, rel, dst))
         
-        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)    
-        edge_index_local = local_indices.view(2, -1)
-        return unique_nodes, edge_index_local
-            
-    
-    def _put_edge_index(self):
-        pass
-    def _remove_edge_index(self):
-        pass
-    def get_all_edge_attrs(self):
-        pass
+        return {
+            "node_types": list(node_types),
+            "edge_triplets": edge_triplets
+        }
+
+    def get_all_edge_attrs(self) -> List[EdgeAttr]:
+        return [
+            EdgeAttr(edge_type=triplet, layout=EdgeLayout.COO) 
+            for triplet in self.meta["edge_triplets"]
+        ]
