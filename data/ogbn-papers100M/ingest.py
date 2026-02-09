@@ -15,7 +15,7 @@ edge_path = os.path.join(raw_dir, "edge.npy")
 edges = np.load(edge_path, mmap_mode='r') 
 total_edges = edges.shape[1]
 
-def node_generator(chunk_size=500_000): # Increased chunk size for 256GB RAM
+def node_generator(chunk_size=100_000):
     for i in range(0, num_nodes, chunk_size):
         end = min(i + chunk_size, num_nodes)
         
@@ -26,7 +26,7 @@ def node_generator(chunk_size=500_000): # Increased chunk size for 256GB RAM
         
         yield pa.Table.from_arrays([node_ids, features], names=["nodeId", "features"])
 
-def edge_generator(chunk_size=2_000_000): # Larger chunks for 1.6B edges
+def edge_generator(chunk_size=1_000_000): # Adapt to RAM size
     for i in range(0, total_edges, chunk_size):
         end = min(i + chunk_size, total_edges)
         # OGB is usually (2, num_edges); slice and convert
