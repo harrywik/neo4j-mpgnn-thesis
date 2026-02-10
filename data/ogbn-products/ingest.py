@@ -62,14 +62,14 @@ def run_ingestion():
             })
             if i % (EDGE_CHUNK * 2) == 0: gc.collect()
 
-    # 5. The Correct API Call
+    # 5. The API Call
     try:
         print("Starting Arrow Ingestion via gds.alpha.graph.construct...")
         # 'construct' accepts iterables of Arrow Tables and handles the Flight protocol
         G = gds.alpha.graph.construct(
             graph_name="products_graph",
-            nodes=node_generator(),
-            relationships=edge_generator()
+            nodes=list(node_generator()),
+            relationships=list(edge_generator())
         )
 
         # 6. Memory Cleanup
