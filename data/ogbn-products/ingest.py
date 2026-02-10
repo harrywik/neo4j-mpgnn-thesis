@@ -63,19 +63,31 @@ def run_ingestion():
 
     # 5. The API Call
     try:
-        print("Concatenating Arrow chunks (Zero-copy)...")
-        # We consume the generators and merge into one Table object
-        # which provides the .columns and .values attributes GDS needs.
-        nodes_table = pa.concat_tables(node_generator())
-        edges_table = pa.concat_tables(edge_generator())
+        node_schema = pa.schema([
+            ("nodeId", pa.int64()),
+            ("values", pa.list_(pa.float32())),
+            ("label", pa.int64()),
+            ("train_mask", pa.bool_()),
+            ("val_mask", pa.bool_()),
+            ("test_mask", pa.bool_())
+        ])
+
+        edge_schema = pa.schema([
+            ("source", pa.int64()),
+            ("target", pa.int64())
+        ])
+
+        # Wrap your generators
+        node_reader = pa.RecordBatchReader.from_batches(node_schema, (t.to_batches()[0] for t in node_generator()))
+        edge_reader = pa.RecordBatchReader.from_batches(edge_schema, (t.to_batches()[0] for t in edge_generator()))
 
         print(f"Streaming {num_nodes} nodes and {graph['edge_index'].shape[1]} edges via Flight...")
         
         # 'construct' now receives a single PyArrow Table for each
         G = gds.alpha.graph.construct(
             graph_name="products_graph",
-            nodes={"Product": nodes_table}, # Labeling as Product
-            relationships={"SHIPPED_WITH": edges_table}
+            nodes=node_reader,
+            relationships=edge_reader
         )
 
         # 6. Memory Cleanup
