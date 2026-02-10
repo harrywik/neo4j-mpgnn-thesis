@@ -3,13 +3,16 @@ import numpy as np
 import gc
 from graphdatascience import GraphDataScience
 from ogb.nodeproppred import NodePropPredDataset
+import os
+from dotenv import load_dotenv
 
 # --- CONFIG ---
-DB_NAME = "ogbnProducts"
+load_dotenv()
+DB_NAME = os.getenv("DB_NAME")
 NODE_CHUNK = 100_000   
 EDGE_CHUNK = 1_000_000 
 NEO4J_URI = "bolt://localhost:7687"
-NEO4J_AUTH = ("neo4j", "password")
+NEO4J_AUTH = (os.getenv("DB_USER"), os.getenv("DB_PW"))
 
 def run_ingestion():
     # 1. Load OGB
