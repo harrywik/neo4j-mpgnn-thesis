@@ -77,7 +77,7 @@ def run_ingestion():
     # 5. Project to GDS Memory
     try:
         print(f"Streaming {num_nodes} nodes and {edge_index.shape[1]} edges to GDS...")
-        G, _ = gds.alpha.graph.project.arrow(
+        G, _ = gds.graph.project.arrow(
             graph_name="products_graph",
             nodes=tqdm(node_generator(), total=num_nodes // NODE_CHUNK, desc="Nodes"),
             relationships=tqdm(edge_generator(), total=edge_index.shape[1] // EDGE_CHUNK, desc="Edges")
