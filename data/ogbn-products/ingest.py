@@ -74,8 +74,8 @@ def run_ingestion():
         # 'construct' now receives a single PyArrow Table for each
         G = gds.alpha.graph.construct(
             graph_name="products_graph",
-            nodes=nodes_table,
-            relationships=edges_table
+            nodes={"Product": nodes_table}, # Labeling as Product
+            relationships={"SHIPPED_WITH": edges_table}
         )
 
         # 6. Memory Cleanup
