@@ -24,3 +24,11 @@ wheels/
 
 # Env
 .env
+
+# Terraform
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Licenses
+*.license
