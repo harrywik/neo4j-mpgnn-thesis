@@ -22,4 +22,4 @@ wheels/
 random_notes.txt
 # Virtual Env
 .venv/
-data/Planetoid/Cora/*
+data/*
