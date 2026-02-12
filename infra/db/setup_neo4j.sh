@@ -61,8 +61,14 @@ chmod 644 /etc/neo4j/neo4j.conf
 curl -LsSf https://astral.sh/uv/install.sh | sh
 source $HOME/.local/bin/env
 
-# Initialize a new directory
-mkdir papers100m-import && cd papers100m-import
+# Before we start the large ingestion we need to be on the quick NVMe-raid drive(s)
+# Go to the RAID mount
+cd /var/lib/neo4j/data
+
+sudo mkdir import-workspace
+sudo chown -R $USER:$USER import-workspace
+cd import-workspace
+
 git init
 
 # Add the remote repository
@@ -83,9 +89,13 @@ git pull origin arrow
 # Ensure the script is executable
 chmod +x data/ogbn-papers100M/ingest.sh
 
-# Use tmux to manage the ingestion
-TERM=xterm tmux new-session -d -s ogb_ingest 'uv run python data/ogbn-papers100M/prepare_import.py && sudo -u neo4j ./data/ogbn-papers100M/ingest.sh; read'
+# Stop Neo4j only if it is currently active
+systemctl is-active --quiet neo4j && systemctl stop neo4j
 
-# Enable and Start
-systemctl enable neo4j
-systemctl start neo4j
+# Use tmux to manage the pipeline
+TERM=xterm tmux new-session -d -s ogb_ingest " \
+  yes y | uv run python data/ogbn-papers100M/prepare_import.py && \
+  sudo chown -R neo4j:neo4j . && \
+  sudo -u neo4j ./data/ogbn-papers100M/ingest.sh && \
+  sudo systemctl start neo4j; \
+  read"
