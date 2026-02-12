@@ -1,8 +1,6 @@
 #!/bin/sh
-echo "DOWNLOAD BEGIN"
-uv run python data/ogbn-papers100M/prepare_import.py
-echo "PARQUET WRITTEN"
-
+sudo chgrp -R neo4j .
+chmod -R g+rwX .
 neo4j-admin database import full \
   --input-type=parquet \
   --overwrite-destination \

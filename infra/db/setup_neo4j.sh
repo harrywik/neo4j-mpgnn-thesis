@@ -73,6 +73,9 @@ git config core.sparseCheckout true
 
 # Define the subdirectory you want to pull
 echo "data/ogbn-papers100M/*" >> .git/info/sparse-checkout
+echo "pyproject.toml" >> .git/info/sparse-checkout
+echo "uv.lock" >> .git/info/sparse-checkout
+echo ".python-version" >> .git/info/sparse-checkout
 
 # Pull the specific branch
 git pull origin arrow
@@ -81,7 +84,7 @@ git pull origin arrow
 chmod +x data/ogbn-papers100M/ingest.sh
 
 # Use tmux to manage the ingestion
-tmux new-session -d -s ogb_ingest 'data/ogbn-papers100M/ingest.sh; read'
+TERM=xterm tmux new-session -d -s ogb_ingest 'uv run python data/ogbn-papers100M/prepare_import.py && sudo -u neo4j ./data/ogbn-papers100M/ingest.sh; read'
 
 # Enable and Start
 systemctl enable neo4j
