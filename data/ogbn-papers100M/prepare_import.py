@@ -43,8 +43,8 @@ with pq.ParquetWriter('papers_nodes.parquet', schema) as writer:
         # Prepare the chunk
         chunk_df = pd.DataFrame({
             'paperId:ID(Paper)': np.arange(start, end),
-            'features:VECTOR<FLOAT32>(128)': features[start:end].tolist(),
-            'label:INT': labels_int[start:end]
+            'features:VECTOR<FLOAT32>(128)': [features[i] for i in range(start, end)],
+            'label:INT': labels_int[start:end],
             'split:INT': split_types[start:end]
         })
         

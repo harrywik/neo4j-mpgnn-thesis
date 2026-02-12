@@ -6,8 +6,8 @@ echo "PARQUET WRITTEN"
 neo4j-admin database import full \
   --input-type=parquet \
   --overwrite-destination \
-  --nodes=Paper="data/ogbn-papers100M/papers_header.csv,data/ogbn-papers100M/papers_data.parquet" \
-  --relationships=CITES="data/ogbn-papers100M/citations_header.csv,data/ogbn-papers100M/citations_data.parquet" \
+  --nodes=Paper="data/ogbn-papers100M/papers_data.parquet" \
+  --relationships=CITES="data/ogbn-papers100M/citations_data.parquet" \
   --id-type=INTEGER \
   --verbose \
   papers100m

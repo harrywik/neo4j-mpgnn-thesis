@@ -9,7 +9,7 @@ apt-get update
 
 # Pre-accept Enterprise License & Install
 echo "neo4j-enterprise neo4j/accept-license select Accept commercial license" | debconf-set-selections
-apt-get install -y neo4j-enterprise openjdk-21-jdk libcap2-bin mdadm lvm2
+apt-get install -y neo4j-enterprise openjdk-21-jdk libcap2-bin mdadm lvm2 git tmux
 
 devices=$(ls /dev/nvme0n*)
 count=$(echo $devices | wc -w)
@@ -47,9 +47,41 @@ CONF_CONTENT=$(curl -H "Metadata-Flavor: Google" \
 # Write the content to the correct file path
 echo "$CONF_CONTENT" > /etc/neo4j/neo4j.conf
 
+# Get the internal IP from the metadata server
+INTERNAL_IP=$(curl -H "Metadata-Flavor: Google" http://metadata.google.internal/computeMetadata/v1/instance/network-interfaces/0/ip)
+
+# Replace the placeholder in the config file
+sed -i "s/INTERNAL_IP_PLACEHOLDER/$INTERNAL_IP/g" /etc/neo4j/neo4j.conf
+
 # Secure permissions
 chown neo4j:neo4j /etc/neo4j/neo4j.conf
 chmod 644 /etc/neo4j/neo4j.conf
+
+# Install uv for python imports
+curl -LsSf https://astral.sh/uv/install.sh | sh
+source $HOME/.local/bin/env
+
+# Initialize a new directory
+mkdir papers100m-import && cd papers100m-import
+git init
+
+# Add the remote repository
+git remote add origin https://github.com/harrywik/neo4j-mpgnn-thesis.git
+
+# Enable sparse checkout
+git config core.sparseCheckout true
+
+# Define the subdirectory you want to pull
+echo "data/ogbn-papers100M/*" >> .git/info/sparse-checkout
+
+# Pull the specific branch
+git pull origin arrow
+
+# Ensure the script is executable
+chmod +x data/ogbn-papers100M/ingest.sh
+
+# Use tmux to manage the ingestion
+tmux new-session -d -s ogb_ingest 'data/ogbn-papers100M/ingest.sh; read'
 
 # Enable and Start
 systemctl enable neo4j
