@@ -41,10 +41,14 @@ def ddp_setup() -> None:
     dist.barrier()
     
     
-
 def build_label_map(uri, user, pwd) -> dict[str, int]:
-    # ... (Rest of label map code remains same) ...
-    pass
+    from neo4j import GraphDatabase
+    driver = GraphDatabase.driver(uri, auth=(user, pwd))
+    q = "MATCH (n) RETURN DISTINCT n.subject AS s ORDER BY s ASC"
+    with driver.session() as session:
+        labels = [r["s"] for r in session.run(q)]
+    driver.close()
+    return {s: i for i, s in enumerate(labels)}
 
 def main(
     version_dict: Dict[str, str],
@@ -53,8 +57,6 @@ def main(
     batch_size: int,
     snapshot_path: str = "snapshot.pt",
     max_train_seconds: int = 3600,
-    val_patience: int = 10,
-    val_min_improve: float = 0.03,
 ):
     ddp_setup()
     
@@ -141,18 +143,7 @@ if __name__ == "__main__":
         type=int,
         help="Max training time in seconds (default: 3600)",
     )
-    parser.add_argument(
-        "--val_patience",
-        default=10,
-        type=int,
-        help="Early stop window (epochs) for val accuracy (default: 10)",
-    )
-    parser.add_argument(
-        "--val_min_improve",
-        default=0.03,
-        type=float,
-        help="Minimum val accuracy improvement over window (default: 0.03)",
-    )
+
     # local rank is passed by torch run
     parser.add_argument("--local-rank", "--local_rank", type=int, help="Local rank for distributed training. (Added for torchrun compatibility)")
     parser.add_argument("--feature-store", 
