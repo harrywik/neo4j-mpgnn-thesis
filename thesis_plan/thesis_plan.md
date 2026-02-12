@@ -37,7 +37,7 @@ Benchmark the system across datasets of three different graph sizes.
 
 
 ### `3.2` In-Database Operations
-* **Message Passing in Cypher:** Investigate if the **Aggregation** step (e.g., `MEAN` in GraphSAGE) can be performed within the Cypher query to further reduce data transfer volume.
+* **Message Passing in Cypher:** Investigate if the some implementation of the message passing function can be defined as a cypher query so that inference for new nodes can be done directly in cypher.
 
 ## Experimental setup
 This sections answers how we plan to perform our training, and what we want to include in the final report regarding the training process
