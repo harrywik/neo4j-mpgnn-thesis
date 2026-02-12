@@ -38,10 +38,10 @@ for i, s in enumerate(['train', 'valid', 'test']):
         idx = pd.read_csv(s_path, compression='gzip', header=None).values.flatten()
         split_types[idx] = i
 
-# --- 3. NODE CONVERSION ---
+# --- NODE CONVERSION ---
 node_schema = pa.schema([
     ('paperId:ID(Paper)', pa.int64()),
-    ('features:VECTOR<FLOAT32>(128)', pa.list_(pa.float32(), 128)),
+    ('features:VECTOR', pa.list_(pa.float32(), 128)),
     ('label:INT', pa.int32()),
     ('split:INT', pa.int8())
 ])
@@ -60,7 +60,7 @@ with pq.ParquetWriter('papers_nodes.parquet', node_schema) as writer:
         
         chunk_df = pd.DataFrame({
             'paperId:ID(Paper)': np.arange(start, end, dtype=np.int64),
-            'features:VECTOR<FLOAT32>(128)': feat_slice.tolist(),
+            'features:VECTOR': feat_slice.tolist(),
             'label:INT': labels_int[start:end],
             'split:INT': split_types[start:end]
         })
