@@ -5,16 +5,26 @@ provider "google" {
   region  = "europe-west4"
 }
 
-# Call the Neo4j configuration from the db folder
+# Database Module
 module "neo4j_instance" {
-  source = "./db"
-  
-  # Pass variables here if you want to make the module reusable
+  source     = "./db"
   project_id = "data-science-python-runtime"
   zone       = "europe-west4-a"
 }
 
-# Output the IP so you know where to SSH or SCP
+# ML Module
+module "ml_instance" {
+  source     = "./ml"
+  project_id = "data-science-python-runtime"
+  zone       = "europe-west4-a"
+}
+
+# Outputs for easy access
 output "neo4j_public_ip" {
   value = module.neo4j_instance.external_ip
 }
+
+output "ml_box_public_ip" {
+  value = module.ml_instance.ml_box_public_ip
+}
+
