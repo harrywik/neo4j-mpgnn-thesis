@@ -1,0 +1,26 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "DDP: Debug Single GPU",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "console": "integratedTerminal",
+            "justMyCode": true,
+            "env": {
+                "RANK": "0",
+                "LOCAL_RANK": "0",
+                "WORLD_SIZE": "1",
+                "MASTER_ADDR": "localhost",
+                "MASTER_PORT": "29500"
+            },
+            "args": [
+                "--total_epochs", "10",
+                "--save_every", "1",
+                "--batch_size", "32",
+                "--feature-store", "002"
+            ]
+        }
+    ]
+}
