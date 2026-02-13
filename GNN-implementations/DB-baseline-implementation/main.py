@@ -1,3 +1,4 @@
+import sys
 from typing import Dict
 from Neo4jConnection import Neo4jConnection
 from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
@@ -14,46 +15,15 @@ import pstats
 import argparse
 from pathlib import Path
 
-def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> None:
-    
-    model.eval()
-    with torch.no_grad():
-        N: int = 2**8
-        i: int = 0
+# Allow running this file directly by adding GNN-implementations to sys.path
+GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
+if str(GNN_IMPL_DIR) not in sys.path:
+    sys.path.insert(0, str(GNN_IMPL_DIR))
 
-        counts = []
-        partial_accuracies = []
+from evaluate import evaluate
+from Trainer import Trainer
 
-        while True:
-            node_ids = graph_store.get_split(N, offset=i, split=split, shuffle=False)
-            
-            if node_ids.numel() == 0:
-                break
 
-            i += node_ids.numel()
-
-            val_loader = NodeLoader(
-                data=(feature_store, graph_store), 
-                node_sampler=sampler,
-                input_nodes=node_ids,
-                batch_size=N,
-                shuffle=False
-            )
-            for data in val_loader:
-                break
-
-            out: torch.Tensor = model(data.x, data.edge_index)
-            seed_mask = torch.isin(data.n_id, data.input_id)
-            targets = data.y[seed_mask]
-            preds = out[seed_mask].argmax(dim=1)
-
-            counts.append(i)
-            partial_accuracies.append((targets == preds).sum().item() / targets.numel())
-
-        cnts = np.array(counts, dtype=np.float32)
-        cnts /= cnts.sum()
-        print(split.capitalize(), "accuracy:", cnts  @ np.array(partial_accuracies))
-        
 def main(version_dict: Dict[str, str]):
     # Demo local user with unsecure passwd
     driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()

@@ -9,6 +9,7 @@ class InMemoryGraphStore(GraphStore):
         super().__init__()
         self._edges: Dict[Tuple[EdgeType, EdgeLayout], EdgeTensorType] = {}
         self._adj: Dict[Tuple[EdgeType, EdgeLayout], List[List[int]]] = {}
+        self._split_indices: Dict[str, torch.Tensor] = {}
 
     @staticmethod
     def _key(attr: EdgeAttr) -> Tuple[EdgeType, EdgeLayout]:
@@ -35,7 +36,54 @@ class InMemoryGraphStore(GraphStore):
         if removed:
             self._adj.pop(self._key(edge_attr), None)
         return removed
+    def set_split_indices(self, split: str, indices: torch.Tensor) -> None:
+        if indices is None:
+            return
+        if not torch.is_tensor(indices):
+            indices = torch.tensor(indices, dtype=torch.long)
+        if indices.dtype != torch.long:
+            indices = indices.to(torch.long)
+        self._split_indices[split] = indices.view(-1).contiguous()
 
+    def set_split_masks(
+        self,
+        train_mask: Optional[torch.Tensor] = None,
+        val_mask: Optional[torch.Tensor] = None,
+        test_mask: Optional[torch.Tensor] = None,
+    ) -> None:
+        if train_mask is not None:
+            self.set_split_indices("train", torch.nonzero(train_mask, as_tuple=False).view(-1))
+        if val_mask is not None:
+            self.set_split_indices("val", torch.nonzero(val_mask, as_tuple=False).view(-1))
+        if test_mask is not None:
+            self.set_split_indices("test", torch.nonzero(test_mask, as_tuple=False).view(-1))
+
+    #    node_ids = graph_store.get_split(N, offset=i, split=split, shuffle=False)
+    def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:
+        assert not shuffle or (shuffle and offset is None), "Offset together with shuffle does not make sense"
+
+        if split not in self._split_indices:
+            raise KeyError(
+                f"Split '{split}' not found. Call set_split_indices(...) or set_split_masks(...) first."
+            )
+
+        indices = self._split_indices[split]
+        if indices.numel() == 0:
+            return indices
+
+        if shuffle:
+            perm = torch.randperm(indices.numel())
+            indices = indices[perm]
+        else:
+            indices = torch.sort(indices).values
+
+        if offset is not None:
+            indices = indices[offset:]
+        if n is not None:
+            indices = indices[:n]
+
+        return indices
+        
     def get_all_edge_attrs(self) -> List[EdgeAttr]:
         out: List[EdgeAttr] = []
         for (edge_type, layout), _ in self._edges.items():
