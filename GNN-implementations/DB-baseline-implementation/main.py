@@ -6,7 +6,6 @@ from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
 from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
-from torch_geometric.loader import NodeLoader
 from Model import GCN
 import torch
 import numpy as np
@@ -43,32 +42,22 @@ def main(version_dict: Dict[str, str]):
     model = GCN(1433, 32, 16, 7)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
     criterion = torch.nn.CrossEntropyLoss()
-    model.train()
 
-    for epoch in range(10):
-        train_indices = graph_store.get_split(256, split="train", shuffle=True)
+    trainer = Trainer(
+        model=model,
+        feature_store=feature_store,
+        graph_store=graph_store,
+        sampler=sampler,
+        optimizer=optimizer,
+        criterion=criterion,
+        batch_size=32,
+        nodes_per_epoch=256,
+        eval_every_epochs=None,
+        log_train_time=True
+    )
 
-        train_loader = NodeLoader(
-            data=(feature_store, graph_store), 
-            node_sampler=sampler,
-            input_nodes=train_indices,
-            batch_size=32,
-            shuffle=False
-        )
+    trainer.train(max_epochs=10)
 
-        for bi, batch in enumerate(train_loader):
-            optimizer.zero_grad()
-            out = model(batch.x, batch.edge_index)
-            seed_mask = torch.isin(batch.n_id, batch.input_id)
-            loss = criterion(out[seed_mask], batch.y[seed_mask])
-
-            loss.backward()
-            optimizer.step()
-            print(f"Epoch: {epoch} batch: {bi} | Loss: {loss:5f}")
-
-
-    evaluate(model, graph_store, feature_store, sampler, "train")
-    evaluate(model, graph_store, feature_store, sampler, "val")
     evaluate(model, graph_store, feature_store, sampler, "test")
 
 

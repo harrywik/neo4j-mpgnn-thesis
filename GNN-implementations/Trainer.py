@@ -28,6 +28,7 @@ class Trainer:
         eval_every_batches: int | None = None,
         eval_split: str = "val",
         evaluate_fn=None,
+        log_train_time: bool = False,
     ) -> None:
         self.model = model
         self.feature_store = feature_store
@@ -51,6 +52,7 @@ class Trainer:
         self.eval_every_batches = eval_every_batches
         self.eval_split = eval_split
         self.evaluate_fn = evaluate if evaluate_fn is None else evaluate_fn
+        self.log_train_time = log_train_time
 
         self.model.to(self.device)
 
@@ -140,3 +142,7 @@ class Trainer:
             # Only save and log from Rank 0
             if self.rank == 0 and self.snapshot_path and epoch % self.save_every == 0:
                 self._save_snapshot(epoch)
+
+        if self.rank == 0 and self.log_train_time:
+            duration = time.monotonic() - start_time
+            print(f"Training duration: {duration:.2f}s")
