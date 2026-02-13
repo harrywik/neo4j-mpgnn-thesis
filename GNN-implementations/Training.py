@@ -109,11 +109,11 @@ class Trainer:
                 input_nodes=train_indices,
                 batch_size=self.batch_size,
                 shuffle=self.nodeloader_args['shuffle'],
-                filter_per_worker=self.nodeloader_args['filter_per_worker'],
+                # filter_per_worker=self.nodeloader_args['filter_per_worker'],
                 num_workers=self.nodeloader_args['num_workers'],
-                persistent_workers=self.nodeloader_args['persistent_workers'],
-                prefetch_factor=self.nodeloader_args['prefetch_factor'],
-                pin_memory=self.nodeloader_args['pin_memory'],
+                # persistent_workers=self.nodeloader_args['persistent_workers'],
+                # prefetch_factor=self.nodeloader_args['prefetch_factor'],
+                # pin_memory=self.nodeloader_args['pin_memory'],
             )
         else:
             # there are some arguments we cant use if the implementation is not pickle safe, so we force them to be single-process
