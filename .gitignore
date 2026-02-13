@@ -23,5 +23,8 @@ wheels/
 .venv/
 
 # data
+data/cora/cora.tgz
 data/Planetoid/
 random_notes.txt
+GNN-implementations/data
+GNN-implementations/profiles
