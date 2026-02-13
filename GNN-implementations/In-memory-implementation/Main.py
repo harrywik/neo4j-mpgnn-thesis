@@ -1,4 +1,5 @@
 import sys
+import json
 from pathlib import Path
 from torch_geometric.datasets import Planetoid
 from torch_geometric.transforms import NormalizeFeatures
@@ -24,7 +25,7 @@ from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 
 
-def main():
+def main(config: dict):
     # Get dataset
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
     graph = dataset[0]
@@ -53,7 +54,8 @@ def main():
     torch.use_deterministic_algorithms(True)
     model = GCN(in_dim=1433, hidden_dim=16, out_dim=16, nbr_classes=7)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=0.01, weight_decay=5e-4)
+    lr = config.get("lr", 0.01)
+    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
     train_mask = graph.train_mask
     test_mask = graph.test_mask
     val_mask = graph.val_mask
@@ -74,13 +76,14 @@ def main():
         sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,
-        batch_size=32,
-        nodes_per_epoch=256,
-        eval_every_epochs=None,
-        log_train_time=True,
+        batch_size=config.get("batch_size"),
+        nodes_per_epoch=config.get("nodes_per_epoch"),
+        eval_every_epochs=config.get("eval_every_epochs"),
+        eval_every_batches=config.get("eval_every_batches"),
+        log_train_time=config.get("log_train_time"),
         nodeloader_args=nodeloader_args,
     )
-    trainer.train(max_epochs=100)
+    trainer.train(max_epochs=config.get("max_epochs"))
 
 
     # evaluate
@@ -105,7 +108,13 @@ if __name__ == "__main__":
 
         pr = cProfile.Profile()
         pr.enable()
-        main()
+        config_path = BASE_DIR.parent / "train_config.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        with config_path.open("r") as f:
+            config = json.load(f)
+
+        main(config)
         pr.disable()
 
         stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
@@ -116,4 +125,10 @@ if __name__ == "__main__":
 
         print(f"wrote {prof_path} and {txt_path}")
     else:
-        main()
+        config_path = Path(__file__).resolve().parent.parent / "train_config.json"
+        if not config_path.exists():
+            raise FileNotFoundError(f"Config not found: {config_path}")
+        with config_path.open("r") as f:
+            config = json.load(f)
+
+        main(config)
