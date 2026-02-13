@@ -1,5 +1,6 @@
 import os
 import sys
+import json
 from typing import Dict
 from Neo4jConnection import Neo4jConnection
 from Neo4jFeatureStore import Neo4jFeatureStore
@@ -25,7 +26,7 @@ from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 
 
-def main(version_dict: Dict[str, str]):
+def main(version_dict: Dict[str, str], config: dict):
     # Demo local user with unsecure passwd
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
@@ -36,17 +37,9 @@ def main(version_dict: Dict[str, str]):
     sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
+    lr = config.get("lr", 1e-2)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
-
-    nodeloader_args = put_nodeLoader_args_map(
-        pickle_safe=True,
-        shuffle=True,
-        num_workers=2,
-        persistent_workers=True,
-        # prefetch_factor=2,
-        filter_per_worker=False,
-    )
 
     trainer = Trainer(
         model=model,
@@ -55,14 +48,14 @@ def main(version_dict: Dict[str, str]):
         sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,
-        batch_size=500,
-        # nodes_per_epoch=256,
-        eval_every_epochs=None,
-        log_train_time=True,
-        nodeloader_args=nodeloader_args,
+        batch_size=config.get("batch_size", 500),
+        nodes_per_epoch=config.get("nodes_per_epoch"),
+        eval_every_epochs=config.get("eval_every_epochs"),
+        eval_every_batches=config.get("eval_every_batches"),
+        log_train_time=config.get("log_train_time", True),
     )
 
-    trainer.train(max_epochs=20)
+    trainer.train(max_epochs=config.get("max_epochs", 20))
 
     evaluate(model, graph_store, feature_store, sampler, "test")
 
@@ -76,6 +69,12 @@ if __name__ == "__main__":
         default=True,
         help="Whether or not to run cProfile",
     )
+    parser.add_argument(
+        "--config",
+        type=str,
+        default="GNN-implementations/train_config.json",
+        help="Path to JSON training config",
+    )
     parser.add_argument("--feature-store", 
                         type=str, 
                         default="002",
@@ -86,6 +85,11 @@ if __name__ == "__main__":
     main_args = {
         "feature_store": args.feature_store
     }
+
+    if not os.path.exists(args.config):
+        raise FileNotFoundError(f"Config not found: {args.config}")
+    with open(args.config, "r") as f:
+        config = json.load(f)
 
     if args.profile:
         BASE_DIR = Path(__file__).resolve().parent                  # folder containing Main.py
@@ -103,7 +107,7 @@ if __name__ == "__main__":
 
         pr = cProfile.Profile()
         pr.enable()
-        main(main_args)
+        main(main_args, config)
         pr.disable()
 
         stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
@@ -114,5 +118,5 @@ if __name__ == "__main__":
 
         print(f"wrote {prof_path} and {txt_path}")
     else:
-        main(main_args)
+        main(main_args, config)
 
