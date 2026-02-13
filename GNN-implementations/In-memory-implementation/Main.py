@@ -14,8 +14,6 @@ import time
 import cProfile
 import pstats
 from pathlib import Path
-from dotenv import load_dotenv
-
 
 # Allow running this file directly by adding GNN-implementations to sys.path
 GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
@@ -25,7 +23,6 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 
-load_dotenv()
 
 def main():
     # Get dataset
