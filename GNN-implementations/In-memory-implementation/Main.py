@@ -14,6 +14,8 @@ import time
 import cProfile
 import pstats
 from pathlib import Path
+from dotenv import load_dotenv
+
 
 # Allow running this file directly by adding GNN-implementations to sys.path
 GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
@@ -21,7 +23,9 @@ if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
 from evaluate import evaluate
-from Trainer import Trainer
+from Training import Trainer, put_nodeLoader_args_map
+
+load_dotenv()
 
 def main():
     # Get dataset
@@ -61,26 +65,30 @@ def main():
 
     # train model
     snapshot_path = Path(__file__).resolve().parent.parent / "profiles" / "InMemoryMain2_snapshot.pt"
+    nodeloader_args = put_nodeLoader_args_map(
+        pickle_safe=False,
+        shuffle=True,
+    )
+
     trainer = Trainer(
         model=model,
         feature_store=fstore,
         graph_store=gstore,
         sampler=sampler,
-        eval_every_epochs=50,
-        eval_split="val",
+        optimizer=optimizer,
+        criterion=criterion,
+        batch_size=32,
+        nodes_per_epoch=256,
+        eval_every_epochs=None,
+        log_train_time=True,
+        nodeloader_args=nodeloader_args,
     )
-    training_time_start = time.time()
-    trainer.train(max_epochs=300)
-    training_duration = time.time() - training_time_start
+    trainer.train(max_epochs=100)
 
 
     # evaluate
-    test_acc = evaluate(model, gstore, fstore, sampler, 'test')
-    
-    print("nbr sampling workers :")
-    print(f"accuracy            : {test_acc:.2f}")
-    print(f"training duration   : {training_duration:.2f}")
-    
+    evaluate(model, gstore, fstore, sampler, 'test')
+
     
 if __name__ == "__main__":
     
