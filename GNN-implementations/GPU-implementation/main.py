@@ -17,7 +17,9 @@ import pstats
 import argparse
 from pathlib import Path
 
-from remote_backend import Trainer, evaluate
+from remote_backend import Trainer#, evaluate
+from .evaluate import evaluate
+
 
 def ddp_setup() -> None:
     # Check if we are actually in a distributed environment

@@ -1,8 +1,28 @@
 import numpy as np
 from torch_geometric.loader import NodeLoader
 import torch
+from torch import nn
+from torch_geometric.data import GraphStore, FeatureStore
+from torch_geometric.sampler import BaseSampler
 
-def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> float:
+def evaluate(model: nn.Module, graph_store: GraphStore, feature_store: FeatureStore, sampler: BaseSampler, split: str = "val") -> float:
+    """Evaluate a GNN model on a dataset split using neighbor sampling.
+
+    The function iterates over the requested split in fixed-size chunks of seed
+    nodes, constructs a one-batch `NodeLoader` per chunk, and computes accuracy
+    on the seed nodes only. It returns a weighted mean of partial accuracies
+    where each chunk is weighted by its number of seed nodes.
+
+    Args:
+        model: A PyTorch model that accepts `(x, edge_index)` and returns logits.
+        graph_store: GraphStore providing `get_split(...)` and graph topology.
+        feature_store: FeatureStore providing node features and labels.
+        sampler: A PyG neighbor sampler compatible with `NodeLoader`.
+        split: Dataset split name, e.g., "train", "val", or "test".
+
+    Returns:
+        The weighted accuracy for the specified split.
+    """
     model.eval()
     device = next(model.parameters()).device
     with torch.no_grad():
@@ -42,5 +62,5 @@ def evaluate(model, graph_store, feature_store, sampler, split: str = "val") -> 
         cnts = np.array(counts, dtype=np.float32)
         cnts /= cnts.sum()
         acc = float(cnts @ np.array(partial_accuracies))
-        print(split.capitalize(), "accuracy:", acc)
+        print(f"{split.capitalize()} accuracy: {acc:.2f}")
         return acc

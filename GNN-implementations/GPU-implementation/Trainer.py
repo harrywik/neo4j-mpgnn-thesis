@@ -2,7 +2,7 @@ import os
 import time
 import torch
 
-from remote_backend import evaluate
+from evaluate import evaluate
 from torch_geometric.loader import NodeLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
