@@ -63,14 +63,14 @@ def main(
     ddp_setup()
     
     # Initialize your stores...
-    uri = "bolt://localhost:7687"
-    user = "neo4j"
-    pwd = "thesis-db-0-pw"
-    label_map = build_label_map(uri, user, pwd)
+    uri = os.environ["URI"]
+    user = os.environ["USERNAME"]
+    password = os.environ["PASSWORD"]
+    label_map = build_label_map(uri, user, password)
 
     # Store logic...
-    feature_store = Neo4jFeatureStore002(uri, user, pwd, label_map=label_map)
-    graph_store   = Neo4jGraphStore(uri, user, pwd)
+    feature_store = Neo4jFeatureStore002(uri, user, password, label_map=label_map)
+    graph_store   = Neo4jGraphStore(uri, user, password)
     sampler       = Neo4jSampler(graph_store, [10, 5])
     
     # Ensure only one process does the DB split to avoid race conditions

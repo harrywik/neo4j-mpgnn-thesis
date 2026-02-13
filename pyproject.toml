@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "dotenv>=0.9.9",
     "graphdatascience>=1.19",
     "neo4j-rust-ext>=6.1.0.0",
     "notebook>=7.5.3",

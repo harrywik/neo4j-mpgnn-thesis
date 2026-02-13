@@ -1,3 +1,4 @@
+import os
 import sys
 from typing import Dict
 from Neo4jConnection import Neo4jConnection
@@ -13,6 +14,9 @@ import cProfile
 import pstats
 import argparse
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Allow running this file directly by adding GNN-implementations to sys.path
 GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
@@ -20,12 +24,16 @@ if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
 from evaluate import evaluate
-from Trainer import Trainer
+from Training import Trainer, put_nodeLoader_args_map
 
 
 def main(version_dict: Dict[str, str]):
     # Demo local user with unsecure passwd
-    driver = Neo4jConnection("bolt://localhost:7687", "neo4j", "thesis-db-0-pw").get_driver()
+    uri = os.environ["URI"]
+    user = os.environ["USERNAME"]
+    password = os.environ["PASSWORD"]
+    print(uri, user, password)
+    driver = Neo4jConnection(uri, user, password).get_driver()
     match version_dict.get("feature_store", "001"):
         case "000":
             feature_store = Neo4jFeatureStore000(driver)
@@ -43,6 +51,11 @@ def main(version_dict: Dict[str, str]):
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
     criterion = torch.nn.CrossEntropyLoss()
 
+    nodeloader_args = put_nodeLoader_args_map(
+        pickle_safe=False,
+        shuffle=True,
+    )
+
     trainer = Trainer(
         model=model,
         feature_store=feature_store,
@@ -53,10 +66,11 @@ def main(version_dict: Dict[str, str]):
         batch_size=32,
         nodes_per_epoch=256,
         eval_every_epochs=None,
-        log_train_time=True
+        log_train_time=True,
+        nodeloader_args=nodeloader_args,
     )
 
-    trainer.train(max_epochs=10)
+    trainer.train(max_epochs=100)
 
     evaluate(model, graph_store, feature_store, sampler, "test")
 
