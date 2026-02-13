@@ -1,6 +1,9 @@
+import sys
 import time
 import os
 from typing import Dict
+
+from dotenv import load_dotenv
 from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
 from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
 from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
@@ -17,8 +20,14 @@ import pstats
 import argparse
 from pathlib import Path
 
-from remote_backend import Trainer#, evaluate
-from .evaluate import evaluate
+# Allow running this file directly by adding GNN-implementations to sys.path
+GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
+if str(GNN_IMPL_DIR) not in sys.path:
+    sys.path.insert(0, str(GNN_IMPL_DIR))
+
+from evaluate import evaluate
+from DistributedTraining import DistributedTrainer, put_nodeLoader_args_map
+
 
 
 def ddp_setup() -> None:
@@ -61,7 +70,7 @@ def main(
     max_train_seconds: int = 3600,
 ):
     ddp_setup()
-    
+    load_dotenv()
     # Initialize your stores...
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
@@ -81,7 +90,7 @@ def main(
     model = GCN(1433, 32, 16, 7)
     optimizer = torch.optim.AdamW(model.parameters(), lr=1e-2)
 
-    trainer = Trainer(
+    trainer = DistributedTrainer(
         model=model,
         feature_store=feature_store,
         graph_store=graph_store,

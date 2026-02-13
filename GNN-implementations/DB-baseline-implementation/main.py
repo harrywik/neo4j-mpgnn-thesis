@@ -32,7 +32,6 @@ def main(version_dict: Dict[str, str]):
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
-    print(uri, user, password)
     driver = Neo4jConnection(uri, user, password).get_driver()
     match version_dict.get("feature_store", "001"):
         case "000":
@@ -44,7 +43,7 @@ def main(version_dict: Dict[str, str]):
         case _:
             raise Exception("Must know which impl of `FeatureStore` to use.")
         
-    graph_store = Neo4jGraphStore(driver) # Sampler handles all topology
+    graph_store = Neo4jGraphStore(driver) 
     sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
@@ -76,10 +75,9 @@ def main(version_dict: Dict[str, str]):
 
 
 if __name__ == "__main__":
-    torch.set_num_threads(1)
     parser = argparse.ArgumentParser(description="Provide profiling versions for this experiment.")
 
-    parser.add_argument("--profile", action="store_true", help="Wheather or not to run cProfile")
+    parser.add_argument("--profile", action="store_true", help="Whether or not to run cProfile")
     parser.add_argument("--feature-store", 
                         type=str, 
                         default="002",
