@@ -7,12 +7,14 @@ from collections import OrderedDict
 import numpy as np
 
 class Neo4jFeatureStore(FeatureStore):
+    """Neo4j feature store with caching and deterministic label mapping, but without pickle safety."""
     def __init__(self, driver: Driver, cache_size: int = 3000) -> None:
         super().__init__()
         self.driver = driver
         self._labels = {}
         # Simple LRU using an OrderedDict
         self.cache = OrderedDict()
+        self.label_cache = OrderedDict()
         self.cache_size = cache_size
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
@@ -28,14 +30,27 @@ class Neo4jFeatureStore(FeatureStore):
             ORDER BY n.id ASC
             """
             data_map = {}
-            with self.driver.session() as session:
-                result = session.run(query, node_ids=node_ids)
-                for record in result:
-                    label_str = record["value"]
-                    if label_str not in self._labels:
-                        self._labels[label_str] = len(self._labels)
-                    num_label = self._labels[label_str]
-                    data_map[record["id"]] = num_label
+            missing_indices = []
+
+            for nid in node_ids:
+                if nid in self.label_cache:
+                    self.label_cache.move_to_end(nid)
+                    data_map[nid] = self.label_cache[nid]
+                else:
+                    missing_indices.append(nid)
+
+            if missing_indices:
+                with self.driver.session() as session:
+                    result = session.run(query, node_ids=missing_indices)
+                    for record in result:
+                        label_str = record["value"]
+                        if label_str not in self._labels:
+                            self._labels[label_str] = len(self._labels)
+                        num_label = self._labels[label_str]
+                        data_map[record["id"]] = num_label
+                        self.label_cache[record["id"]] = num_label
+                        if len(self.label_cache) > self.cache_size:
+                            self.label_cache.popitem(last=False)
                 
             ordered_list = [data_map[i] for i in node_ids]
             return torch.tensor(ordered_list, dtype=torch.int64)
@@ -78,7 +93,6 @@ class Neo4jFeatureStore(FeatureStore):
                 
         # Reconstruct in correct order
         ordered_list = [data_map[i] for i in node_ids]
-        # np.stack is faster than torch.stack for numpy inputs
         final_array = np.stack(ordered_list)
 
         return torch.from_numpy(final_array)

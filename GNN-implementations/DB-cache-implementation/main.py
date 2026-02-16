@@ -3,7 +3,9 @@ import sys
 import json
 from typing import Dict
 from Neo4jConnection import Neo4jConnection
-from Neo4jFeatureStore import Neo4jFeatureStore
+from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
+from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
+from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
 from Model import GCN
@@ -26,13 +28,27 @@ from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 
 
-def main(config: dict):
+def main(version_dict: Dict[str, str], config: dict):
     # Demo local user with unsecure passwd
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = Neo4jFeatureStore(driver)
+    match version_dict.get("feature_store", "001"):
+        case "000":
+            feature_store = Neo4jFeatureStore000(driver)
+        case "001":
+            feature_store = Neo4jFeatureStore001(
+                driver,
+                cache_size=config.get("cache_size", 3000),
+                label_cache_size=config.get("label_cache_size"),
+                batch_cache_size=config.get("batch_cache_size", 64),
+                db_batch_size=config.get("db_batch_size", 1000),
+            )
+        case "002":
+            feature_store = Neo4jFeatureStore002(driver)
+        case _:
+            raise Exception("Must know which impl of `FeatureStore` to use.")
         
     graph_store = Neo4jGraphStore(driver) 
     sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
@@ -41,6 +57,16 @@ def main(config: dict):
     lr = config.get("lr", 1e-2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
+
+    if config.get("prewarm_cache", True) and hasattr(feature_store, "prewarm"):
+        split = config.get("prewarm_split", "train")
+        prewarm_n = config.get("prewarm_max_nodes", 5000)
+        warm_ids = graph_store.get_split(n=prewarm_n, split=split, shuffle=True)
+        feature_store.prewarm(
+            warm_ids.tolist(),
+            include_embeddings=config.get("prewarm_embeddings", True),
+            include_labels=config.get("prewarm_labels", True),
+        )
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,
@@ -82,8 +108,16 @@ if __name__ == "__main__":
             default="GNN-implementations/train_config.json",
             help="Path to JSON training config",
         )
-
+    parser.add_argument("--feature-store", 
+            type=str, 
+            default="002",
+            choices=["000", "001", "002"],
+            help="Feature store version")
+    
     args = parser.parse_args()
+    main_args = {
+        "feature_store": args.feature_store
+    }
 
     if not os.path.exists(args.config):
         raise FileNotFoundError(f"Config not found: {args.config}")
@@ -96,16 +130,17 @@ if __name__ == "__main__":
         profiles_dir.mkdir(parents=True, exist_ok=True)
 
         folder_name = BASE_DIR.name                                # e.g. "InMemoryGNNExample"
+        ver = f"feat_store_v{main_args['feature_store']}"
 
         target_dir = profiles_dir / folder_name
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        prof_path = target_dir / f"{folder_name}.prof"
-        txt_path  = target_dir / f"{folder_name}.txt"
+        prof_path = target_dir / f"{ver}.prof"
+        txt_path  = target_dir / f"{ver}.txt"
 
         pr = cProfile.Profile()
         pr.enable()
-        main(config)
+        main(main_args, config)
         pr.disable()
 
         stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
@@ -116,5 +151,5 @@ if __name__ == "__main__":
 
         print(f"wrote {prof_path} and {txt_path}")
     else:
-        main(config)
+        main(main_args, config)
 
