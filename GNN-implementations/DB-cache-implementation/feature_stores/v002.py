@@ -2,100 +2,156 @@ import torch
 from torch_geometric.typing import FeatureTensorType
 from torch_geometric.data.feature_store import FeatureStore, TensorAttr, NodeType
 from neo4j import Driver
+from neo4j.exceptions import ClientError
 from typing import Optional, List, Tuple, Dict
 from collections import OrderedDict
 import numpy as np
 
+
 class Neo4jFeatureStore(FeatureStore):
-    """Neo4j feature store with caching and deterministic label mapping, but without pickle safety."""
-    def __init__(self, driver: Driver, cache_size: int = 3000) -> None:
+    """Neo4j feature store with a two-tier caching system: a static "hot" cache for PageRank-important nodes and a dynamic LRU cache for recently accessed nodes."""
+    def __init__(self, driver: Driver, cache_size: int = 3000, hot_cache_size: int = None) -> None:
         super().__init__()
         self.driver = driver
         self._labels = {}
-        # Simple LRU using an OrderedDict
+        
+        # 1. Static "Hot" Cache for PageRank-important nodes
+        self.hot_cache = {}
+        self.hot_label_cache = {} 
+        hot_cache_size = hot_cache_size or int(cache_size // 3)  
+        self._prefill_hot_cache(graph_name="hot_cache_projection", k=hot_cache_size)  
+        
+        # 2. Dynamic LRU Cache for recently accessed nodes
         self.cache = OrderedDict()
         self.label_cache = OrderedDict()
         self.cache_size = cache_size
 
+
+
+    def _prefill_hot_cache(
+        self,
+        graph_name: str,
+        k: int = 500,
+        node_label: str = "Paper",
+        rel_type: str = "CITES",
+        undirected: bool = True,
+        drop_graph: bool = True,
+    ):
+        """
+        Runs PageRank in GDS and fills the static hot_cache with the top K nodes.
+        Call this before starting your training loop.
+        """
+        self.hot_cache.clear()
+        self.hot_label_cache.clear()
+        orientation = "UNDIRECTED" if undirected else "NATURAL"
+        exists_query = "CALL gds.graph.exists($name) YIELD exists"
+        project_query = f"""
+        CALL gds.graph.project(
+            $name,
+            $label,
+            {{ {rel_type}: {{ type: $rel_type, orientation: $orientation }} }}
+        )
+        YIELD graphName
+        """
+        pagerank_query = f"""
+        CALL gds.pageRank.stream('{graph_name}')
+        YIELD nodeId, score
+        WITH gds.util.asNode(nodeId) AS n, score
+        ORDER BY score DESC LIMIT $limit
+        RETURN n.id AS id, n.embedding AS embedding, n.subject AS label
+        """
+        drop_query = "CALL gds.graph.drop($name)"
+
+        projected_here = False
+        try:
+            with self.driver.session() as session:
+                exists = session.run(exists_query, name=graph_name).single()["exists"]
+                if not exists:
+                    session.run(
+                        project_query,
+                        name=graph_name,
+                        label=node_label,
+                        rel_type=rel_type,
+                        orientation=orientation,
+                    )
+                    projected_here = True
+
+                result = session.run(pagerank_query, limit=k)
+                for record in result:
+                    nid = record["id"]
+                    # Process Embedding
+                    feat = np.frombuffer(record["embedding"], dtype=np.float32).copy()
+                    self.hot_cache[nid] = feat
+                    
+                    # Process Label
+                    label_str = record["label"]
+                    if label_str not in self._labels:
+                        self._labels[label_str] = len(self._labels)
+                    self.hot_label_cache[nid] = self._labels[label_str]
+
+                    if len(self.hot_cache) >= k:
+                        break
+
+                if drop_graph and projected_here:
+                    session.run(drop_query, name=graph_name)
+        except ClientError as exc:
+            raise RuntimeError("GDS is unavailable or graph projection failed.") from exc
+        
+        print(f"Hot cache prefilled with {len(self.hot_cache)} nodes.")
+
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
-
-        # If looking for a categorical target
-        if attr.attr_name == "y":
-            # `subject` is hardcoded as the categorical target for now
-            query = f"""
-            MATCH (n)
-            WHERE n.id IN $node_ids
-            RETURN n.id AS id, n.subject AS value
-            ORDER BY n.id ASC
-            """
-            data_map = {}
-            missing_indices = []
-
-            for nid in node_ids:
-                if nid in self.label_cache:
-                    self.label_cache.move_to_end(nid)
-                    data_map[nid] = self.label_cache[nid]
-                else:
-                    missing_indices.append(nid)
-
-            if missing_indices:
-                with self.driver.session() as session:
-                    result = session.run(query, node_ids=missing_indices)
-                    for record in result:
-                        label_str = record["value"]
-                        if label_str not in self._labels:
-                            self._labels[label_str] = len(self._labels)
-                        num_label = self._labels[label_str]
-                        data_map[record["id"]] = num_label
-                        self.label_cache[record["id"]] = num_label
-                        if len(self.label_cache) > self.cache_size:
-                            self.label_cache.popitem(last=False)
-                
-            ordered_list = [data_map[i] for i in node_ids]
-            return torch.tensor(ordered_list, dtype=torch.int64)
-
-        # else: look for embedding
-        # Identify what is already in cache vs. what we need to fetch
         data_map = {}
         missing_indices = []
+
+        is_label = (attr.attr_name == "y")
         
+        # Determine which caches to check
+        target_hot_cache = self.hot_label_cache if is_label else self.hot_cache
+        target_lru_cache = self.label_cache if is_label else self.cache
+
         for nid in node_ids:
-            if nid in self.cache:
-                # Move to end to maintain LRU order
-                self.cache.move_to_end(nid)
-                data_map[nid] = self.cache[nid]
+            # CHECK 1: Static Hot Cache
+            if nid in target_hot_cache:
+                data_map[nid] = target_hot_cache[nid]
+            
+            # CHECK 2: Dynamic LRU Cache
+            elif nid in target_lru_cache:
+                target_lru_cache.move_to_end(nid)
+                data_map[nid] = target_lru_cache[nid]
+            
+            # FALLBACK: Mark for DB Fetch
             else:
                 missing_indices.append(nid)
 
         if missing_indices:
-            query = f"""
-            MATCH (n)
-            WHERE n.id IN $node_ids
-            RETURN n.id AS id, n.embedding AS value
-            ORDER BY n.id ASC
-            """
+            # DB Fetch logic (optimized for labels vs embeddings)
+            val_col = "subject" if is_label else "embedding"
+            query = f"MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id, n.{val_col} AS value"
 
             with self.driver.session() as session:
                 result = session.run(query, node_ids=missing_indices)
                 for record in result:
-                    raw_blob = record["value"]
+                    nid, val = record["id"], record["value"]
                     
-                    # Asumption embedding is saved as float32 in DB
-                    feat = np.frombuffer(raw_blob, dtype=np.float32).copy()
-                    data_map[record["id"]] = feat
-                    # Store in map and update LRU cache
-                    self.cache[record["id"]] = feat
-                    
-                    # Evict oldest if cache is full
-                    if len(self.cache) > self.cache_size:
-                        self.cache.popitem(last=False)
-                
-        # Reconstruct in correct order
-        ordered_list = [data_map[i] for i in node_ids]
-        final_array = np.stack(ordered_list)
+                    if is_label:
+                        if val not in self._labels: self._labels[val] = len(self._labels)
+                        processed_val = self._labels[val]
+                    else:
+                        processed_val = np.frombuffer(val, dtype=np.float32).copy()
 
-        return torch.from_numpy(final_array)
+                    data_map[nid] = processed_val
+                    
+                    # Update LRU cache only
+                    target_lru_cache[nid] = processed_val
+                    if len(target_lru_cache) > self.cache_size:
+                        target_lru_cache.popitem(last=False)
+
+        # Reconstruct result
+        ordered_list = [data_map[i] for i in node_ids]
+        if is_label:
+            return torch.tensor(ordered_list, dtype=torch.int64)
+        return torch.from_numpy(np.stack(ordered_list))
 
     @staticmethod
     def _key(attr: TensorAttr) -> Tuple[Optional[NodeType], str]:
