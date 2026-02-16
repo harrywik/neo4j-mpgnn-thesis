@@ -5,6 +5,7 @@ from neo4j import Driver
 from typing import Optional, List, Tuple, Dict
 
 class Neo4jFeatureStore(FeatureStore):
+    """Basic Neo4j feature store without caching or pickle safety"""
     def __init__(self, driver: Driver) -> None:
         super().__init__()
         self.driver = driver
