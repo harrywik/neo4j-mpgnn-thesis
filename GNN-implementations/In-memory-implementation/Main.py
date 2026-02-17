@@ -8,7 +8,6 @@ import torch
 from torch import optim
 from InMemoryFeatureStore import InMemoryFeatureStore
 from InMemoryGraph import InMemoryGraphStore
-from Model import GCN
 from torch_geometric.data.graph_store import EdgeLayout
 from CustomSampler import InMemorySampler
 import time
@@ -20,10 +19,9 @@ from pathlib import Path
 GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
-
+from Model import GCN
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-
 
 def main(config: dict):
     # Get dataset
