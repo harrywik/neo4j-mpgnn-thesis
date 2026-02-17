@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple, Dict
 from collections import OrderedDict
 import numpy as np
 
-class Neo4jFeatureStore(FeatureStore):
+class SimpleCacheFeatureStore(FeatureStore):
     """Neo4j feature store with caching and deterministic label mapping, but without pickle safety."""
     def __init__(self, driver: Driver, cache_size: int = 3000) -> None:
         super().__init__()

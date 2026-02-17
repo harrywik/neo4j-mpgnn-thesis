@@ -17,9 +17,9 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from models.GCN import GCN
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-from feature_stores.NoCacheFeatureStore import NoCacheFeatureStore
-from graph_stores.BaseLineGS import BaseLineGS
-from samplers.UniformSampler import UniformSampler
+from feature_stores import NoCacheFeatureStore
+from graph_stores import BaseLineGS
+from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
 
 def main(config: dict):
