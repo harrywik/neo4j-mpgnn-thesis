@@ -8,8 +8,8 @@ from collections import OrderedDict
 import numpy as np
 import atexit
 
-class Neo4jFeatureStore(FeatureStore):
-    """pickle safe implemenation of feature store"""
+class PickleSafeFeatureStore(FeatureStore):
+    """pickle safe implemenation of feature store with simple LRU cache"""
     def __init__(
         self,
         uri: str,

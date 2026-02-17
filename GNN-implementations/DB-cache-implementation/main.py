@@ -2,12 +2,6 @@ import os
 import sys
 import json
 from typing import Dict
-from Neo4jConnection import Neo4jConnection
-from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
-from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
-from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
-from Neo4jGraphStore import Neo4jGraphStore
-from Neo4jSampler import Neo4jSampler
 import torch
 import numpy as np
 import cProfile
@@ -25,8 +19,11 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-from Model import GCN
-
+from models.GCN import GCN
+from Neo4jConnection import Neo4jConnection
+from feature_stores.PageRankCacheFeatureStore import PageRankCacheFeatureStore
+from graph_stores.v1 import Neo4jGraphStore
+from samplers.UniformSampler import UniformSampler
 
 def main(version_dict: Dict[str, str], config: dict):
     # Demo local user with unsecure passwd
@@ -34,24 +31,10 @@ def main(version_dict: Dict[str, str], config: dict):
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
     driver = Neo4jConnection(uri, user, password).get_driver()
-    match version_dict.get("feature_store", "001"):
-        case "000":
-            feature_store = Neo4jFeatureStore000(driver)
-        case "001":
-            feature_store = Neo4jFeatureStore001(
-                driver,
-                cache_size=config.get("cache_size", 3000),
-                label_cache_size=config.get("label_cache_size"),
-                batch_cache_size=config.get("batch_cache_size", 64),
-                db_batch_size=config.get("db_batch_size", 1000),
-            )
-        case "002":
-            feature_store = Neo4jFeatureStore002(driver)
-        case _:
-            raise Exception("Must know which impl of `FeatureStore` to use.")
+    feature_store = PageRankCacheFeatureStore(driver)
         
     graph_store = Neo4jGraphStore(driver) 
-    sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
+    sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
     lr = config.get("lr", 1e-2)

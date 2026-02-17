@@ -1,6 +1,10 @@
 import os
 import sys
 import json
+from Neo4jConnection import Neo4jConnection
+from feature_stores import *
+from graph_stores import *
+from samplers import *
 import torch
 import cProfile
 import pstats
@@ -9,31 +13,24 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
-# Allow running this file directly by adding GNN-implementations to sys.path
-GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
-if str(GNN_IMPL_DIR) not in sys.path:
-    sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from models.GCN import GCN
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-from feature_stores.NoCacheFeatureStore import NoCacheFeatureStore
-from graph_stores.v1 import Neo4jGraphStore
-from samplers.UniformSampler import UniformSampler
-from Neo4jConnection import Neo4jConnection
+from Model import GCN
+
 
 def main(config: dict):
+    # Demo local user with unsecure passwd
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
-    
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = NoCacheFeatureStore(driver)
+    feature_store = Neo4jFeatureStore(driver)
+        
     graph_store = Neo4jGraphStore(driver) 
-    sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
-    
+    sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
-    model = GCN(1433, 32, 32, 7)
+    model = GCN(1433, 32, 16, 7)
     lr = config.get("lr", 1e-2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()

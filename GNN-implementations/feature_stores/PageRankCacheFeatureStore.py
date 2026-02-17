@@ -8,7 +8,7 @@ from collections import OrderedDict
 import numpy as np
 
 
-class Neo4jFeatureStore(FeatureStore):
+class PageRankCacheFeatureStore(FeatureStore):
     """Neo4j feature store with a two-tier caching system: a static "hot" cache for PageRank-important nodes and a dynamic LRU cache for recently accessed nodes."""
     def __init__(self, driver: Driver, cache_size: int = 3000, hot_cache_size: int = None) -> None:
         super().__init__()
