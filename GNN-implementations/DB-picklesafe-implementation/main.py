@@ -40,6 +40,16 @@ def main(version_dict: Dict[str, str], config: dict):
     lr = config.get("lr", 1e-2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
+    
+    nodeloader_args = put_nodeLoader_args_map(
+        pickle_safe=True,
+        shuffle=True,
+        num_workers=2,          # must be 0 for pickle_safe=True
+        prefetch_factor=2,
+        filter_per_worker=False,
+        persistent_workers=False,
+        pin_memory=False,
+    )
 
     trainer = Trainer(
         model=model,
@@ -53,6 +63,7 @@ def main(version_dict: Dict[str, str], config: dict):
         eval_every_epochs=config.get("eval_every_epochs"),
         eval_every_batches=config.get("eval_every_batches"),
         log_train_time=config.get("log_train_time", True),
+        nodeloader_args=nodeloader_args,
     )
 
     trainer.train(max_epochs=config.get("max_epochs", 20))
