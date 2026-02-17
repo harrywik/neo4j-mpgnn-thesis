@@ -1,19 +1,10 @@
 import sys
-import time
 import os
 from typing import Dict
-
 from dotenv import load_dotenv
-from feature_stores.v002 import Neo4jFeatureStore as Neo4jFeatureStore002
-from feature_stores.v001 import Neo4jFeatureStore as Neo4jFeatureStore001
-from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
-from Neo4jGraphStore import Neo4jGraphStore
-from Neo4jSampler import Neo4jSampler
 from torch_geometric.loader import NodeLoader
 import torch
 import torch.distributed as dist
-from torch.nn.parallel import DistributedDataParallel as DDP
-import numpy as np
 import cProfile
 import pstats
 import argparse
@@ -25,8 +16,11 @@ if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
 from evaluate import evaluate
-from DistributedTraining import DistributedTrainer, put_nodeLoader_args_map
-from Model import GCN
+from DistributedTraining import DistributedTrainer
+from models.GCN import GCN
+from feature_stores.PickleSafeFeatureStore import PickleSafeFeatureStore
+from graph_stores.PickleSafeGraphStore import PickleSafeGraphStore
+from samplers.UniformSampler import UniformSampler
 
 
 
@@ -78,9 +72,9 @@ def main(
     label_map = build_label_map(uri, user, password)
 
     # Store logic...
-    feature_store = Neo4jFeatureStore002(uri, user, password, label_map=label_map)
-    graph_store   = Neo4jGraphStore(uri, user, password)
-    sampler       = Neo4jSampler(graph_store, [10, 5])
+    feature_store = PickleSafeFeatureStore(uri, user, password, label_map=label_map)
+    graph_store   = PickleSafeGraphStore(uri, user, password)
+    sampler       = UniformSampler(graph_store, [10, 5])
     
     # Ensure only one process does the DB split to avoid race conditions
     if dist.get_rank() == 0:

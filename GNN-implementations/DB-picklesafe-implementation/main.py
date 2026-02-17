@@ -2,10 +2,6 @@ import os
 import sys
 import json
 from typing import Dict
-from Neo4jConnection import Neo4jConnection
-from Neo4jFeatureStore import Neo4jFeatureStore
-from Neo4jGraphStore import Neo4jGraphStore
-from Neo4jSampler import Neo4jSampler
 import torch
 import numpy as np
 import cProfile
@@ -23,7 +19,11 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-from Model import GCN
+from models.GCN import GCN
+from feature_stores.PickleSafeFeatureStore import PickleSafeFeatureStore
+from graph_stores.PickleSafeGraphStore import PickleSafeGraphStore
+from samplers.UniformSampler import UniformSampler
+from Neo4jConnection import Neo4jConnection
 
 
 def main(version_dict: Dict[str, str], config: dict):
@@ -31,10 +31,10 @@ def main(version_dict: Dict[str, str], config: dict):
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
-    feature_store = Neo4jFeatureStore(uri, user, password)
+    feature_store = PickleSafeFeatureStore(uri, user, password)
         
-    graph_store = Neo4jGraphStore(uri, user, password) 
-    sampler = Neo4jSampler(graph_store, num_neighbors=[10, 5])
+    graph_store = PickleSafeGraphStore(uri, user, password) 
+    sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
     model = GCN(1433, 32, 16, 7)
     lr = config.get("lr", 1e-2)

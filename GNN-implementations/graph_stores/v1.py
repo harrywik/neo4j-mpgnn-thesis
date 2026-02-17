@@ -1,11 +1,7 @@
 import torch
 from typing import List, Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
-from torch_geometric.typing import NodeType
 from neo4j import Driver
-from typing import Dict, Tuple
-from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
-
 
 class Neo4jGraphStore(GraphStore):
     def __init__(self, driver: Driver):
@@ -57,9 +53,9 @@ class Neo4jGraphStore(GraphStore):
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
-    def sample_from_nodes(self, seeds_list:List[int], total_hops:int, limit:int, query:str):
+    def sample_from_nodes(self, kwargs, query:str):
         with self.driver.session() as session:
-            result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
+            result = session.run(query, **kwargs)
             
             # Extract edges and format for PyG
             edges = [[r["src"], r["dst"]] for r in result]

@@ -7,7 +7,8 @@ from collections import OrderedDict
 import numpy as np
 
 class Neo4jFeatureStore(FeatureStore):
-    """Neo4j feature store with caching and deterministic label mapping, but without pickle safety."""
+    """Neo4j feature store with caching and deterministic label mapping, but without pickle safety.
+    Caches both X and y unlike simple cache feature store."""
     def __init__(
         self,
         driver: Driver,

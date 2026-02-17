@@ -6,10 +6,7 @@ from torch_geometric.transforms import NormalizeFeatures
 import torch.nn as nn
 import torch
 from torch import optim
-from InMemoryFeatureStore import InMemoryFeatureStore
-from InMemoryGraph import InMemoryGraphStore
 from torch_geometric.data.graph_store import EdgeLayout
-from CustomSampler import InMemorySampler
 import time
 import cProfile
 import pstats
@@ -19,9 +16,14 @@ from pathlib import Path
 GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
-from Model import GCN
+
 from evaluate import evaluate
+from models.GCN import GCN
+from feature_stores.InMemoryFeatureStore import InMemoryFeatureStore
+from graph_stores.InMemoryGraphStore import InMemoryGraphStore
+from samplers.InMemorySampler import InMemorySampler
 from Training import Trainer, put_nodeLoader_args_map
+
 
 def main(config: dict):
     # Get dataset

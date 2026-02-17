@@ -1,16 +1,46 @@
 import torch
 from typing import List, Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
-from torch_geometric.typing import NodeType
 from neo4j import Driver
-from typing import Dict, Tuple
-from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
+from neo4j import GraphDatabase
+import atexit
 
 
-class Neo4jGraphStore(GraphStore):
-    def __init__(self, driver: Driver):
+class PickleSafeGraphStore(GraphStore):
+    """Pickle safe implementation of GraphStore that connects to Neo4j on demand and closes connection on exit. Does not cache any graph data, but can be used together with a sampler that does."""
+    def __init__(self, uri:str, user:str, pwd:str):
         super().__init__()
-        self.driver = driver
+        self._driver = None
+        self.uri = uri
+        self.user = user
+        self.pwd = pwd
+        
+    def _get_driver(self) -> Driver:
+        if self._driver is None:
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
+        return self._driver
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_driver"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._driver = None
+    
+    
+    def _get_driver(self):
+        if self._driver is None:
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
+            atexit.register(self.close)
+        return self._driver
+
+    def close(self):
+        if getattr(self, "_driver", None) is not None:
+            try:
+                self._driver.close()
+            finally:
+                self._driver = None
 
     def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
         pass
@@ -35,7 +65,7 @@ class Neo4jGraphStore(GraphStore):
         t, v = ratios[:2]
         v += t
 
-        with self.driver.session() as session:
+        with self._get_driver().session() as session:
             session.run(query, train_tresh=t, val_tresh=v)
 
     def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
@@ -51,15 +81,15 @@ class Neo4jGraphStore(GraphStore):
         RETURN n.id AS id
         """
 
-        with self.driver.session() as session:
+        with self._get_driver().session() as session:
             result = session.run(query, n=n, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
-    def sample_from_nodes(self, seeds_list:List[int], total_hops:int, limit:int, query:str):
-        with self.driver.session() as session:
-            result = session.run(query, seed_ids=seeds_list, hops=total_hops, limit=limit)
+    def sample_from_nodes(self, kwargs, query:str):
+        with self._get_driver().session() as session:
+            result = session.run(query, **kwargs)
             
             # Extract edges and format for PyG
             edges = [[r["src"], r["dst"]] for r in result]

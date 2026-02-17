@@ -1,11 +1,11 @@
-from typing import List, Tuple
+from typing import List
 from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
 import torch
 from torch_geometric.data.graph_store import GraphStore
 
 
 class Neo4jSampler(BaseSampler):
-    """This class defines a samlping method for generating sub-graphs around the seed"""
+    """This class defines a samlping method for generating sub-graphs around the seed nodes of a homogeneous graph"""
     def __init__(self, graph_store: GraphStore, num_neighbors: List[int]):
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors # e.g., [10, 5] for 2 hops
@@ -38,7 +38,8 @@ class Neo4jSampler(BaseSampler):
             limit *= n
 
         if hasattr(self.graph_store, "sample_from_nodes"):
-            unique_nodes, edge_index_local = self.graph_store.sample_from_nodes(seeds_list, total_hops, limit, self.query)
+            kwargs = {"seed_ids": seeds_list, "hops": total_hops, "limit": limit}
+            unique_nodes, edge_index_local = self.graph_store.sample_from_nodes(kwargs, self.query)
             return SamplerOutput(
                 node=unique_nodes,               # These Global IDs go to the FeatureStore
                 row=edge_index_local[0],         # Local source indices (0 to N-1)
