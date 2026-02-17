@@ -3,7 +3,7 @@ from typing import List, Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
 from neo4j import Driver
 
-class Neo4jGraphStore(GraphStore):
+class BaseLineGS(GraphStore):
     def __init__(self, driver: Driver):
         super().__init__()
         self.driver = driver

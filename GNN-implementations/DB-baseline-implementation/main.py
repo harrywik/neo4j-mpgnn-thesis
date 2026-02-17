@@ -18,7 +18,7 @@ from models.GCN import GCN
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 from feature_stores.NoCacheFeatureStore import NoCacheFeatureStore
-from graph_stores.v1 import Neo4jGraphStore
+from graph_stores.BaseLineGS import BaseLineGS
 from samplers.UniformSampler import UniformSampler
 from Neo4jConnection import Neo4jConnection
 
@@ -29,7 +29,7 @@ def main(config: dict):
     
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver)
-    graph_store = Neo4jGraphStore(driver) 
+    graph_store = BaseLineGS(driver) 
     sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
     
     graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
