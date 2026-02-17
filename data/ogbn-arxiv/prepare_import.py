@@ -43,8 +43,8 @@ edges_df = pd.DataFrame({
 })
 
 # Export to CSV
-nodes_files = str(Path(__file__).resolve() / 'arxiv_nodes.csv')
-edges_files = str(Path(__file__).resolve() / 'arxiv_edges.csv')
+nodes_files = str(Path(__file__).resolve().parent / 'arxiv_nodes.csv')
+edges_files = str(Path(__file__).resolve().parent / 'arxiv_edges.csv')
 
 nodes_df.to_csv(nodes_files, index=False)
 edges_df.to_csv(edges_files, index=False)
