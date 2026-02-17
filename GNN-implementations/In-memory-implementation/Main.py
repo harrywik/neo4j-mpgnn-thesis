@@ -50,7 +50,7 @@ def main(config: dict):
     # set seed for reprodicability and create model
     torch.manual_seed(0)
     torch.use_deterministic_algorithms(True)
-    model = GCN(in_dim=1433, hidden_dim=16, out_dim=16, nbr_classes=7)
+    model = GCN(in_dim=1433, hidden_dim1=16, hidden_dim2=16, nbr_classes=7)
     criterion = nn.CrossEntropyLoss()
     lr = config.get("lr", 0.01)
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
