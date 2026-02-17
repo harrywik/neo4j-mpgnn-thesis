@@ -18,10 +18,10 @@ if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
 from evaluate import evaluate
-from models.GCN import GCN
-from feature_stores.InMemoryFeatureStore import InMemoryFeatureStore
-from graph_stores.InMemoryGraphStore import InMemoryGraphStore
-from samplers.InMemorySampler import InMemorySampler
+from models import GCN
+from feature_stores import InMemoryFeatureStore
+from graph_stores import InMemoryGraphStore
+from samplers import InMemorySampler
 from Training import Trainer, put_nodeLoader_args_map
 
 

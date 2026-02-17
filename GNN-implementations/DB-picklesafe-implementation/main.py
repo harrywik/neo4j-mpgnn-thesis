@@ -20,10 +20,9 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 from models.GCN import GCN
-from feature_stores.PickleSafeFeatureStore import PickleSafeFeatureStore
-from graph_stores.PickleSafeGraphStore import PickleSafeGraphStore
-from samplers.UniformSampler import UniformSampler
-from Neo4jConnection import Neo4jConnection
+from feature_stores import PickleSafeFeatureStore
+from graph_stores import PickleSafeGraphStore
+from samplers import UniformSampler
 
 
 def main(version_dict: Dict[str, str], config: dict):
