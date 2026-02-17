@@ -96,6 +96,6 @@ systemctl is-active --quiet neo4j && systemctl stop neo4j
 TERM=xterm tmux new-session -d -s ogb_ingest " \
   uv run python data/ogbn-papers100M/prepare_import.py && \
   sudo chown -R neo4j:neo4j . && \
-  sudo -u neo4j ./data/ogbn-papers100M/ingest.sh && \
+  sudo -u -E neo4j ./data/ogbn-papers100M/ingest.sh && \
   sudo systemctl start neo4j; \
   read"

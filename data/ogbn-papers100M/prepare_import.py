@@ -1,3 +1,4 @@
+import csv
 import os
 import zipfile
 import urllib.request
@@ -38,58 +39,43 @@ for i, s in enumerate(['train', 'valid', 'test']):
         idx = pd.read_csv(s_path, compression='gzip', header=None).values.flatten()
         split_types[idx] = i
 
+
 # --- NODE CONVERSION ---
-node_schema = pa.schema([
-    ('paperId:ID(Paper)', pa.int64()),
-    ('features:VECTOR', pa.list_(pa.float32(), 128)),
-    ('label:INT', pa.int32()),
-    ('split:INT', pa.int8())
-])
-
-# CHUNK_SIZE optimization: 100k reduces the RES spike compared to 500k
+print(f"Converting nodes to CSV...")
 CHUNK_SIZE = 100_000 
-print(f"Converting nodes...")
 
-with pq.ParquetWriter('papers_nodes.parquet', node_schema) as writer:
+# Open the data file (we use a separate header file for neo4j-admin)
+with open('papers_nodes.csv', 'w', newline='') as f:
+    writer = csv.writer(f, delimiter=',')
     for start in range(0, num_nodes, CHUNK_SIZE):
         end = min(start + CHUNK_SIZE, num_nodes)
-        
-        # We slice first, then convert to list to minimize the time Python 
-        # objects spend sitting in the heap
-        feat_slice = node_feat[start:end].astype(np.float32)
-        
-        chunk_df = pd.DataFrame({
-            'paperId:ID(Paper)': np.arange(start, end, dtype=np.int64),
-            'features:VECTOR': feat_slice.tolist(),
-            'label:INT': labels_int[start:end],
-            'split:INT': split_types[start:end]
-        })
-        
-        writer.write_table(pa.Table.from_pandas(chunk_df, schema=node_schema))
+        # Convert 128-dim features to a single string: "0.1;0.5;..."
+        feat_slice = node_feat[start:end].astype(np.float64)
+        formatted_features = [";".join(map(str, row)) for row in feat_slice]
+        # Write rows directly to CSV
+        for i in range(len(formatted_features)):
+            writer.writerow([
+                start + i,              # paperId
+                formatted_features[i],   # features (stringified array)
+                labels_int[start + i],   # label
+                split_types[start + i]   # split
+            ])
         if end % 5_000_000 == 0 or end == num_nodes:
             print(f"Nodes: {end:,}/{num_nodes:,}")
 
 # --- EDGE CONVERSION ---
-num_edges = edge_index.shape[1]
-edge_schema = pa.schema([
-    (':START_ID(Paper)', pa.int64()),
-    (':END_ID(Paper)', pa.int64())
-])
-
-print(f"Converting edges...")
+print(f"Converting edges to CSV...")
 EDGE_CHUNK = 10_000_000
-with pq.ParquetWriter('citations_data.parquet', edge_schema) as writer:
+with open('citations_data.csv', 'w', newline='') as f:
+    writer = csv.writer(f, delimiter=',')
     for start in range(0, num_edges, EDGE_CHUNK):
         end = min(start + EDGE_CHUNK, num_edges)
         
-        # Accessing edge_index[0] and [1] is efficient in mmap
-        chunk_df = pd.DataFrame({
-            ':START_ID(Paper)': edge_index[0, start:end].astype(np.int64),
-            ':END_ID(Paper)': edge_index[1, start:end].astype(np.int64)
-        })
+        # Standard edge export
+        sources = edge_index[0, start:end].astype(np.int64)
+        targets = edge_index[1, start:end].astype(np.int64)
         
-        writer.write_table(pa.Table.from_pandas(chunk_df, schema=edge_schema))
+        writer.writerows(zip(sources, targets))
+        
         if end % 100_000_000 == 0 or end == num_edges:
             print(f"Edges: {end:,}/{num_edges:,}")
-
-print("Success. All Parquet files generated.")
