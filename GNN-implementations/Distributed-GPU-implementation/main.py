@@ -10,7 +10,6 @@ from feature_stores.v000 import Neo4jFeatureStore as Neo4jFeatureStore000
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
 from torch_geometric.loader import NodeLoader
-from Model import GCN
 import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
@@ -27,6 +26,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from evaluate import evaluate
 from DistributedTraining import DistributedTrainer, put_nodeLoader_args_map
+from Model import GCN
 
 
 

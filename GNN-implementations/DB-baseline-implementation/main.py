@@ -6,7 +6,6 @@ from Neo4jConnection import Neo4jConnection
 from Neo4jFeatureStore import Neo4jFeatureStore
 from Neo4jGraphStore import Neo4jGraphStore
 from Neo4jSampler import Neo4jSampler
-from Model import GCN
 import torch
 import numpy as np
 import cProfile
@@ -24,7 +23,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
-
+from Model import GCN
 
 def main(config: dict):
     # Demo local user with unsecure passwd
