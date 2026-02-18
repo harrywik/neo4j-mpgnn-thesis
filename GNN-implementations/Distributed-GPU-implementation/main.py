@@ -2,7 +2,6 @@ import sys
 import os
 from typing import Dict
 from dotenv import load_dotenv
-from torch_geometric.loader import NodeLoader
 import torch
 import torch.distributed as dist
 import cProfile
@@ -19,7 +18,7 @@ from evaluate import evaluate
 from DistributedTraining import DistributedTrainer
 from models.GCN import GCN
 from feature_stores.PickleSafeFeatureStore import PickleSafeFeatureStore
-from graph_stores.PickleSafeGraphStore import PickleSafeGraphStore
+from graph_stores import PickleSafeGS
 from samplers.UniformSampler import UniformSampler
 
 
@@ -73,7 +72,7 @@ def main(
 
     # Store logic...
     feature_store = PickleSafeFeatureStore(uri, user, password, label_map=label_map)
-    graph_store   = PickleSafeGraphStore(uri, user, password)
+    graph_store   = PickleSafeGS(uri, user, password)
     sampler       = UniformSampler(graph_store, [10, 5])
     
     # Ensure only one process does the DB split to avoid race conditions
