@@ -3,7 +3,6 @@ import sys
 import json
 from typing import Dict
 import torch
-import numpy as np
 import cProfile
 import pstats
 import argparse

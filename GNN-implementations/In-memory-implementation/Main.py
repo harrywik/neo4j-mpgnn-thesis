@@ -7,7 +7,6 @@ import torch.nn as nn
 import torch
 from torch import optim
 from torch_geometric.data.graph_store import EdgeLayout
-import time
 import cProfile
 import pstats
 from pathlib import Path
@@ -20,7 +19,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from evaluate import evaluate
 from models import GCN
 from feature_stores import InMemoryFeatureStore
-from graph_stores import InMemoryGraphStore
+from graph_stores import InMemoryGS
 from samplers import InMemorySampler
 from Training import Trainer, put_nodeLoader_args_map
 
