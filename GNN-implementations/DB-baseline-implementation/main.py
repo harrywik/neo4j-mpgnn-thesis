@@ -1,3 +1,4 @@
+import csv
 import os
 import sys
 import json
@@ -14,21 +15,36 @@ GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from models.GCN import GCN
+from models import GCN
 from evaluate import evaluate
 from Training import Trainer, put_nodeLoader_args_map
 from feature_stores import NoCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
+from Measurer import Measurer
+import time
 
 def main(config: dict):
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
     
+    results_path = Path(__file__).parent.parent.parent / "experiment-results"
+    num_folders = sum(1 for p in results_path.iterdir() if p.is_dir())
+    results_name = f"run_{num_folders}"
+    run_results_path = results_path / results_name
+    run_results_path.mkdir(parents=True, exist_ok=False)
+    
+    with open(run_results_path / "config.json", "w") as f:
+        json.dump(config, f, indent=4)
+    
+    measurements_path = run_results_path / "measurements.csv"
+    
+    measurer = Measurer(measurements_path)
+    
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = NoCacheFeatureStore(driver)
+    feature_store = NoCacheFeatureStore(driver, measurer=measurer)
     graph_store = BaseLineGS(driver) 
     sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
     
@@ -56,9 +72,12 @@ def main(config: dict):
         eval_every_batches=config.get("eval_every_batches"),
         log_train_time=config.get("log_train_time", True),
         nodeloader_args=nodeloader_args,
+        measurer=measurer,
     )
 
     trainer.train(max_epochs=config.get("max_epochs"))
+    
+    measurer.log_event("program_end", 1)
 
     evaluate(model, graph_store, feature_store, sampler, "test")
 

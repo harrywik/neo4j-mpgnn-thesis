@@ -3,10 +3,14 @@ from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
 import torch
 from torch_geometric.data.graph_store import GraphStore
 
-
 class UniformSampler(BaseSampler):
     """Sampling method for generating sub-graphs around seed nodes of a homogeneous graph."""
+    
+    _instance_counter = 0
+    
     def __init__(self, graph_store: GraphStore, num_neighbors: List[int], ):
+        self.instance_id = UniformSampler._instance_counter
+        UniformSampler._instance_counter += 1
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors  # e.g. [10, 5] for 2 hops
         self.query = self._build_fanout_query(len(num_neighbors))

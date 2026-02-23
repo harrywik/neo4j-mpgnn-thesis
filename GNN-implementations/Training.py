@@ -1,3 +1,4 @@
+from pathlib import Path
 import time
 import math
 import torch
@@ -8,7 +9,8 @@ from torch_geometric.data import GraphStore, FeatureStore
 from torch import nn
 from torch import optim
 from evaluate import evaluate
-
+from Measurer import Measurer
+from EarlyStopping import EarlyStopping
 
 class Trainer:
     def __init__(
@@ -33,6 +35,7 @@ class Trainer:
         evaluate_fn=None,
         log_train_time: bool = False,
         nodeloader_args: dict | None = None,
+        measurer: Measurer | None = None,
     ) -> None:
         self.model = model
         self.feature_store = feature_store
@@ -41,6 +44,7 @@ class Trainer:
         self.optimizer = optimizer if optimizer is not None else optim.Adam(
             model.parameters(), lr=lr, weight_decay=5e-4
         )
+        self.measurer = measurer
         self.save_every = save_every
         self.snapshot_path = snapshot_path
         self.batch_size = batch_size
@@ -65,6 +69,10 @@ class Trainer:
             shuffle=True,
         )
         self.model.to(self.device)
+        self.train_indices = self._get_train_indices()
+        self.early_stopping = EarlyStopping(min_delta=1e-2, patience=10)
+        self.validation_loss_minimum = None
+        
 
     def _save_snapshot(self, epoch: int) -> None:
         if not self.snapshot_path:
@@ -93,20 +101,17 @@ class Trainer:
         # Filter for seed nodes (Graph GCN specific)
         seed_mask = torch.isin(batch.n_id, batch.input_id)
         loss = self.criterion(out[seed_mask], batch.y[seed_mask])
-        
+        self.measurer.log_event("batch_train_loss", loss.item())
         loss.backward()
         self.optimizer.step()
 
-    def _run_epoch(self, epoch: int) -> None:
-        self.model.train()
-        train_indices = self._get_train_indices()
-        
+    def _run_epoch(self, epoch: int) -> None:        
         # NodeLoader handles the graph sampling logic\
         if self.nodeloader_args['pickle_safe']:
             train_loader = NodeLoader(
                 data=(self.feature_store, self.graph_store),
                 node_sampler=self.sampler,
-                input_nodes=train_indices,
+                input_nodes=self.train_indices,
                 batch_size=self.batch_size,
                 shuffle=self.nodeloader_args['shuffle'],
                 filter_per_worker=self.nodeloader_args['filter_per_worker'],
@@ -120,7 +125,7 @@ class Trainer:
             train_loader = NodeLoader(
                 data=(self.feature_store, self.graph_store),
                 node_sampler=self.sampler,
-                input_nodes=train_indices,
+                input_nodes=self.train_indices,
                 batch_size=self.batch_size,
                 shuffle=self.nodeloader_args['shuffle'],
                 pin_memory=self.nodeloader_args['pin_memory']
@@ -132,44 +137,62 @@ class Trainer:
                 # prefetch_factor=0,
             )
         
-        num_steps = int(math.ceil(train_indices.numel() / self.batch_size)) if self.batch_size > 0 else 0
+        num_steps = int(math.ceil(self.train_indices.numel() / self.batch_size)) if self.batch_size > 0 else 0
         print(f"Epoch {epoch} | Steps: {num_steps}")
-            
+        
+        nbr_batches = len(train_loader)
+        self.measurer.log_event("batch_start", 1)
         for batch_idx, batch in enumerate(train_loader):
+            self.measurer.log_event("start_batch_processing", 1)
             self._run_batch(batch)
-            eval_batches = self.eval_every_batches or num_steps
-            if (
-                self.eval_every_epochs is not None
-                and self.eval_every_epochs > 0
-                and eval_batches > 0
-                and (epoch % self.eval_every_epochs == 0)
-                and ((batch_idx + 1) % eval_batches == 0)
-            ):
-                self.evaluate_fn(
-                    self.model,
-                    self.graph_store,
-                    self.feature_store,
-                    self.sampler,
-                    self.eval_split,
-                )
-                self.model.train()
+            self.measurer.log_event("end_batch_processing", 1)
+            self.measurer.log_event("end_batch", 1)
+            if batch_idx >= nbr_batches - 1:
+                self.measurer.log_event("batch_start", 1)
+ 
+            
+                
 
     def train(self, max_epochs: int) -> None:
         start_time = time.monotonic()
+        self.model.train()
+        validation_loss_minimum = None
         for epoch in range(self.epochs_run, max_epochs):
+            self.measurer.log_event("epoch_start", 1)
+                        
+            self._run_epoch(epoch)
+            self.measurer.log_event("epoch_end", 1)
+            
+            self.measurer.log_event("start_validation_accuracy", 1)
+            validation_acc, validation_loss = self.evaluate_fn( # re write this function
+                self.model,
+                self.graph_store,
+                self.feature_store,
+                self.sampler,
+                self.eval_split,
+            )
+            self.measurer.log_event("validation_accuracy", validation_acc)
+            self.measurer.log_event("validation_loss", validation_loss)
+            self.measurer.log_event("end_validation_accuracy", 1)
+            
+            if validation_loss_minimum is None or validation_loss < validation_loss_minimum:
+                validation_loss_minimum = validation_loss
+                self.measurer.log_event("start_saving_weights")
+                self._save_snapshot(epoch)
+                self.measurer.log_event("end_saving_weights")
+                
+            if self.early_stopping(validation_loss):
+                self.measurer.log_event("training_converged")
+                break
             if time.monotonic() - start_time >= self.max_train_seconds:
                 print("Stopping: max training time reached.")
+                self.measurer.log_event("training_time_exceeded", epoch)
                 break
-            
-            self._run_epoch(epoch)
-            
-            # Only save and log from Rank 0
-            if self.snapshot_path and epoch % self.save_every == 0:
-                self._save_snapshot(epoch)
 
         if self.log_train_time:
             duration = time.monotonic() - start_time
             print(f"Training duration: {duration:.2f}s")
+
 
 
 def put_nodeLoader_args_map(

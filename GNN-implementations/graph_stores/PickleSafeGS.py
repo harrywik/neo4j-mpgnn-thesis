@@ -6,7 +6,7 @@ from neo4j import GraphDatabase
 import atexit
 
 
-class PickleSafeGraphStore(GraphStore):
+class PickleSafeGS(GraphStore):
     """Pickle safe implementation of GraphStore that connects to Neo4j on demand and closes connection on exit. Does not cache any graph data, but can be used together with a sampler that does."""
     def __init__(self, uri:str, user:str, pwd:str):
         super().__init__()

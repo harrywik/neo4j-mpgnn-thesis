@@ -1,3 +1,6 @@
+from pathlib import Path
+import sys
+
 import torch
 from torch_geometric.typing import FeatureTensorType
 from torch_geometric.data.feature_store import FeatureStore, TensorAttr, NodeType
@@ -5,12 +8,20 @@ from neo4j import Driver
 from typing import Optional, List, Tuple, Dict
 import numpy as np
 
+# Allow running this file directly by adding GNN-implementations to sys.path
+GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
+if str(GNN_IMPL_DIR) not in sys.path:
+    sys.path.insert(0, str(GNN_IMPL_DIR))
+
+from Measurer import Measurer
+
 class NoCacheFeatureStore(FeatureStore):
-    def __init__(self, driver: Driver) -> None:
+    def __init__(self, driver: Driver, measurer:Measurer = None) -> None:
         super().__init__()
         self.driver = driver
         self._feat: Dict[Tuple[Optional[NodeType], str], torch.Tensor] = {}
         self._labels = {}
+        self.measurer = measurer
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
@@ -24,6 +35,11 @@ class NoCacheFeatureStore(FeatureStore):
         RETURN n.id AS id, n.{prop} AS value
         ORDER BY n.id ASC
         """
+
+        if self.measurer:
+            self.measurer.log_event("cache_hit", 0)
+            self.measurer.log_event("cache_miss", len(node_ids))
+            self.measurer.log_event("remote_feature_fetch", 1)
         with self.driver.session() as session:
             result = session.run(query, node_ids=node_ids)
             data_map = {}
@@ -41,7 +57,8 @@ class NoCacheFeatureStore(FeatureStore):
                         self._labels[label_str] = len(self._labels)
                     num_label = self._labels[label_str]
                     data_map[record["id"]] = num_label
-                
+        if self.measurer:
+            self.measurer.log_event("remote_feature_recieved", 1)     
         # Reconstruct in correct order
         ordered_list = [data_map[i] for i in node_ids]
         if prop == "embedding":
