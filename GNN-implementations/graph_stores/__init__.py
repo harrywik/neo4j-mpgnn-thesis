@@ -1,9 +1,9 @@
 from .BaseLineGS import BaseLineGS
-from .InMemoryGraphStore import InMemoryGraphStore
-from .PickleSafeGraphStore import PickleSafeGraphStore
+from .InMemoryGS import InMemoryGS
+from .PickleSafeGS import PickleSafeGS
 
 __all__ = [
     "BaseLineGS",
-    "InMemoryGraphStore",
-    "PickleSafeGraphStore",
+    "InMemoryGS",
+    "PickleSafeGS",
 ]

@@ -4,7 +4,7 @@ from torch_geometric.data import GraphStore, EdgeAttr
 from torch_geometric.data.graph_store import EdgeLayout
 from torch_geometric.typing import EdgeTensorType, EdgeType
 
-class InMemoryGraphStore(GraphStore):
+class InMemoryGS(GraphStore):
     def __init__(self):
         super().__init__()
         self._edges: Dict[Tuple[EdgeType, EdgeLayout], EdgeTensorType] = {}
