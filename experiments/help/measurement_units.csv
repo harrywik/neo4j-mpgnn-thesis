@@ -1,0 +1,19 @@
+Event, Unit
+program_start, Boolean
+epoch_start, Boolean
+remote_topology_fetch, Amount of requested seed nodes
+remote_topology_recieved, Amount of received nodes including the neighborhood for each seed node
+cache_miss, Amount of feature vectors not found in cache for a particular global node id
+cache_hit, Amount of feature vectors found in cache for a particular global node id
+remote_feature_fetch, Boolean
+remote_feature_recieved, Boolean
+batch_start, Boolean
+start_batch_processing, Boolean
+batch_train_loss, Downward trending float
+batch_validation_loss, Minima containing float
+write_best_parameters, Boolean if the parameters was written i.e. if validation loss is a new minimum
+batch_end, Boolean
+epoch_end, Boolean
+start_validation_accuracy, Boolean
+end_validation_accuracy, Float of validation accuracy between 0 and 1
+program_end, Boolean

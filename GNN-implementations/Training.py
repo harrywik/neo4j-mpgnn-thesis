@@ -23,7 +23,6 @@ class Trainer:
         batch_size: int = 500,
         lr:float = 1e-2,
         optimizer: optim.Optimizer = None,
-        nodes_per_epoch: int | None = None,
         max_train_seconds: int = 3600,
         device: str = "cpu",
         world_size: int = 1,
@@ -41,7 +40,6 @@ class Trainer:
         self.measurer = measurer
         self.snapshot_path = snapshot_path
         self.batch_size = batch_size
-        self.nodes_per_epoch = nodes_per_epoch
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
         self.device = torch.device(device)
@@ -57,7 +55,9 @@ class Trainer:
         )
         self.model.to(self.device)
         self.train_indices = self._get_train_indices()
-        self.early_stopping = EarlyStopping(min_delta=1e-3, patience=5)
+        self.nbr_training_datapoints = len(self.train_indices)
+        self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
+        self.early_stopping = EarlyStopping(min_delta=1e-3, patience=2)
         self.validation_loss_minimum = None
         self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
         
@@ -75,7 +75,6 @@ class Trainer:
 
     def _get_train_indices(self) -> torch.Tensor:
         indices = self.graph_store.get_split(
-            self.nodes_per_epoch,
             split="train",
             shuffle=True,
         ).to(torch.long)
@@ -124,7 +123,6 @@ class Trainer:
                 # persistent_workers=False,
                 # prefetch_factor=0,
             )
-        
         nbr_batches = len(train_loader)
         self.measurer.log_event("batch_start", 1)
         for batch_idx, batch in enumerate(train_loader):
@@ -134,48 +132,57 @@ class Trainer:
             self.measurer.log_event("end_batch", 1)
             if batch_idx >= nbr_batches - 1:
                 self.measurer.log_event("batch_start", 1)
- 
             
                 
 
     def train(self, max_epochs: int) -> None:
+        import cProfile
+        import pstats
         start_time = time.monotonic()
         self.model.train()
         validation_loss_minimum = None
-        for epoch in range(self.epochs_run, max_epochs):
-            self.measurer.log_event("epoch_start", 1)
-                        
-            self._run_epoch(epoch)
-            self.measurer.log_event("epoch_end", 1)
-            
-            self.measurer.log_event("start_validation_accuracy", 1)
-            validation_acc, validation_loss = evaluate( # re write this function
-                self.model,
-                self.graph_store,
-                self.feature_store,
-                self.sampler,
-            )
-            self.measurer.log_event("validation_accuracy", validation_acc)
-            self.measurer.log_event("validation_loss", validation_loss)
-            self.measurer.log_event("end_validation_accuracy", 1)
-            
-            if validation_loss_minimum is None or validation_loss < validation_loss_minimum:
-                validation_loss_minimum = validation_loss
-                self.measurer.log_event("start_saving_weights")
-                self._save_snapshot(epoch)
-                self.measurer.log_event("end_saving_weights")
-                
-            if self.early_stopping(validation_loss):
-                self.measurer.log_event("training_converged")
-                break
-            if time.monotonic() - start_time >= self.max_train_seconds:
-                print("Stopping: max training time reached.")
-                self.measurer.log_event("training_time_exceeded", epoch)
-                break
-
+        # Profiling setup
+        run_dir = self.measurer.run_results_path
+        txt_path = run_dir / "train_profile.txt"
+        pr = cProfile.Profile()
+        pr.enable()
+        try:
+            for epoch in range(self.epochs_run, max_epochs):
+                self.measurer.log_event("epoch_start", 1)
+                self._run_epoch(epoch)
+                self.measurer.log_event("epoch_end", 1)
+                self.measurer.log_event("start_validation_accuracy", 1)
+                validation_acc, validation_loss = evaluate(
+                    self.model,
+                    self.graph_store,
+                    self.feature_store,
+                    self.sampler,
+                )
+                self.measurer.log_event("validation_accuracy", validation_acc)
+                self.measurer.log_event("validation_loss", validation_loss)
+                self.measurer.log_event("end_validation_accuracy", 1)
+                if validation_loss_minimum is None or validation_loss < validation_loss_minimum:
+                    validation_loss_minimum = validation_loss
+                    self.measurer.log_event("start_saving_weights")
+                    self._save_snapshot(epoch)
+                    self.measurer.log_event("end_saving_weights")
+                if self.early_stopping(validation_loss):
+                    self.measurer.log_event("training_converged", (epoch + 1))
+                    break
+                if time.monotonic() - start_time >= self.max_train_seconds:
+                    print("Stopping: max training time reached.")
+                    self.measurer.log_event("training_time_exceeded", (epoch + 1))
+                    break
+        finally:
+            pr.disable()
+            stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
+            with txt_path.open("w") as f:
+                stats.stream = f
+                stats.print_stats(50)
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
-
+        test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
+        self.measurer.log_event("test_accuracy", test_accuracy)
 
 
 def put_nodeLoader_args_map(

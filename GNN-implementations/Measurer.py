@@ -2,18 +2,243 @@ import csv
 import time 
 
 
-class Measurer:
-    def __init__(self, measurements_path: str):
-        self.measurements_path = measurements_path
-        rows = [
-        ["Event", "Time", "Value"],
-        ["program_start", time.monotonic(), 1],
-        ]
 
+from pathlib import Path
+import json
+
+import pandas as pd
+from dataclasses import dataclass, asdict
+from typing import Any, Dict, Optional, List, Tuple
+import os
+import matplotlib
+matplotlib.use("Agg")  # headless
+import matplotlib.pyplot as plt
+
+PAIR_EVENTS: List[Tuple[str, str, str]] = [
+    ("epoch_start", "epoch_end", "epoch_time_s"),
+    ("batch_start", "start_batch_processing", "sampling_phase_time_s"),
+    ("start_batch_processing", "end_batch_processing", "training_phase_time_s"),
+    ("start_validation_accuracy", "end_validation_accuracy", "validation_time_s"),
+    ("start_saving_weights", "end_saving_weights", "saving_weights_time_s"),
+    ("remote_feature_fetch", "remote_feature_recieved", "remote_feature_latency_s"),
+]
+
+@dataclass
+class Stats:
+    count: int = 0
+    total_s: float = 0.0
+    mean_s: Optional[float] = None
+    p50_s: Optional[float] = None
+    p90_s: Optional[float] = None
+    p99_s: Optional[float] = None
+    min_s: Optional[float] = None
+    max_s: Optional[float] = None
+
+    @staticmethod
+    def from_series(s: pd.Series) -> "Stats":
+        s = pd.to_numeric(s, errors="coerce").dropna()
+        if len(s) == 0:
+            return Stats()
+        return Stats(
+            count=int(len(s)),
+            total_s=float(s.sum()),
+            mean_s=float(s.mean()),
+            p50_s=float(s.quantile(0.50)),
+            p90_s=float(s.quantile(0.90)),
+            p99_s=float(s.quantile(0.99)),
+            min_s=float(s.min()),
+            max_s=float(s.max()),
+        )
+
+def _read_csv(path: Path) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    expected = {"Event", "Time", "Value"}
+    missing = expected - set(df.columns)
+    if missing:
+        raise ValueError(f"{path}: missing columns {sorted(missing)} (expected {sorted(expected)})")
+    df["Time"] = pd.to_numeric(df["Time"], errors="coerce")
+    df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
+    df = df.dropna(subset=["Time"]).sort_values("Time").reset_index(drop=True)
+    return df
+
+def _first_time(df: pd.DataFrame, event: str) -> Optional[float]:
+    m = df.loc[df["Event"] == event, "Time"]
+    return float(m.iloc[0]) if len(m) else None
+
+def _last_time(df: pd.DataFrame, event: str) -> Optional[float]:
+    m = df.loc[df["Event"] == event, "Time"]
+    return float(m.iloc[-1]) if len(m) else None
+
+def _last_value(df: pd.DataFrame, event: str) -> Optional[float]:
+    m = df.loc[df["Event"] == event, "Value"]
+    return float(m.iloc[-1]) if len(m) else None
+
+def _best_value(df: pd.DataFrame, event: str, mode: str = "max") -> Optional[float]:
+    m = df.loc[df["Event"] == event, "Value"]
+    if len(m) == 0:
+        return None
+    m = pd.to_numeric(m, errors="coerce").dropna()
+    if len(m) == 0:
+        return None
+    return float(m.max() if mode == "max" else m.min())
+
+def _time_at_best(df: pd.DataFrame, event: str, mode: str = "max") -> Optional[float]:
+    sub = df[df["Event"] == event].copy()
+    if sub.empty:
+        return None
+    sub["Value"] = pd.to_numeric(sub["Value"], errors="coerce")
+    sub = sub.dropna(subset=["Value"])
+    if sub.empty:
+        return None
+    idx = sub["Value"].idxmax() if mode == "max" else sub["Value"].idxmin()
+    return float(df.loc[idx, "Time"])
+
+def _pair_durations(df: pd.DataFrame, start_event: str, end_event: str) -> pd.Series:
+    starts = df.loc[df["Event"] == start_event, "Time"].to_list()
+    ends = df.loc[df["Event"] == end_event, "Time"].to_list()
+    n = min(len(starts), len(ends))
+    if n == 0:
+        return pd.Series(dtype="float64")
+    starts = starts[:n]
+    ends = ends[:n]
+    d = [max(0.0, e - s) for s, e in zip(starts, ends)]
+    return pd.Series(d, dtype="float64")
+
+class Measurer:
+    def __init__(self, config: dict):
+        # Handles all results path logic internally
+        results_path = Path(__file__).parent.parent / "experiments" / "results"
+        results_path.mkdir(parents=True, exist_ok=True)
+        num_folders = sum(1 for p in results_path.iterdir() if p.is_dir())
+        results_name = f"run_{num_folders}"
+        run_results_path = results_path / results_name
+        run_results_path.mkdir(parents=True, exist_ok=False)
+
+        # Save config
+        with open(run_results_path / "config.json", "w") as f:
+            json.dump(config, f, indent=4)
+
+        self.measurements_path = run_results_path / "measurements.csv"
+        self.run_results_path = run_results_path
+        rows = [
+            ["Event", "Time", "Value"],
+            ["program_start", time.monotonic(), 1],
+        ]
         # Write to a CSV file
-        with open(measurements_path, "w", newline="\n") as csvfile:
+        with open(self.measurements_path, "w", newline="\n") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(rows)
+
+    def summarize(self):
+        """Summarize the measurements CSV and write a JSON summary in the same folder."""
+        csv_path = self.measurements_path
+        df = _read_csv(csv_path)
+
+        program_start = _first_time(df, "program_start")
+        program_end = _last_time(df, "program_end")
+        if program_start is None:
+            program_start = float(df["Time"].min())
+        if program_end is None:
+            program_end = float(df["Time"].max())
+        runtime_s = float(program_end - program_start)
+
+        first_epoch_start = _first_time(df, "epoch_start")
+        last_epoch_end = _last_time(df, "epoch_end")
+        if first_epoch_start is not None and last_epoch_end is not None and last_epoch_end > first_epoch_start:
+            training_time_s = float(last_epoch_end - first_epoch_start)
+        else:
+            training_time_s = runtime_s
+
+        epochs_completed = int((df["Event"] == "epoch_end").sum()) or int((df["Event"] == "epoch_start").sum())
+        batches_seen = int((df["Event"] == "end_batch").sum()) or int((df["Event"] == "batch_start").sum())
+        nbr_training_datapoints = _last_value(df, "nbr_training_datapoints")
+
+        throughput_samples_per_s = None
+        if nbr_training_datapoints is not None and training_time_s > 0 and epochs_completed > 0:
+            throughput_samples_per_s = float((nbr_training_datapoints * epochs_completed) / training_time_s)
+
+        converged_time = _first_time(df, "training_converged")
+        converged_epoch = _last_value(df, "training_converged")
+        convergence_time_s = float(converged_time - program_start) if (converged_time is not None and program_start is not None) else None
+
+        final_val_acc = _last_value(df, "validation_accuracy")
+        best_val_acc = _best_value(df, "validation_accuracy", mode="max")
+        time_at_best_acc = _time_at_best(df, "validation_accuracy", mode="max")
+        time_to_best_acc_s = float(time_at_best_acc - program_start) if (time_at_best_acc is not None and program_start is not None) else None
+
+        final_val_loss = _last_value(df, "validation_loss")
+        best_val_loss = _best_value(df, "validation_loss", mode="min")
+        time_at_best_loss = _time_at_best(df, "validation_loss", mode="min")
+        time_to_best_loss_s = float(time_at_best_loss - program_start) if (time_at_best_loss is not None and program_start is not None) else None
+
+        final_test_acc = _last_value(df, "test_accuracy")
+        best_test_acc = _best_value(df, "test_accuracy", mode="max")
+        time_at_best_test_acc = _time_at_best(df, "test_accuracy", mode="max")
+        time_to_best_test_acc_s = float(time_at_best_test_acc - program_start) if (time_at_best_test_acc is not None and program_start is not None) else None
+
+        cache_hits = int((df["Event"] == "cache_hit").sum())
+        cache_misses = int((df["Event"] == "cache_miss").sum())
+        cache_total = cache_hits + cache_misses
+        cache_hit_rate = float(cache_hits / cache_total) if cache_total > 0 else None
+
+        paired_stats: Dict[str, Dict[str, Any]] = {}
+        for s_ev, e_ev, name in PAIR_EVENTS:
+            durations = _pair_durations(df, s_ev, e_ev)
+            paired_stats[name] = asdict(Stats.from_series(durations))
+
+        batch_losses = df.loc[df["Event"] == "batch_train_loss", "Value"]
+        batch_loss_mean = float(pd.to_numeric(batch_losses, errors="coerce").dropna().mean()) if len(batch_losses) else None
+
+        remote_feature_total_s = paired_stats.get("remote_feature_latency_s", {}).get("total_s", 0.0) or 0.0
+
+        summary: Dict[str, Any] = {
+            "run": {
+                "csv": str(csv_path),
+                "runtime_s": runtime_s,
+                "training_time_s": training_time_s,
+                "epochs_completed": epochs_completed,
+                "batches_seen": batches_seen,
+                "nbr_training_datapoints": nbr_training_datapoints,
+            },
+            "metrics": {
+                "throughput_samples_per_s": throughput_samples_per_s,
+                "epoch_time_s": paired_stats["epoch_time_s"],
+                "sampling_phase_time_s": paired_stats["sampling_phase_time_s"],
+                "training_phase_time_s": paired_stats["training_phase_time_s"],
+                "convergence_time_s": convergence_time_s,
+                "converged_epoch": converged_epoch,
+                "final_validation_accuracy": final_val_acc,
+                "best_validation_accuracy": best_val_acc,
+                "time_to_best_accuracy_s": time_to_best_acc_s,
+                "final_validation_loss": final_val_loss,
+                "best_validation_loss": best_val_loss,
+                "time_to_best_loss_s": time_to_best_loss_s,
+                "final_test_accuracy": final_test_acc,
+                "best_test_accuracy": best_test_acc,
+                "time_to_best_test_accuracy_s": time_to_best_test_acc_s,
+                "remote_feature_latency_s": paired_stats["remote_feature_latency_s"],
+                "remote_feature_total_s": remote_feature_total_s,
+                "cache_hits": cache_hits,
+                "cache_misses": cache_misses,
+                "cache_hit_rate": cache_hit_rate,
+                "validation_time_s": paired_stats["validation_time_s"],
+                "saving_weights_time_s": paired_stats["saving_weights_time_s"],
+                "batch_train_loss_mean": batch_loss_mean,
+            },
+            "notes": [
+                "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",
+                "throughput_samples_per_s assumes nbr_training_datapoints is per-epoch; if it's total across training, remove the * epochs_completed multiplier.",
+                "remote_feature_total_s is a proxy for time spent waiting on remote feature reads (DB reads).",
+            ],
+        }
+
+        json_path = csv_path.with_suffix('.json')
+        try:
+            with open(json_path, 'w') as f:
+                json.dump(summary, f, indent=2)
+        except Exception as e:
+            print(f"Warning: Failed to write JSON summary to {json_path}: {e}")
+        return summary
     
     def log_event(self, event_name: str, value: int | float = 1):
         with open(self.measurements_path, "a", newline="\n") as csvfile:
@@ -22,3 +247,9 @@ class Measurer:
     
     def __del__(self):
         self.log_event("program_end", 1)
+        try:
+            self.summarize()
+        except Exception as e:
+            print(f"Warning: Failed to summarize measurements: {e}")
+            
+    
