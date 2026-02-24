@@ -1,0 +1,13 @@
+{
+    "config": {
+        "GNN_model": "GCN(1433, 64, 4)",
+        "implementation": "Example-memory",
+        "dataset": "ogbn-exapmle",
+        "num_epochs": 5,
+        "batch_size": 1024,
+        "learning_rate": 0.01,
+        "weight_decay": 5e-4,
+        "num_workers_training": 4,
+        "nbr_GPUs_used": 0
+    }
+}

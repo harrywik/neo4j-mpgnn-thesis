@@ -30,18 +30,7 @@ def main(config: dict):
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
     
-    results_path = Path(__file__).parent.parent.parent / "experiment-results"
-    num_folders = sum(1 for p in results_path.iterdir() if p.is_dir())
-    results_name = f"run_{num_folders}"
-    run_results_path = results_path / results_name
-    run_results_path.mkdir(parents=True, exist_ok=False)
-    
-    with open(run_results_path / "config.json", "w") as f:
-        json.dump(config, f, indent=4)
-    
-    measurements_path = run_results_path / "measurements.csv"
-    
-    measurer = Measurer(measurements_path)
+    measurer = Measurer(config)
     
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer)
@@ -70,11 +59,7 @@ def main(config: dict):
     )
 
     trainer.train(max_epochs=config.get("max_epochs"))
-    
     measurer.log_event("program_end", 1)
-
-    evaluate(model, graph_store, feature_store, sampler, "test")
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Provide profiling versions for this experiment.")
@@ -99,31 +84,5 @@ if __name__ == "__main__":
     with open(args.config, "r") as f:
         config = json.load(f)
 
-    if args.profile:
-        BASE_DIR = Path(__file__).resolve().parent                  # folder containing Main.py
-        profiles_dir = BASE_DIR.parent / "profiles"                 # sibling folder named "profile"
-        profiles_dir.mkdir(parents=True, exist_ok=True)
-
-        folder_name = BASE_DIR.name                                # e.g. "InMemoryGNNExample"
-
-        target_dir = profiles_dir / folder_name
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        prof_path = target_dir / f"{folder_name}.prof"
-        txt_path  = target_dir / f"{folder_name}.txt"
-
-        pr = cProfile.Profile()
-        pr.enable()
-        main(config)
-        pr.disable()
-
-        stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
-        stats.dump_stats(str(prof_path))                           # overwrites
-        with txt_path.open("w") as f:                              # overwrites
-            stats.stream = f
-            stats.print_stats(50)
-
-        print(f"wrote {prof_path} and {txt_path}")
-    else:
-        main(config)
+    main(config)
 
