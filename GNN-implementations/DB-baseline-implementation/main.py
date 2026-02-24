@@ -64,13 +64,7 @@ def main(config: dict):
         feature_store=feature_store,
         graph_store=graph_store,
         sampler=sampler,
-        optimizer=optimizer,
-        criterion=criterion,
         batch_size=config.get("batch_size"),
-        nodes_per_epoch=config.get("nodes_per_epoch"),
-        eval_every_epochs=config.get("eval_every_epochs"),
-        eval_every_batches=config.get("eval_every_batches"),
-        log_train_time=config.get("log_train_time", True),
         nodeloader_args=nodeloader_args,
         measurer=measurer,
     )
