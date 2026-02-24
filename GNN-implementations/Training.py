@@ -1,8 +1,8 @@
 from pathlib import Path
 import time
-import math
 import torch
-
+import cProfile
+import pstats
 from torch_geometric.loader import NodeLoader
 from torch_geometric.sampler import BaseSampler
 from torch_geometric.data import GraphStore, FeatureStore
@@ -136,43 +136,15 @@ class Trainer:
                 
 
     def train(self, max_epochs: int) -> None:
-        import cProfile
-        import pstats
         start_time = time.monotonic()
         self.model.train()
         validation_loss_minimum = None
-        # Profiling setup
         run_dir = self.measurer.run_results_path
         txt_path = run_dir / "train_profile.txt"
         pr = cProfile.Profile()
         pr.enable()
         try:
-            for epoch in range(self.epochs_run, max_epochs):
-                self.measurer.log_event("epoch_start", 1)
-                self._run_epoch(epoch)
-                self.measurer.log_event("epoch_end", 1)
-                self.measurer.log_event("start_validation_accuracy", 1)
-                validation_acc, validation_loss = evaluate(
-                    self.model,
-                    self.graph_store,
-                    self.feature_store,
-                    self.sampler,
-                )
-                self.measurer.log_event("validation_accuracy", validation_acc)
-                self.measurer.log_event("validation_loss", validation_loss)
-                self.measurer.log_event("end_validation_accuracy", 1)
-                if validation_loss_minimum is None or validation_loss < validation_loss_minimum:
-                    validation_loss_minimum = validation_loss
-                    self.measurer.log_event("start_saving_weights")
-                    self._save_snapshot(epoch)
-                    self.measurer.log_event("end_saving_weights")
-                if self.early_stopping(validation_loss):
-                    self.measurer.log_event("training_converged", (epoch + 1))
-                    break
-                if time.monotonic() - start_time >= self.max_train_seconds:
-                    print("Stopping: max training time reached.")
-                    self.measurer.log_event("training_time_exceeded", (epoch + 1))
-                    break
+            self._start_training(max_epochs, start_time)
         finally:
             pr.disable()
             stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
@@ -184,6 +156,34 @@ class Trainer:
         test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
         self.measurer.log_event("test_accuracy", test_accuracy)
 
+    def _start_training(self, max_epochs: int, start_time: float) -> None:
+        validation_loss_minimum = None
+        for epoch in range(self.epochs_run, max_epochs):
+            self.measurer.log_event("epoch_start", 1)
+            self._run_epoch(epoch)
+            self.measurer.log_event("epoch_end", 1)
+            self.measurer.log_event("start_validation_accuracy", 1)
+            validation_acc, validation_loss = evaluate(
+                self.model,
+                self.graph_store,
+                self.feature_store,
+                self.sampler,
+            )
+            self.measurer.log_event("validation_accuracy", validation_acc)
+            self.measurer.log_event("validation_loss", validation_loss)
+            self.measurer.log_event("end_validation_accuracy", 1)
+            if validation_loss_minimum is None or validation_loss < validation_loss_minimum:
+                validation_loss_minimum = validation_loss
+                self.measurer.log_event("start_saving_weights")
+                self._save_snapshot(epoch)
+                self.measurer.log_event("end_saving_weights")
+            if self.early_stopping(validation_loss):
+                self.measurer.log_event("training_converged", (epoch + 1))
+                break
+            if time.monotonic() - start_time >= self.max_train_seconds:
+                print("Stopping: max training time reached.")
+                self.measurer.log_event("training_time_exceeded", (epoch + 1))
+                break
 
 def put_nodeLoader_args_map(
     pickle_safe: bool | None = None,
