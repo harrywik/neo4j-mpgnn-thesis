@@ -184,6 +184,7 @@ class Trainer:
                 print("Stopping: max training time reached.")
                 self.measurer.log_event("training_time_exceeded", (epoch + 1))
                 break
+        self.measurer.log_event("program_end", 1)
 
 def put_nodeLoader_args_map(
     pickle_safe: bool | None = None,
