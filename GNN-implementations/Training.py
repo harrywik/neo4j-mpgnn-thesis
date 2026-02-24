@@ -150,7 +150,7 @@ class Trainer:
             stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
             with txt_path.open("w") as f:
                 stats.stream = f
-                stats.print_stats(50)
+                stats.print_stats(75)
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
         test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
