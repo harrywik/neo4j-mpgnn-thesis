@@ -19,23 +19,17 @@ class Trainer:
         feature_store: FeatureStore,
         graph_store: GraphStore,
         sampler: BaseSampler,
-        save_every: int = 50,
         snapshot_path: str | None = None,
         batch_size: int = 500,
-        criterion = None,
         lr:float = 1e-2,
         optimizer: optim.Optimizer = None,
         nodes_per_epoch: int | None = None,
         max_train_seconds: int = 3600,
         device: str = "cpu",
         world_size: int = 1,
-        eval_every_epochs: int | None = None,
-        eval_every_batches: int | None = None,
-        eval_split: str = "val",
-        evaluate_fn=None,
-        log_train_time: bool = False,
         nodeloader_args: dict | None = None,
         measurer: Measurer | None = None,
+        criterion = None
     ) -> None:
         self.model = model
         self.feature_store = feature_store
@@ -45,20 +39,13 @@ class Trainer:
             model.parameters(), lr=lr, weight_decay=5e-4
         )
         self.measurer = measurer
-        self.save_every = save_every
         self.snapshot_path = snapshot_path
         self.batch_size = batch_size
         self.nodes_per_epoch = nodes_per_epoch
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
-        self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
         self.device = torch.device(device)
         self.world_size = world_size
-        self.eval_every_epochs = eval_every_epochs
-        self.eval_every_batches = eval_every_batches
-        self.eval_split = eval_split
-        self.evaluate_fn = evaluate if evaluate_fn is None else evaluate_fn
-        self.log_train_time = log_train_time
         self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
             pickle_safe=False,
             num_workers=0,
@@ -70,8 +57,9 @@ class Trainer:
         )
         self.model.to(self.device)
         self.train_indices = self._get_train_indices()
-        self.early_stopping = EarlyStopping(min_delta=1e-2, patience=10)
+        self.early_stopping = EarlyStopping(min_delta=1e-3, patience=5)
         self.validation_loss_minimum = None
+        self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
         
 
     def _save_snapshot(self, epoch: int) -> None:
@@ -137,9 +125,6 @@ class Trainer:
                 # prefetch_factor=0,
             )
         
-        num_steps = int(math.ceil(self.train_indices.numel() / self.batch_size)) if self.batch_size > 0 else 0
-        print(f"Epoch {epoch} | Steps: {num_steps}")
-        
         nbr_batches = len(train_loader)
         self.measurer.log_event("batch_start", 1)
         for batch_idx, batch in enumerate(train_loader):
@@ -164,12 +149,11 @@ class Trainer:
             self.measurer.log_event("epoch_end", 1)
             
             self.measurer.log_event("start_validation_accuracy", 1)
-            validation_acc, validation_loss = self.evaluate_fn( # re write this function
+            validation_acc, validation_loss = evaluate( # re write this function
                 self.model,
                 self.graph_store,
                 self.feature_store,
                 self.sampler,
-                self.eval_split,
             )
             self.measurer.log_event("validation_accuracy", validation_acc)
             self.measurer.log_event("validation_loss", validation_loss)
@@ -189,9 +173,8 @@ class Trainer:
                 self.measurer.log_event("training_time_exceeded", epoch)
                 break
 
-        if self.log_train_time:
-            duration = time.monotonic() - start_time
-            print(f"Training duration: {duration:.2f}s")
+        duration = time.monotonic() - start_time
+        print(f"Training duration: {duration:.2f}s")
 
 
 
