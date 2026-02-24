@@ -1,9 +1,5 @@
 {
   "lr": 0.01,
   "batch_size": 100,
-  "nodes_per_epoch": 140,
-  "eval_every_epochs": null,
-  "eval_every_batches": null,
-  "log_train_time": true,
   "max_epochs": 100
 }

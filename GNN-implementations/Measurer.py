@@ -232,6 +232,11 @@ class Measurer:
             ],
         }
 
+        # --- NEW: Write all validation accuracies to a separate CSV ---
+        val_acc_path = csv_path.with_name("validation_accuracies.csv")
+        val_accs = df[df["Event"] == "validation_accuracy"][["Time", "Value"]]
+        val_accs.to_csv(val_acc_path, index=False)
+
         json_path = csv_path.with_suffix('.json')
         try:
             with open(json_path, 'w') as f:
@@ -251,5 +256,4 @@ class Measurer:
             self.summarize()
         except Exception as e:
             print(f"Warning: Failed to summarize measurements: {e}")
-            
-    
+
