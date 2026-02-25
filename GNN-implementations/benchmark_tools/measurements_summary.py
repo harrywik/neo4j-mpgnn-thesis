@@ -167,6 +167,10 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
 
     remote_feature_total_s = paired_stats.get("remote_feature_latency_s", {}).get("total_s", 0.0) or 0.0
 
+    cpu_values = df.loc[df["Event"] == "cpu_utilization_percentage", "Value"]
+    cpu_values = pd.to_numeric(cpu_values, errors="coerce").dropna()
+    avg_cpu_utilization = float(cpu_values.mean()) if len(cpu_values) else None
+
     return {
         "run": {
             "csv": str(csv_path),
@@ -183,6 +187,7 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "training_phase_time_s": paired_stats["training_phase_time_s"],
             "convergence_time_s": convergence_time_s,
             "converged_epoch": converged_epoch,
+            "avg_cpu_utilization": avg_cpu_utilization,
             "final_validation_accuracy": final_val_acc,
             "best_validation_accuracy": best_val_acc,
             "time_to_best_accuracy_s": time_to_best_acc_s,
