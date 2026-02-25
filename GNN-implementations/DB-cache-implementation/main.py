@@ -18,7 +18,7 @@ from Neo4jConnection import Neo4jConnection
 from feature_stores.PageRankCacheFeatureStore import PageRankCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers.UniformSampler import UniformSampler
-from Measurer import Measurer
+from benchmark_tools import Measurer
 
 def main(config: dict):
     # Demo local user with unsecure passwd
@@ -49,16 +49,6 @@ def main(config: dict):
     measurer.write_to_configresult("graph_store", "BaseLineGS")
     measurer.write_to_configresult("train_val_test_split", split_ratios)
     measurer.write_to_configresult("lr", lr)
-
-    if config.get("prewarm_cache", True) and hasattr(feature_store, "prewarm"):
-        split = config.get("prewarm_split", "train")
-        prewarm_n = config.get("prewarm_max_nodes", 5000)
-        warm_ids = graph_store.get_split(n=prewarm_n, split=split, shuffle=True)
-        feature_store.prewarm(
-            warm_ids.tolist(),
-            include_embeddings=config.get("prewarm_embeddings", True),
-            include_labels=config.get("prewarm_labels", True),
-        )
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,

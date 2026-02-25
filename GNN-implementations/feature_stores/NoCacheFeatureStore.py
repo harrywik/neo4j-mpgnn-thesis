@@ -13,7 +13,7 @@ GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from Measurer import Measurer
+from benchmark_tools import Measurer
 
 class NoCacheFeatureStore(FeatureStore):
     def __init__(self, driver: Driver, measurer:Measurer = None) -> None:

@@ -16,7 +16,7 @@ from feature_stores import NoCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
-from Measurer import Measurer
+from benchmark_tools import Measurer
 
 def main(config: dict):
     uri = os.environ["URI"]
