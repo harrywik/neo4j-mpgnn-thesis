@@ -18,7 +18,7 @@ from models.GCN import GCN
 from feature_stores import PickleSafeFeatureStore
 from graph_stores import PickleSafeGS
 from samplers import UniformSampler
-from benchmark_tools import Measurer
+from benchmarking_tools import Measurer
 
 def main(config: dict):
     # Demo local user with unsecure passwd
@@ -51,8 +51,8 @@ def main(config: dict):
         shuffle=True,
         num_workers=2,          # must be 0 for pickle_safe=True
         prefetch_factor=2,
-        filter_per_worker=True,
-        persistent_workers=True,
+        # filter_per_worker=False,
+        persistent_workers=False,
         pin_memory=False,
     )
     measurer.write_to_configresult("nodeloader_args", nodeloader_args)

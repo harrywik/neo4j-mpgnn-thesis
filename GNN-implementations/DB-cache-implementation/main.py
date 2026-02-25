@@ -18,7 +18,7 @@ from Neo4jConnection import Neo4jConnection
 from feature_stores.PageRankCacheFeatureStore import PageRankCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers.UniformSampler import UniformSampler
-from benchmark_tools import Measurer
+from benchmarking_tools import Measurer
 
 def main(config: dict):
     # Demo local user with unsecure passwd
@@ -31,7 +31,7 @@ def main(config: dict):
     feature_store = PageRankCacheFeatureStore(driver)
     
     graph_store = BaseLineGS(driver) 
-    num_neighbors = [10]
+    num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     split_ratios = [0.6, 0.2, 0.2]
     graph_store.train_val_test_split_db(split_ratios)
