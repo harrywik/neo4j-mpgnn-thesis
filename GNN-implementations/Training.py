@@ -9,7 +9,7 @@ from torch_geometric.data import GraphStore, FeatureStore
 from torch import nn
 from torch import optim
 from evaluate import evaluate
-from Measurer import Measurer
+from benchmark_tools import Measurer
 from EarlyStopping import EarlyStopping
 
 class Trainer:
