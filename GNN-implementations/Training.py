@@ -121,16 +121,17 @@ class Trainer:
                 # persistent_workers=False,
                 # prefetch_factor=0,
             )
+        it = iter(train_loader)
         nbr_batches = len(train_loader)
-        self.measurer.log_event("batch_start", 1)
-        for batch_idx, batch in enumerate(train_loader):
+
+        for _ in range(nbr_batches):
+            self.measurer.log_event("start_batch_fetch", 1)
+            batch = next(it)  # sampling + filter_fn + feature_store happens here
+            self.measurer.log_event("end_batch_fetch", 1)
+
             self.measurer.log_event("start_batch_processing", 1)
-            self._run_batch(batch)
-            self.measurer.log_event("end_batch_processing", 1)
-            self.measurer.log_event("end_batch", 1)
-            if batch_idx >= nbr_batches - 1:
-                self.measurer.log_event("batch_start", 1)
-            
+            self._run_batch(batch)  # forward/backward/optimizer
+            self.measurer.log_event("end_batch_processing", 1)                    
                 
 
     def train(self, max_epochs: int) -> None:

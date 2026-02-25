@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 
 PAIR_EVENTS: List[Tuple[str, str, str]] = [
     ("epoch_start", "epoch_end", "epoch_time_s"),
-    ("batch_start", "start_batch_processing", "sampling_phase_time_s"),
+    ("start_batch_fetch", "end_batch_fetch", "sampling_phase_time_s"),
     ("start_batch_processing", "end_batch_processing", "training_phase_time_s"),
     ("start_validation_accuracy", "end_validation_accuracy", "validation_time_s"),
     ("start_saving_weights", "end_saving_weights", "saving_weights_time_s"),
@@ -158,7 +158,7 @@ class Measurer:
             training_time_s = runtime_s
 
         epochs_completed = int((df["Event"] == "epoch_end").sum()) or int((df["Event"] == "epoch_start").sum())
-        batches_seen = int((df["Event"] == "end_batch").sum()) or int((df["Event"] == "batch_start").sum())
+        batches_seen = int((df["Event"] == "end_batch_fetch").sum()) or int((df["Event"] == "start_batch_fetch").sum())
         nbr_training_datapoints = _last_value(df, "nbr_training_datapoints")
 
         throughput_samples_per_s = None
@@ -246,7 +246,7 @@ class Measurer:
         val_accs.to_csv(val_acc_path, index=False)
 
         # --- NEW: Plot sampling and training phase as a histogram-style bar chart ---
-        sampling_durations = _pair_durations(df, "batch_start", "start_batch_processing")
+        sampling_durations = _pair_durations(df, "start_batch_fetch", "end_batch_fetch")
         training_durations = _pair_durations(df, "start_batch_processing", "end_batch_processing")
 
         if len(sampling_durations) or len(training_durations):
