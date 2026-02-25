@@ -16,7 +16,7 @@ from feature_stores import NoCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
-from benchmark_tools import Measurer
+from benchmarking_tools import Measurer
 
 def main(config: dict):
     uri = os.environ["URI"]
@@ -28,7 +28,7 @@ def main(config: dict):
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer)
     graph_store = BaseLineGS(driver) 
-    num_neighbors = [10]
+    num_neighbors = [10, 10, 10]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     
     split_ratios = [0.6, 0.2, 0.2]

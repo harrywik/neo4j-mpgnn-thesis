@@ -10,7 +10,7 @@ from torch_geometric.data import GraphStore, FeatureStore
 from torch import nn
 from torch import optim
 from evaluate import evaluate
-from benchmark_tools import Measurer, start_cpu_monitor
+from benchmarking_tools import Measurer, start_cpu_monitor
 from EarlyStopping import EarlyStopping
 
 
@@ -152,7 +152,7 @@ class Trainer:
             stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
             with txt_path.open("w") as f:
                 stats.stream = f
-                stats.print_stats(75)
+                stats.print_stats(150)
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
         test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
