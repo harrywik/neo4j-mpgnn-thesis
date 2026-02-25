@@ -25,7 +25,6 @@ class Trainer:
         optimizer: optim.Optimizer = None,
         max_train_seconds: int = 3600,
         device: str = "cpu",
-        world_size: int = 1,
         nodeloader_args: dict | None = None,
         measurer: Measurer | None = None,
         criterion = None
@@ -43,7 +42,6 @@ class Trainer:
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
         self.device = torch.device(device)
-        self.world_size = world_size
         self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
             pickle_safe=False,
             num_workers=0,

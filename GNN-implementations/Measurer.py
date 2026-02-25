@@ -115,8 +115,10 @@ class Measurer:
         run_results_path.mkdir(parents=True, exist_ok=False)
 
         # Save config
-        with open(run_results_path / "config.json", "w") as f:
-            json.dump(config, f, indent=4)
+        self.config_path = run_results_path / "config.json"
+        self.config_data = dict(config)
+        with open(self.config_path, "w") as f:
+            json.dump(self.config_data, f, indent=4)
 
         self.measurements_path = run_results_path / "measurements.csv"
         self.run_results_path = run_results_path
@@ -128,6 +130,12 @@ class Measurer:
         with open(self.measurements_path, "w", newline="\n") as csvfile:
             writer = csv.writer(csvfile)
             writer.writerows(rows)
+
+    def write_to_configresult(self, key: str, value: Any) -> None:
+        """Add or update a key in the stored config.json for this run."""
+        self.config_data[key] = value
+        with open(self.config_path, "w") as f:
+            json.dump(self.config_data, f, indent=4)
 
     def summarize(self):
         """Summarize the measurements CSV and write a JSON summary in the same folder."""
@@ -236,6 +244,45 @@ class Measurer:
         val_acc_path = csv_path.with_name("validation_accuracies.csv")
         val_accs = df[df["Event"] == "validation_accuracy"][["Time", "Value"]]
         val_accs.to_csv(val_acc_path, index=False)
+
+        # --- NEW: Plot sampling and training phase as a histogram-style bar chart ---
+        sampling_durations = _pair_durations(df, "batch_start", "start_batch_processing")
+        training_durations = _pair_durations(df, "start_batch_processing", "end_batch_processing")
+
+        if len(sampling_durations) or len(training_durations):
+            sampling_mean = float(sampling_durations.mean()) if len(sampling_durations) else 0.0
+            training_mean = float(training_durations.mean()) if len(training_durations) else 0.0
+
+            labels = ["sampling", "training"]
+            means = [sampling_mean, training_mean]
+
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.bar(labels, means, color=["#4C78A8", "#F58518"])
+            ax.set_title("Phase durations (mean)")
+            ax.set_ylabel("seconds")
+
+            fig.tight_layout()
+            plot_path = csv_path.with_name("phase_summary.png")
+            fig.savefig(plot_path, dpi=150)
+            plt.close(fig)
+
+        # --- NEW: Convergence plot (validation accuracy over epochs) ---
+        val_accs = df[df["Event"] == "validation_accuracy"][["Time", "Value"]].copy()
+        if len(val_accs):
+            val_accs = val_accs.reset_index(drop=True)
+            epochs = list(range(1, len(val_accs) + 1))
+            acc_values = pd.to_numeric(val_accs["Value"], errors="coerce")
+            fig, ax = plt.subplots(figsize=(6, 4))
+            ax.plot(epochs, acc_values, marker="o", linestyle="-")
+            ax.set_title("Validation accuracy convergence")
+            ax.set_xlabel("epoch")
+            ax.set_ylabel("validation accuracy")
+            ax.set_ylim(0.0, 1.0)
+            ax.set_xticks(epochs)
+            fig.tight_layout()
+            conv_path = csv_path.with_name("validation_convergence.png")
+            fig.savefig(conv_path, dpi=150)
+            plt.close(fig)
 
         json_path = csv_path.with_suffix('.json')
         try:

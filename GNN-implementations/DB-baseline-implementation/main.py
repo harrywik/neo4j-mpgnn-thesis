@@ -28,16 +28,27 @@ def main(config: dict):
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer)
     graph_store = BaseLineGS(driver) 
-    sampler = UniformSampler(graph_store, num_neighbors=[10, 5])
+    num_neighbors = [10, 5]
+    sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     
-    graph_store.train_val_test_split_db([0.6, 0.2, 0.2])
-    model = GCN(1433, 32, 32, 7)
+    split_ratios = [0.6, 0.2, 0.2]
+    graph_store.train_val_test_split_db(split_ratios)
+    model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 7}
+    model = GCN(**model_args)
     lr = config.get("lr", 1e-2)
+
+    measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
+    measurer.write_to_configresult("sampler", {"name": "UniformSampler", "num_neighbors": num_neighbors})
+    measurer.write_to_configresult("feature_store", "NoCacheFeatureStore")
+    measurer.write_to_configresult("graph_store", "BaseLineGS")
+    measurer.write_to_configresult("train_val_test_split", split_ratios)
+    measurer.write_to_configresult("lr", lr)
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,
         shuffle=True,
     )
+    measurer.write_to_configresult("nodeloader_args", nodeloader_args)
 
     trainer = Trainer(
         model=model,
