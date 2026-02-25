@@ -31,7 +31,7 @@ def main(config: dict):
     feature_store = PageRankCacheFeatureStore(driver)
     
     graph_store = BaseLineGS(driver) 
-    num_neighbors = [10, 5]
+    num_neighbors = [10]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     split_ratios = [0.6, 0.2, 0.2]
     graph_store.train_val_test_split_db(split_ratios)
