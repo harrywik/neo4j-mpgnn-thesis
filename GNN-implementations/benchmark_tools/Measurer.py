@@ -6,7 +6,7 @@ from typing import Any
 
 from .config_writer import ConfigWriter
 from .measurements_summary import read_measurements, build_summary, get_validation_accuracies
-from .measurements_plots import plot_phase_summary, plot_validation_convergence
+from .measurements_plots import plot_phase_summary, plot_validation_convergence, plot_cpu_utilization
 
 class Measurer:
     def __init__(self, config: dict):
@@ -48,6 +48,7 @@ class Measurer:
 
         plot_phase_summary(csv_path, df)
         plot_validation_convergence(csv_path, df)
+        plot_cpu_utilization(csv_path, df)
 
         json_path = csv_path.with_suffix(".json")
         try:
