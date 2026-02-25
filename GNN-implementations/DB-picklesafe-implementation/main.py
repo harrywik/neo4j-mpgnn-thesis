@@ -22,7 +22,7 @@ from models.GCN import GCN
 from feature_stores import PickleSafeFeatureStore
 from graph_stores import PickleSafeGS
 from samplers import UniformSampler
-from Measurer import Measurer
+from benchmark_tools import Measurer
 
 def main(config: dict):
     # Demo local user with unsecure passwd
