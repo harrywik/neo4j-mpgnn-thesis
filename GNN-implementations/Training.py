@@ -1,5 +1,6 @@
 from pathlib import Path
 import time
+import psutil
 import torch
 import cProfile
 import pstats
@@ -9,8 +10,9 @@ from torch_geometric.data import GraphStore, FeatureStore
 from torch import nn
 from torch import optim
 from evaluate import evaluate
-from benchmark_tools import Measurer
+from benchmark_tools import Measurer, start_cpu_monitor
 from EarlyStopping import EarlyStopping
+
 
 class Trainer:
     def __init__(
@@ -143,6 +145,7 @@ class Trainer:
         pr = cProfile.Profile()
         pr.enable()
         try:
+            start_cpu_monitor(self.measurer)
             self._start_training(max_epochs, start_time)
         finally:
             pr.disable()
@@ -154,6 +157,10 @@ class Trainer:
         print(f"Training duration: {duration:.2f}s")
         test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
         self.measurer.log_event("test_accuracy", test_accuracy)
+        try:
+            self.measurer.summarize()
+        except Exception as e:
+            print(f"Warning: Failed to summarize measurements: {e}")
 
     def _start_training(self, max_epochs: int, start_time: float) -> None:
         validation_loss_minimum = None
