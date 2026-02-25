@@ -28,7 +28,7 @@ def main(config: dict):
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer)
     graph_store = BaseLineGS(driver) 
-    num_neighbors = [10, 5]
+    num_neighbors = [10]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     
     split_ratios = [0.6, 0.2, 0.2]
