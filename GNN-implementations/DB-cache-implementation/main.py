@@ -63,6 +63,8 @@ def main(config: dict):
         sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,
+        patience=config.get("patience"),
+        min_delta=config.get("min_delta"),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         measurer=measurer,

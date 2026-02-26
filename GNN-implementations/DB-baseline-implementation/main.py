@@ -28,7 +28,7 @@ def main(config: dict):
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer)
     graph_store = BaseLineGS(driver) 
-    num_neighbors = [10, 10, 10]
+    num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     
     split_ratios = [0.6, 0.2, 0.2]
@@ -49,12 +49,15 @@ def main(config: dict):
         shuffle=True,
     )
     measurer.write_to_configresult("nodeloader_args", nodeloader_args)
+    
 
     trainer = Trainer(
         model=model,
         feature_store=feature_store,
         graph_store=graph_store,
         sampler=sampler,
+        min_delta=config.get('min_delta'),
+        patience=config.get('patience'),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         measurer=measurer,

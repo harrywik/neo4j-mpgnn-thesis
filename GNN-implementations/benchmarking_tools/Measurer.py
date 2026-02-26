@@ -13,9 +13,17 @@ class Measurer:
         # Handles all results path logic internally
         results_path = Path(__file__).parent.parent.parent / "experiments" / "results"
         results_path.mkdir(parents=True, exist_ok=True)
-        num_folders = sum(1 for p in results_path.iterdir() if p.is_dir())
-        results_name = f"run_{num_folders}"
-        run_results_path = results_path / results_name
+
+        # Find next available run_N
+        existing = []
+        for p in results_path.iterdir():
+            if p.is_dir() and p.name.startswith("run_"):
+                try:
+                    existing.append(int(p.name.split("_", 1)[1]))
+                except ValueError:
+                    pass
+        next_id = (max(existing) + 1) if existing else 0
+        run_results_path = results_path / f"run_{next_id}"
         run_results_path.mkdir(parents=True, exist_ok=False)
 
         # Save config
@@ -64,6 +72,8 @@ class Measurer:
             writer.writerow([event_name, time.monotonic(), value])
     
     def __del__(self):
+        if not hasattr(self, "measurements_path"):
+            return
         self.log_event("program_end", 1)
         try:
             self.summarize()
