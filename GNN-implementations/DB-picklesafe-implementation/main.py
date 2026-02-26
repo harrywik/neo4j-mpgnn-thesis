@@ -34,7 +34,7 @@ def main(config: dict):
     graph_store.train_val_test_split_db(split_ratios)
     model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 16, "nbr_classes": 7}
     model = GCN(**model_args)
-    lr = config.get("lr", 1e-2)
+    lr = config.get("lr")
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
     
@@ -49,10 +49,10 @@ def main(config: dict):
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=True,
         shuffle=True,
-        num_workers=2,          # must be 0 for pickle_safe=True
-        prefetch_factor=2,
-        # filter_per_worker=False,
-        persistent_workers=False,
+        num_workers=2,        
+        prefetch_factor=1,
+        filter_per_worker=False, # True -> 
+        persistent_workers=True,
         pin_memory=False,
     )
     measurer.write_to_configresult("nodeloader_args", nodeloader_args)
@@ -64,6 +64,8 @@ def main(config: dict):
         sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,
+        patience=config.get('patience'),
+        min_delta=config.get('min_delta'),
         batch_size=config.get("batch_size", 100),
         nodeloader_args=nodeloader_args,
         measurer=measurer

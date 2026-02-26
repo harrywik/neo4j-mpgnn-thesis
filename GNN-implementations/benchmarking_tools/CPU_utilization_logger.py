@@ -2,11 +2,11 @@ import psutil
 import threading
 import time
 
-def start_cpu_monitor(measurer, interval=0.11):
+def start_cpu_monitor(measurer, interval=0.01):
     """Measures 100% as one CPU core, computer with several cores can have more
     than 100% utilization"""
     process = psutil.Process()
-    process.cpu_percent(None)  # warmup
+    process.cpu_percent(1)  # warmup
 
     def monitor():
         while True:

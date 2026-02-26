@@ -21,6 +21,9 @@ class Trainer:
         feature_store: FeatureStore,
         graph_store: GraphStore,
         sampler: BaseSampler,
+        patience:int,
+        min_delta:float,
+        measurer: Measurer,
         snapshot_path: str | None = None,
         batch_size: int = 500,
         lr:float = 1e-2,
@@ -28,7 +31,6 @@ class Trainer:
         max_train_seconds: int = 3600,
         device: str = "cpu",
         nodeloader_args: dict | None = None,
-        measurer: Measurer | None = None,
         criterion = None
     ) -> None:
         self.model = model
@@ -57,7 +59,7 @@ class Trainer:
         self.train_indices = self._get_train_indices()
         self.nbr_training_datapoints = len(self.train_indices)
         self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
-        self.early_stopping = EarlyStopping(min_delta=1e-3, patience=2)
+        self.early_stopping = EarlyStopping(min_delta=min_delta, patience=patience)
         self.validation_loss_minimum = None
         self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
         
