@@ -49,8 +49,8 @@ def main(config: dict):
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=True,
         shuffle=True,
-        num_workers=4,        
-        prefetch_factor=10,
+        num_workers=5,        
+        prefetch_factor=5,
         filter_per_worker=False, # True -> 
         persistent_workers=True,
         pin_memory=False,

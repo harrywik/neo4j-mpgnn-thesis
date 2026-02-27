@@ -139,9 +139,11 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
     convergence_time_s = float(converged_time - program_start) if (converged_time is not None and program_start is not None) else None
 
     final_val_acc = _last_value(df, "validation_accuracy")
+    first_val_acc_time = _first_time(df, "validation_accuracy")
     best_val_acc = _best_value(df, "validation_accuracy", mode="max")
     time_at_best_acc = _time_at_best(df, "validation_accuracy", mode="max")
     time_to_best_acc_s = float(time_at_best_acc - program_start) if (time_at_best_acc is not None and program_start is not None) else None
+    time_to_first_val_acc_s = float(first_val_acc_time - program_start) if (first_val_acc_time is not None and program_start is not None) else None
 
     final_val_loss = _last_value(df, "validation_loss")
     best_val_loss = _best_value(df, "validation_loss", mode="min")
@@ -191,6 +193,7 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "avg_cpu_utilization": avg_cpu_utilization,
             "final_validation_accuracy": final_val_acc,
             "best_validation_accuracy": best_val_acc,
+            "time_to_first_validation_accuracy_s": time_to_first_val_acc_s,
             "time_to_best_accuracy_s": time_to_best_acc_s,
             "final_validation_loss": final_val_loss,
             "best_validation_loss": best_val_loss,

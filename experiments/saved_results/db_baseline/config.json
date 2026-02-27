@@ -1,0 +1,39 @@
+{
+    "lr": 0.01,
+    "batch_size": 100,
+    "max_epochs": 100,
+    "patience": 3,
+    "min_delta": 0.001,
+    "model": {
+        "name": "GCN",
+        "args": {
+            "in_dim": 1433,
+            "hidden_dim1": 32,
+            "hidden_dim2": 32,
+            "nbr_classes": 7
+        }
+    },
+    "sampler": {
+        "name": "UniformSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "NoCacheFeatureStore",
+    "graph_store": "BaseLineGS",
+    "train_val_test_split": [
+        0.6,
+        0.2,
+        0.2
+    ],
+    "nodeloader_args": {
+        "pickle_safe": false,
+        "num_workers": 0,
+        "prefetch_factor": 2,
+        "filter_per_worker": false,
+        "persistent_workers": false,
+        "pin_memory": false,
+        "shuffle": true
+    }
+}

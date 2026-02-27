@@ -52,6 +52,46 @@ def plot_validation_convergence(csv_path: Path, df: pd.DataFrame) -> None:
         plt.close(fig)
 
 
+def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame) -> None:
+    val_accs = get_validation_accuracies(df).copy()
+    if val_accs.empty:
+        return
+
+    val_accs = val_accs.reset_index(drop=True)
+    times = pd.to_numeric(val_accs["Time"], errors="coerce")
+    acc_values = pd.to_numeric(val_accs["Value"], errors="coerce")
+    mask = times.notna() & acc_values.notna()
+    if not mask.any():
+        return
+
+    times = times[mask]
+    acc_values = acc_values[mask]
+
+    epoch_start = df.loc[df["Event"] == "epoch_start", "Time"]
+    if len(epoch_start):
+        t0 = float(epoch_start.iloc[0])
+    else:
+        t0 = float(times.min())
+
+    times = times - t0
+    times = times[times >= 0]
+    acc_values = acc_values.loc[times.index]
+    if times.empty:
+        return
+
+    fig, ax = plt.subplots(figsize=(6, 4))
+    ax.plot(times, acc_values, marker="o", linestyle="-")
+    ax.set_title("Validation accuracy over time")
+    ax.set_xlabel("seconds")
+    ax.set_ylabel("validation accuracy")
+    ax.set_ylim(0.0, 1.0)
+    ax.set_xticks([float(t) for t in times.to_list()])
+    fig.tight_layout()
+    conv_path = csv_path.with_name("validation_convergence_time.png")
+    fig.savefig(conv_path, dpi=150)
+    plt.close(fig)
+
+
 def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame) -> None:
     cpu = df[df["Event"] == "cpu_utilization_percentage"][["Time", "Value"]].copy()
     ram = df[df["Event"] == "ram_usage_mb"][["Time", "Value"]].copy()
