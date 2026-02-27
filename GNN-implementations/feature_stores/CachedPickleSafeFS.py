@@ -1,20 +1,31 @@
+from aiohttp import ClientError
 import torch
 from torch_geometric.typing import FeatureTensorType
 from torch_geometric.data.feature_store import FeatureStore, TensorAttr, NodeType
+from neo4j import GraphDatabase
 from neo4j import Driver
-from neo4j.exceptions import ClientError
-from typing import Optional, List, Tuple
+from typing import Optional, List, Tuple, Dict
 from collections import OrderedDict
 import numpy as np
+import atexit
 
-
-class PageRankCacheFeatureStore(FeatureStore):
-    """Neo4j feature store with a two-tier caching system: a static "hot" cache for PageRank-important nodes and a dynamic LRU cache for recently accessed nodes."""
-    def __init__(self, driver: Driver, cache_size: int = 3000, hot_cache_size: int = None) -> None:
+class CachedPickleSafeFS(FeatureStore):
+    """pickle safe implemenation of feature store with simple LRU cache"""
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        pwd: str,
+        label_map: Optional[Dict[str, int]] = None,
+        cache_size: int = 3000,
+        hot_cache_size: int = None
+    ) -> None:
         super().__init__()
-        self.driver = driver
+        self.uri = uri
+        self.user = user
+        self.pwd = pwd
+        self._driver: Optional[Driver] = None
         self._labels = {}
-        
         # 1. Static "Hot" Cache for PageRank-important nodes
         self.hot_cache = {}
         self.hot_label_cache = {} 
@@ -25,9 +36,16 @@ class PageRankCacheFeatureStore(FeatureStore):
         self.cache = OrderedDict()
         self.label_cache = OrderedDict()
         self.cache_size = cache_size
+        # IMPORTANT: must be deterministic across workers
+        self._label_map: Dict[str, int] = label_map or {}
+        
 
-
-
+    def _get_driver(self) -> Driver:
+        if self._driver is None:
+            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
+            atexit.register(self.close)
+        return self._driver
+    
     def _prefill_hot_cache(
         self,
         graph_name: str,
@@ -64,7 +82,7 @@ class PageRankCacheFeatureStore(FeatureStore):
 
         projected_here = False
         try:
-            with self.driver.session() as session:
+            with self._get_driver().session() as session:
                 exists = session.run(exists_query, name=graph_name).single()["exists"]
                 if not exists:
                     session.run(
@@ -99,6 +117,23 @@ class PageRankCacheFeatureStore(FeatureStore):
         
         print(f"Hot cache prefilled with {len(self.hot_cache)} nodes.")
 
+
+    def close(self) -> None:
+        if getattr(self, "_driver", None) is not None:
+            try:
+                self._driver.close()
+            finally:
+                self._driver = None
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state["_driver"] = None
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._driver = None
+
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
         data_map = {}
@@ -129,7 +164,7 @@ class PageRankCacheFeatureStore(FeatureStore):
             val_col = "subject" if is_label else "embedding"
             query = f"MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id, n.{val_col} AS value"
 
-            with self.driver.session() as session:
+            with self._get_driver().session() as session:
                 result = session.run(query, node_ids=missing_indices)
                 for record in result:
                     nid, val = record["id"], record["value"]

@@ -56,17 +56,27 @@ class Trainer:
             pin_memory=False,
             shuffle=False,
         )
-        self.train_loader = NodeLoader(
+        if self.nodeloader_args["pickle_safe"]:
+            self.train_loader = NodeLoader(
                 data=(self.feature_store, self.graph_store),
                 node_sampler=self.sampler,
                 input_nodes=self.train_indices,
                 batch_size=self.batch_size,
-                shuffle=self.nodeloader_args['shuffle'],
-                filter_per_worker=self.nodeloader_args['filter_per_worker'],
-                num_workers=self.nodeloader_args['num_workers'],
-                persistent_workers=self.nodeloader_args['persistent_workers'],
-                prefetch_factor=self.nodeloader_args['prefetch_factor'],
-                pin_memory=self.nodeloader_args['pin_memory'],
+                shuffle=self.nodeloader_args["shuffle"],
+                filter_per_worker=self.nodeloader_args["filter_per_worker"],
+                num_workers=self.nodeloader_args["num_workers"],
+                persistent_workers=self.nodeloader_args["persistent_workers"],
+                prefetch_factor=self.nodeloader_args["prefetch_factor"],
+                pin_memory=self.nodeloader_args["pin_memory"],
+            )
+        else:
+            self.train_loader = NodeLoader(
+                data=(self.feature_store, self.graph_store),
+                node_sampler=self.sampler,
+                input_nodes=self.train_indices,
+                batch_size=self.batch_size,
+                shuffle=self.nodeloader_args["shuffle"],
+                pin_memory=self.nodeloader_args["pin_memory"],
             )
         self.model.to(self.device)
         self.nbr_training_datapoints = len(self.train_indices)
@@ -190,7 +200,7 @@ def put_nodeLoader_args_map(
 ) -> dict:
     """Helper function to create a consistent dictionary of NodeLoader arguments.
     If GNN implementations are not pickle safe, pickle safe has to be set to False,
-    and all argumenets setting multiple workers configuration can be ignored"""
+    and all arguments setting multiple workers configuration can be ignored."""
     return {
         "pickle_safe": bool(pickle_safe) if pickle_safe is not None else False,
         "num_workers": int(num_workers) if num_workers is not None else 0,
