@@ -29,6 +29,7 @@ random_notes.txt
 GNN-implementations/data
 GNN-implementations/profiles
 experiments/results
+experiments/saved_results
 
 
 .env

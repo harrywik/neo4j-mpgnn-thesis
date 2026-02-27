@@ -46,17 +46,29 @@ class Trainer:
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
         self.device = torch.device(device)
+        self.train_indices = self._get_train_indices()
         self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
             pickle_safe=False,
-            num_workers=0,
+            num_workers=4,
             prefetch_factor=2,
-            filter_per_worker=False,
-            persistent_workers=False,
+            filter_per_worker=True,
+            persistent_workers=True,
             pin_memory=False,
-            shuffle=True,
+            shuffle=False,
         )
+        self.train_loader = NodeLoader(
+                data=(self.feature_store, self.graph_store),
+                node_sampler=self.sampler,
+                input_nodes=self.train_indices,
+                batch_size=self.batch_size,
+                shuffle=self.nodeloader_args['shuffle'],
+                filter_per_worker=self.nodeloader_args['filter_per_worker'],
+                num_workers=self.nodeloader_args['num_workers'],
+                persistent_workers=self.nodeloader_args['persistent_workers'],
+                prefetch_factor=self.nodeloader_args['prefetch_factor'],
+                pin_memory=self.nodeloader_args['pin_memory'],
+            )
         self.model.to(self.device)
-        self.train_indices = self._get_train_indices()
         self.nbr_training_datapoints = len(self.train_indices)
         self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
         self.early_stopping = EarlyStopping(min_delta=min_delta, patience=patience)
@@ -95,46 +107,19 @@ class Trainer:
         self.optimizer.step()
 
     def _run_epoch(self, epoch: int) -> None:        
-        # NodeLoader handles the graph sampling logic\
-        if self.nodeloader_args['pickle_safe']:
-            train_loader = NodeLoader(
-                data=(self.feature_store, self.graph_store),
-                node_sampler=self.sampler,
-                input_nodes=self.train_indices,
-                batch_size=self.batch_size,
-                shuffle=self.nodeloader_args['shuffle'],
-                filter_per_worker=self.nodeloader_args['filter_per_worker'],
-                num_workers=self.nodeloader_args['num_workers'],
-                persistent_workers=self.nodeloader_args['persistent_workers'],
-                prefetch_factor=self.nodeloader_args['prefetch_factor'],
-                pin_memory=self.nodeloader_args['pin_memory'],
-            )
-        else:
-            # there are some arguments we cant use if the implementation is not pickle safe, so we force them to be single-process
-            train_loader = NodeLoader(
-                data=(self.feature_store, self.graph_store),
-                node_sampler=self.sampler,
-                input_nodes=self.train_indices,
-                batch_size=self.batch_size,
-                shuffle=self.nodeloader_args['shuffle'],
-                pin_memory=self.nodeloader_args['pin_memory']
-
-                #ARGUMENTS BELOW IGNORED IF NOT PICKLE SAFE
-                # filter_per_worker=self.nodeloader_args['filter_per_worker'],
-                # num_workers=0,  # Force single-process loading
-                # persistent_workers=False,
-                # prefetch_factor=0,
-            )
-        it = iter(train_loader)
-        nbr_batches = len(train_loader)
+        
+        # create new nodeloader every epoch
+        
+        it = iter(self.train_loader)
+        nbr_batches = len(self.train_loader)
 
         for _ in range(nbr_batches):
             self.measurer.log_event("start_batch_fetch", 1)
-            batch = next(it)  # sampling + filter_fn + feature_store happens here
+            batch = next(it) 
             self.measurer.log_event("end_batch_fetch", 1)
 
             self.measurer.log_event("start_batch_processing", 1)
-            self._run_batch(batch)  # forward/backward/optimizer
+            self._run_batch(batch)
             self.measurer.log_event("end_batch_processing", 1)                    
                 
 
