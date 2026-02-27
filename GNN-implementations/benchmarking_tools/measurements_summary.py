@@ -120,8 +120,9 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
 
     first_epoch_start = _first_time(df, "epoch_start")
     last_epoch_end = _last_time(df, "epoch_end")
-    if first_epoch_start is not None and last_epoch_end is not None and last_epoch_end > first_epoch_start:
-        training_time_s = float(last_epoch_end - first_epoch_start)
+    training_start = _first_time(df, "start_batch_processing") or first_epoch_start
+    if training_start is not None and last_epoch_end is not None and last_epoch_end > training_start:
+        training_time_s = float(last_epoch_end - training_start)
     else:
         training_time_s = runtime_s
 
