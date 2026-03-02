@@ -58,8 +58,7 @@ def main(config: dict):
 
     trainer = Trainer(
         model=model,
-        feature_store=feature_store,
-        graph_store=graph_store,
+        data=(feature_store, graph_store),
         sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,

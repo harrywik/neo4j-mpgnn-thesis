@@ -33,13 +33,14 @@ class Trainer:
         nodeloader_args: dict | None = None,
         criterion = None
     ) -> None:
+        self.batch_size = batch_size
         # IF data is a tuple of (FeatureStore, GraphStore), then we need a sampler to create the train_loader.
         # this is the case when the graph is stored in the database
         if isinstance(data, tuple) and len(data) == 2 and isinstance(data[0], FeatureStore) and isinstance(data[1], GraphStore):
             if sampler is None:
                 raise ValueError("Sampler cannot be None when data is a tuple of (FeatureStore, GraphStore)")
-            self.train_indices = train_indices if train_indices is not None else self._get_train_indices()
             self.feature_store, self.graph_store = data
+            self.train_indices = train_indices if train_indices is not None else self._get_train_indices()
             self.sampler = sampler
             self.data = None
             self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
@@ -83,6 +84,7 @@ class Trainer:
             self.feature_store = None
             self.graph_store = None
             self.sampler = None
+            self.num_neighbors = num_neighbors
             self.train_loader = NeighborLoader(
                 data,
                 # Sample 30 neighbors for each node for 2 iterations
@@ -97,7 +99,6 @@ class Trainer:
         )
         self.measurer = measurer
         self.snapshot_path = snapshot_path
-        self.batch_size = batch_size
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
         self.device = torch.device(device)
@@ -172,7 +173,21 @@ class Trainer:
                 stats.print_stats(150)
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
-        test_accuracy, _ = evaluate(self.model, self.graph_store, self.feature_store, self.sampler, split="test")
+        test_accuracy = None
+        if self.data:
+            test_accuracy, _ = evaluate(
+                model=self.model,
+                data=self.data,
+                num_neighbors=self.num_neighbors,
+                split="val",
+            )
+        else:
+            test_accuracy, _ = evaluate(
+                model=self.model,
+                data=(self.feature_store, self.graph_store),
+                sampler=self.sampler,
+                split="val",
+            )
         self.measurer.log_event("test_accuracy", test_accuracy)
         try:
             self.measurer.summarize()
@@ -186,12 +201,21 @@ class Trainer:
             self._run_epoch(epoch)
             self.measurer.log_event("epoch_end", 1)
             self.measurer.log_event("start_validation_accuracy", 1)
-            validation_acc, validation_loss = evaluate(
-                self.model,
-                self.graph_store,
-                self.feature_store,
-                self.sampler,
-            )
+            # if we have a data object and not FS and GS
+            if self.data:
+                validation_acc, validation_loss = evaluate(
+                    model=self.model,
+                    data=self.data,
+                    num_neighbors=self.num_neighbors,
+                    split="val",
+                )
+            else:
+                validation_acc, validation_loss = evaluate(
+                    model=self.model,
+                    data=(self.feature_store, self.graph_store),
+                    sampler=self.sampler,
+                    split="val",
+                )
             self.measurer.log_event("validation_accuracy", validation_acc)
             self.measurer.log_event("validation_loss", validation_loss)
             self.measurer.log_event("end_validation_accuracy", 1)

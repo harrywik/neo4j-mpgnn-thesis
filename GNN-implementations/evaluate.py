@@ -1,12 +1,12 @@
-from typing import Tuple
+from typing import List, Tuple, Union
 import numpy as np
-from torch_geometric.loader import NodeLoader
+from torch_geometric.loader import NodeLoader, NeighborLoader
 import torch
 from torch import nn
-from torch_geometric.data import GraphStore, FeatureStore
+from torch_geometric.data import GraphStore, FeatureStore, HeteroData, Data
 from torch_geometric.sampler import BaseSampler
 
-def evaluate(model: nn.Module, graph_store: GraphStore, feature_store: FeatureStore, sampler: BaseSampler, split: str = "val") -> float:
+def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None) -> float:
     """Evaluate a GNN model on a dataset split using neighbor sampling.
 
     The function iterates over the requested split in fixed-size chunks of seed
@@ -24,13 +24,11 @@ def evaluate(model: nn.Module, graph_store: GraphStore, feature_store: FeatureSt
     Returns:
         The weighted accuracy for the specified split.
     """
-    model.eval()
-    device = next(model.parameters()).device
-    with torch.no_grad():
-        N: int = 256
-        criterion = nn.CrossEntropyLoss()
-        counts = []
-        partial_accuracies = []
+    val_loader = None
+    N: int = 256
+
+    if isinstance(data, tuple):
+        feature_store, graph_store = data
         node_ids = graph_store.get_split(split=split)
         val_loader = NodeLoader(
                 data=(feature_store, graph_store),
@@ -39,7 +37,21 @@ def evaluate(model: nn.Module, graph_store: GraphStore, feature_store: FeatureSt
                 batch_size=N,
                 shuffle=False,
             )
-        
+    else:
+        val_loader = NeighborLoader(
+                        data,
+                        # Sample 30 neighbors for each node for 2 iterations
+                        num_neighbors=num_neighbors,
+                        # Use a batch size of 128 for sampling training nodes
+                        batch_size=N,
+                        input_nodes=data.test_mask if split == "test" else data.val_mask,
+                    )
+    model.eval()
+    device = next(model.parameters()).device
+    with torch.no_grad():
+        criterion = nn.CrossEntropyLoss()
+        counts = []
+        partial_accuracies = []
         losses = []
         for data in val_loader:
             data = data.to(device)

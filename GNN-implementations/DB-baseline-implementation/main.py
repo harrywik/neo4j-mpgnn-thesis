@@ -53,8 +53,7 @@ def main(config: dict):
 
     trainer = Trainer(
         model=model,
-        feature_store=feature_store,
-        graph_store=graph_store,
+        data=(feature_store, graph_store),
         sampler=sampler,
         min_delta=config.get('min_delta'),
         patience=config.get('patience'),
