@@ -25,7 +25,26 @@ def main(config: dict):
     # Get dataset
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
     graph = dataset[0]
+    train_idx = torch.where(graph.test_mask)[0]    
+    
+    # create stores
+    fstore = InMemoryFeatureStore() 
+    fstore["node", "x", None] = graph.x
+    fstore["node", "y", None] = graph.y 
+    N = graph.x.shape[0]
+    edge_index = graph.edge_index
+    row, col = edge_index[0].contiguous(), edge_index[1].contiguous()
+    
+    NODE_TYPE = "node"
+    EDGE_TYPE = (NODE_TYPE, "to", NODE_TYPE)  # keep consistent with FeatureStore keys
+    LAYOUT = EdgeLayout.COO
+    gstore = InMemoryGS()
+    gstore.put_edge_index((row, col), edge_type=EDGE_TYPE, layout=LAYOUT)
 
+    # create sampler
+    r, c = gstore.get_edge_index(edge_type=EDGE_TYPE, layout=LAYOUT)
+    sampler = InMemorySampler(gstore, EDGE_TYPE, num_neighbors=[10, 5], layout=LAYOUT, undirected=True)
+    
     # set seed for reprodicability and create model
     model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=16, nbr_classes=7)
     criterion = nn.CrossEntropyLoss()
@@ -34,8 +53,8 @@ def main(config: dict):
     train_mask = graph.train_mask
     test_mask = graph.test_mask
     val_mask = graph.val_mask
-    
-    train_indices = torch.where(train_mask)[0]
+
+    gstore.set_split_masks(train_mask=train_mask, val_mask=val_mask, test_mask=test_mask)
 
     # train model
     nodeloader_args = put_nodeLoader_args_map(
@@ -43,24 +62,22 @@ def main(config: dict):
         shuffle=True,
     )
     
-    num_neighbors = [10, 5]
-    
     measurer = Measurer(config)
     
     patience = 20
 
     trainer = Trainer(
         model=model,
-        data=graph,
+        feature_store=fstore,
+        graph_store=gstore,
         measurer=measurer,
+        sampler=sampler,
         optimizer=optimizer,
         criterion=criterion,
-        train_indices=train_indices,
         patience=patience, #config.get("patience"),
         min_delta=0.001,#config.get("min_delta"),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
-        num_neighbors=num_neighbors,
     )
     trainer.train(max_epochs=config.get("max_epochs"))
     

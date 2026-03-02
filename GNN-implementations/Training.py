@@ -1,12 +1,11 @@
-from pathlib import Path
 import time
-import psutil
+from typing import Tuple, Union
 import torch
 import cProfile
 import pstats
-from torch_geometric.loader import NodeLoader
+from torch_geometric.loader import NeighborLoader, NodeLoader
 from torch_geometric.sampler import BaseSampler
-from torch_geometric.data import GraphStore, FeatureStore
+from torch_geometric.data import Data, GraphStore, FeatureStore, HeteroData
 from torch import nn
 from torch import optim
 from evaluate import evaluate
@@ -18,14 +17,15 @@ class Trainer:
     def __init__(
         self,
         model: nn.Module,
-        feature_store: FeatureStore,
-        graph_store: GraphStore,
-        sampler: BaseSampler,
+        data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]],
         patience:int,
         min_delta:float,
         measurer: Measurer,
+        num_neighbors: list[int] | None = None,
+        train_indices: torch.Tensor | None = None,
+        sampler: BaseSampler = None,
         snapshot_path: str | None = None,
-        batch_size: int = 500,
+        batch_size: int = 100,
         lr:float = 1e-2,
         optimizer: optim.Optimizer = None,
         max_train_seconds: int = 3600,
@@ -33,10 +33,65 @@ class Trainer:
         nodeloader_args: dict | None = None,
         criterion = None
     ) -> None:
+        # IF data is a tuple of (FeatureStore, GraphStore), then we need a sampler to create the train_loader.
+        # this is the case when the graph is stored in the database
+        if isinstance(data, tuple) and len(data) == 2 and isinstance(data[0], FeatureStore) and isinstance(data[1], GraphStore):
+            if sampler is None:
+                raise ValueError("Sampler cannot be None when data is a tuple of (FeatureStore, GraphStore)")
+            self.train_indices = train_indices if train_indices is not None else self._get_train_indices()
+            self.feature_store, self.graph_store = data
+            self.sampler = sampler
+            self.data = None
+            self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
+                pickle_safe=False,
+                num_workers=4,
+                prefetch_factor=2,
+                filter_per_worker=True,
+                persistent_workers=True,
+                pin_memory=False,
+                shuffle=False,
+            )
+            if self.nodeloader_args["pickle_safe"]:
+                self.train_loader = NodeLoader(
+                    data=(self.feature_store, self.graph_store),
+                    node_sampler=self.sampler,
+                    input_nodes=self.train_indices,
+                    batch_size=self.batch_size,
+                    shuffle=self.nodeloader_args["shuffle"],
+                    filter_per_worker=self.nodeloader_args["filter_per_worker"],
+                    num_workers=self.nodeloader_args["num_workers"],
+                    persistent_workers=self.nodeloader_args["persistent_workers"],
+                    prefetch_factor=self.nodeloader_args["prefetch_factor"],
+                    pin_memory=self.nodeloader_args["pin_memory"],
+                )
+            else:
+                self.train_loader = NodeLoader(
+                    data=(self.feature_store, self.graph_store),
+                    node_sampler=self.sampler,
+                    input_nodes=self.train_indices,
+                    batch_size=self.batch_size,
+                    shuffle=self.nodeloader_args["shuffle"],
+                    pin_memory=self.nodeloader_args["pin_memory"],
+                )
+        # If data is not a tuple, we assume it's already a Data or HeteroData object ready for training, and we don't use a sampler.
+        # This is the case when the graph is stored in RAM
+        else:
+            if train_indices is None or num_neighbors is None:
+                raise ValueError("Train indices and num_neighbors cannot be None when data is a Data or HeteroData object")
+            self.train_indices = train_indices 
+            self.data = data
+            self.feature_store = None
+            self.graph_store = None
+            self.sampler = None
+            self.train_loader = NeighborLoader(
+                data,
+                # Sample 30 neighbors for each node for 2 iterations
+                num_neighbors=num_neighbors,
+                # Use a batch size of 128 for sampling training nodes
+                batch_size=batch_size,
+                input_nodes=data.train_mask,
+            )
         self.model = model
-        self.feature_store = feature_store
-        self.graph_store = graph_store
-        self.sampler = sampler
         self.optimizer = optimizer if optimizer is not None else optim.Adam(
             model.parameters(), lr=lr, weight_decay=5e-4
         )
@@ -46,38 +101,6 @@ class Trainer:
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
         self.device = torch.device(device)
-        self.train_indices = self._get_train_indices()
-        self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
-            pickle_safe=False,
-            num_workers=4,
-            prefetch_factor=2,
-            filter_per_worker=True,
-            persistent_workers=True,
-            pin_memory=False,
-            shuffle=False,
-        )
-        if self.nodeloader_args["pickle_safe"]:
-            self.train_loader = NodeLoader(
-                data=(self.feature_store, self.graph_store),
-                node_sampler=self.sampler,
-                input_nodes=self.train_indices,
-                batch_size=self.batch_size,
-                shuffle=self.nodeloader_args["shuffle"],
-                filter_per_worker=self.nodeloader_args["filter_per_worker"],
-                num_workers=self.nodeloader_args["num_workers"],
-                persistent_workers=self.nodeloader_args["persistent_workers"],
-                prefetch_factor=self.nodeloader_args["prefetch_factor"],
-                pin_memory=self.nodeloader_args["pin_memory"],
-            )
-        else:
-            self.train_loader = NodeLoader(
-                data=(self.feature_store, self.graph_store),
-                node_sampler=self.sampler,
-                input_nodes=self.train_indices,
-                batch_size=self.batch_size,
-                shuffle=self.nodeloader_args["shuffle"],
-                pin_memory=self.nodeloader_args["pin_memory"],
-            )
         self.model.to(self.device)
         self.nbr_training_datapoints = len(self.train_indices)
         self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
@@ -117,9 +140,7 @@ class Trainer:
         self.optimizer.step()
 
     def _run_epoch(self, epoch: int) -> None:        
-        
-        # create new nodeloader every epoch
-        
+                
         it = iter(self.train_loader)
         nbr_batches = len(self.train_loader)
 
@@ -136,7 +157,6 @@ class Trainer:
     def train(self, max_epochs: int) -> None:
         start_time = time.monotonic()
         self.model.train()
-        validation_loss_minimum = None
         run_dir = self.measurer.run_results_path
         txt_path = run_dir / "train_profile.txt"
         pr = cProfile.Profile()
