@@ -1,10 +1,11 @@
 import pyarrow.flight as flight
 import json
 import torch
+from torch.utils.dlpack import from_dlpack
 from torch_geometric.data import Data
 
 class Neo4jArrowClient:
-    def __init__(self, host="localhost", port=8491, username="neo4j", password="password"):
+    def __init__(self, host="localhost", port=8491, database_name="neo4j", username="neo4j", password="password"):
         self.location = f"grpc+tcp://{host}:{port}"
         self.client = flight.FlightClient(self.location)
         
@@ -13,6 +14,7 @@ class Neo4jArrowClient:
             (b"authorization", f"Basic {self._encode_auth(username, password)}".encode())
         ])
         self.options = options
+        self.database_name = database_name
 
     def fetch_graph_data(self, graph_name, node_properties):
         """
@@ -22,6 +24,7 @@ class Neo4jArrowClient:
             "name": "GET_COMMAND",
             "version": "v1",
             "body": {
+                "database_name": self.database_name,
                 "graph_name": graph_name,
                 "procedure_name": "gds.graph.nodeProperties.stream",
                 "configuration": {
@@ -45,18 +48,22 @@ class Neo4jArrowClient:
 
 # --- Integration with GPU via DLPack ---
 
-def to_pytorch_gpu(arrow_table):
+def to_pytorch_gpu(arrow_table, col_name: str = "features"):
     # Arrow -> DLPack -> PyTorch
     # Note: Arrow lives in CPU memory. DLPack avoids Py-copying, 
     # but .to('cuda') is still needed for the actual transfer.
-    
-    # Extract the feature columns
-    feature_columns = [c for c in arrow_table.column_names if c != 'nodeId']
-    
-    # Convert Arrow to a PyTorch tensor via DLPack (Zero-copy on CPU)
-    # Most production setups use .to_pandas() then torch.from_numpy() 
-    # but for "ultra-scale," look at pyarrow.cuda for direct GPU buffers.
-    features_np = arrow_table.select(feature_columns).to_pandas().values
-    features_torch = torch.from_numpy(features_np).to('cuda')
-    
-    return features_torch
+    col = arrow_table.column(col_name)
+    if len(col.chunks) > 1:
+        col = col.combine_chunks()
+    else:
+        col = col.chunk(0)
+
+    flat_values = col.values
+
+    num_nodes = len(col)
+    dim = len(flat_values) // num_nodes
+
+    cpu_tensor_64 = cpu_tensor_flat.reshape(num_nodes, dim)
+    cpu_tensor_32 = cpu_tensor_64.to(torch.float32)
+
+    return cpu_tensor_32.to("cuda")
