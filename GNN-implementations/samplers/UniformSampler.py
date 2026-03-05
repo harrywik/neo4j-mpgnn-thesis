@@ -8,11 +8,12 @@ class UniformSampler(BaseSampler):
     
     _instance_counter = 0
     
-    def __init__(self, graph_store: GraphStore, num_neighbors: List[int], ):
+    def __init__(self, graph_store: GraphStore, num_neighbors: List[int]):
         self.instance_id = UniformSampler._instance_counter
         UniformSampler._instance_counter += 1
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors  # e.g. [10, 5] for 2 hops
+        self.nodeid_property = graph_store.nodeid_property
         self.query = self._build_fanout_query(len(num_neighbors))
 
     def _build_fanout_query(self, hops: int) -> str:
@@ -20,8 +21,8 @@ class UniformSampler(BaseSampler):
         rel_pattern = "--"  # change to "-[:REL]->" if you want directed
 
         q = []
-        q.append("""
-        MATCH (s) WHERE s.id IN $seed_ids
+        q.append(f"""
+        MATCH (s) WHERE s.{self.nodeid_property} IN $seed_ids
         WITH s, [s] AS frontier, [s] AS visited, [] AS edges
         """)
 
@@ -37,7 +38,7 @@ class UniformSampler(BaseSampler):
               // aggregate first, then concatenate (avoids implicit grouping error)
               WITH visited, edges,
                    collect(picked) AS dsts_list,
-                   collect([d IN picked | {{src_id: src.id, dst_id: d.id}}]) AS es_list
+                   collect([d IN picked | {{src_id: src.{self.nodeid_property}, dst_id: d.{self.nodeid_property}}}]) AS es_list
 
               WITH visited, edges,
                    apoc.coll.toSet(apoc.coll.flatten(dsts_list)) AS next_frontier,

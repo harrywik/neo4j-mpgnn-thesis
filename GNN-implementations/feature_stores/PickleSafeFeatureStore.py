@@ -16,7 +16,12 @@ class PickleSafeFeatureStore(FeatureStore):
         user: str,
         pwd: str,
         label_map: Optional[Dict[str, int]] = None,
-        cache_size: int = 3000
+        cache_size: int = 3000,
+        dataset_name: str = "neo4j",
+        feature_property: str = "features",
+        target_property: str = "category",
+        nodeid_property: str = "nodeId",
+        feature_property_type: str = "f64[]",
     ) -> None:
         super().__init__()
         self.uri = uri
@@ -29,6 +34,11 @@ class PickleSafeFeatureStore(FeatureStore):
         self.cache_size = cache_size
         # IMPORTANT: must be deterministic across workers
         self._label_map: Dict[str, int] = label_map or {}
+        self.dataset_name = dataset_name
+        self.feature_property = feature_property
+        self.target_property = target_property
+        self.nodeid_property = nodeid_property
+        self.feature_property_type = feature_property_type
         
 
     def _get_driver(self) -> Driver:
@@ -61,12 +71,12 @@ class PickleSafeFeatureStore(FeatureStore):
             # `subject` is hardcoded as the categorical target for now
             query = f"""
             MATCH (n)
-            WHERE n.id IN $node_ids
-            RETURN n.id AS id, n.subject AS value
-            ORDER BY n.id ASC
+            WHERE n.{self.nodeid_property} IN $node_ids
+            RETURN n.{self.nodeid_property} AS id, n.{self.target_property} AS value
+            ORDER BY n.{self.nodeid_property} ASC
             """
             data_map = {}
-            with self._get_driver().session() as session:
+            with self._get_driver().session(database=self.dataset_name) as session:
                 result = session.run(query, node_ids=node_ids)
                 for record in result:
                     label_str = record["value"]
@@ -94,18 +104,23 @@ class PickleSafeFeatureStore(FeatureStore):
         if missing_indices:
             query = f"""
             MATCH (n)
-            WHERE n.id IN $node_ids
-            RETURN n.id AS id, n.embedding AS value
-            ORDER BY n.id ASC
+            WHERE n.{self.nodeid_property} IN $node_ids
+            RETURN n.{self.nodeid_property} AS id, n.{self.feature_property} AS value
+            ORDER BY n.{self.nodeid_property} ASC
             """
 
-            with self._get_driver().session() as session:
+            with self._get_driver().session(database=self.dataset_name) as session:
                 result = session.run(query, node_ids=missing_indices)
                 for record in result:
                     raw_blob = record["value"]
                     
                     # Asumption embedding is saved as float32 in DB
-                    feat = np.frombuffer(raw_blob, dtype=np.float32).copy()
+                    if self.feature_property_type == "byte[]":
+                        feat = np.frombuffer(raw_blob, dtype=np.float32).copy()
+                    elif self.feature_property_type == "f64[]":
+                        feat = np.asarray(raw_blob, dtype=np.float32)
+                    else:
+                        raise ValueError("feat wasn't assigned a value")
                     data_map[record["id"]] = feat
                     # Store in map and update LRU cache
                     self.cache[record["id"]] = feat

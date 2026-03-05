@@ -8,17 +8,30 @@ import atexit
 
 class PickleSafeGS(GraphStore):
     """Pickle safe implementation of GraphStore that connects to Neo4j on demand and closes connection on exit. Does not cache any graph data, but can be used together with a sampler that does."""
-    def __init__(self, uri:str, user:str, pwd:str):
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        pwd: str,
+        dataset_name: str = "neo4j",
+        split_property_name: str = "split",
+        split_property_type: str = "int",
+        nodeid_property: str = "nodeId",
+    ):
         super().__init__()
         self._driver = None
         self.uri = uri
         self.user = user
         self.pwd = pwd
+        self.dataset_name = dataset_name
+        self.split_property_name = split_property_name
+        self.split_property_type = split_property_type
+        self.nodeid_property = nodeid_property
         
-    def _get_driver(self) -> Driver:
-        if self._driver is None:
-            self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
-        return self._driver
+    # def _get_driver(self) -> Driver:
+    #     if self._driver is None:
+    #         self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
+    #     return self._driver
     def __getstate__(self):
         state = self.__dict__.copy()
         state["_driver"] = None
@@ -45,50 +58,33 @@ class PickleSafeGS(GraphStore):
     def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
         pass
 
-    def train_val_test_split_db(self, ratios: list[float]) -> None:
-        """
-        ratios: [train_frac, val_frac, test_frac] with sum eq. 1.0
-        """
-        
-        assert sum(ratios) == 1.0, "ratios must sum to 1.0"
-        query = """
-        MATCH (n)
-        WITH n, rand() AS r
-        SET n.split = 
-            CASE 
-                WHEN r <= $train_tresh THEN 'train'
-                WHEN r <= $val_tresh THEN 'val'
-                ELSE 'test'
-            END
-        """
-
-        t, v = ratios[:2]
-        v += t
-
-        with self._get_driver().session() as session:
-            session.run(query, train_tresh=t, val_tresh=v)
-
     def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
-        shuffle_clause = "ORDER BY rand()" if shuffle else "ORDER BY n.id ASC"
+        shuffle_clause = "ORDER BY rand()" if shuffle else f"ORDER BY n.{self.nodeid_property} ASC"
 
         assert not shuffle or (shuffle and offset is None), "Offset together with shuffle does not make sense"
 
-        query = """
-        MATCH (n { split: $split })
-        """ + shuffle_clause + """
+        split_map = {"train": 0, "val": 1, "test": 2}
+        if self.split_property_type == "int":
+            split = split_map[split]
+        elif self.split_property_type != "str":
+            raise ValueError(f"Unsupported split property type: {self.split_property_type}")
+
+        query = f"""
+        MATCH (n {{ {self.split_property_name}: $split }})
+        """ + shuffle_clause + f"""
         LIMIT toInteger(coalesce($n, 9223372036854775807))
         SKIP toInteger(coalesce($offset, 0))
-        RETURN n.id AS id
+        RETURN n.{self.nodeid_property} AS id
         """
 
-        with self._get_driver().session() as session:
+        with self._get_driver().session(database=self.dataset_name) as session:
             result = session.run(query, n=n, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
     def sample_from_nodes(self, kwargs, query:str):
-        with self._get_driver().session() as session:
+        with self._get_driver().session(database=self.dataset_name) as session:
             result = session.run(query, **kwargs)
             
             # Extract edges and format for PyG

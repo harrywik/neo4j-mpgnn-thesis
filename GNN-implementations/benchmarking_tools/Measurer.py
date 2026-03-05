@@ -31,6 +31,9 @@ class Measurer:
 
         self.measurements_path = run_results_path / "measurements.csv"
         self.run_results_path = run_results_path
+        self._csvfile = open(self.measurements_path, "a", newline="\n")
+        self._writer = csv.writer(self._csvfile)
+
         rows = [
             ["Event", "Time", "Value"],
             ["program_start", time.monotonic(), 1],
@@ -68,14 +71,17 @@ class Measurer:
         return summary
     
     def log_event(self, event_name: str, value: int | float = 1):
-        with open(self.measurements_path, "a", newline="\n") as csvfile:
-            writer = csv.writer(csvfile)
-            writer.writerow([event_name, time.monotonic(), value])
-    
+        self._writer.writerow([event_name, time.monotonic(), value])
+
     def __del__(self):
         if not hasattr(self, "measurements_path"):
             return
-        self.log_event("program_end", 1)
+        try:
+            self.log_event("program_end", 1)
+            self._csvfile.flush()
+            self._csvfile.close()
+        except Exception:
+            pass
         try:
             self.summarize()
         except Exception as e:

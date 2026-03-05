@@ -10,10 +10,25 @@ import numpy as np
 
 class PageRankCacheFeatureStore(FeatureStore):
     """Neo4j feature store with a two-tier caching system: a static "hot" cache for PageRank-important nodes and a dynamic LRU cache for recently accessed nodes."""
-    def __init__(self, driver: Driver, cache_size: int = 3000, hot_cache_size: int = None) -> None:
+    def __init__(
+        self,
+        driver: Driver,
+        cache_size: int = 3000,
+        hot_cache_size: int = None,
+        dataset_name: str = "neo4j",
+        feature_property: str = "features",
+        target_property: str = "category",
+        nodeid_property: str = "nodeId",
+        feature_property_type: str = "f64[]",
+    ) -> None:
         super().__init__()
         self.driver = driver
         self._labels = {}
+        self.dataset_name = dataset_name
+        self.feature_property = feature_property
+        self.target_property = target_property
+        self.nodeid_property = nodeid_property
+        self.feature_property_type = feature_property_type
         
         # 1. Static "Hot" Cache for PageRank-important nodes
         self.hot_cache = {}
@@ -32,8 +47,6 @@ class PageRankCacheFeatureStore(FeatureStore):
         self,
         graph_name: str,
         k: int = 500,
-        node_label: str = "Paper",
-        rel_type: str = "CITES",
         undirected: bool = True,
         drop_graph: bool = True,
     ):
@@ -48,8 +61,13 @@ class PageRankCacheFeatureStore(FeatureStore):
         project_query = f"""
         CALL gds.graph.project(
             $name,
-            $label,
-            {{ {rel_type}: {{ type: $rel_type, orientation: $orientation }} }}
+            '*',
+            {{
+              ALL: {{
+                type: '*',
+                orientation: $orientation
+              }}
+            }}
         )
         YIELD graphName
         """
@@ -58,20 +76,18 @@ class PageRankCacheFeatureStore(FeatureStore):
         YIELD nodeId, score
         WITH gds.util.asNode(nodeId) AS n, score
         ORDER BY score DESC LIMIT $limit
-        RETURN n.id AS id, n.embedding AS embedding, n.subject AS label
+        RETURN n.{self.nodeid_property} AS id, n.{self.feature_property} AS embedding, n.{self.target_property} AS label
         """
         drop_query = "CALL gds.graph.drop($name)"
 
         projected_here = False
         try:
-            with self.driver.session() as session:
+            with self.driver.session(database=self.dataset_name) as session:
                 exists = session.run(exists_query, name=graph_name).single()["exists"]
                 if not exists:
                     session.run(
                         project_query,
                         name=graph_name,
-                        label=node_label,
-                        rel_type=rel_type,
                         orientation=orientation,
                     )
                     projected_here = True
@@ -80,7 +96,12 @@ class PageRankCacheFeatureStore(FeatureStore):
                 for record in result:
                     nid = record["id"]
                     # Process Embedding
-                    feat = np.frombuffer(record["embedding"], dtype=np.float32).copy()
+                    if self.feature_property_type == "byte[]":
+                        feat = np.frombuffer(record["embedding"], dtype=np.float32).copy()
+                    elif self.feature_property_type == "f64[]":
+                        feat = np.asarray(record["embedding"], dtype=np.float32)
+                    else:
+                        raise ValueError("feat wasn't assigned a value")
                     self.hot_cache[nid] = feat
                     
                     # Process Label
@@ -126,10 +147,10 @@ class PageRankCacheFeatureStore(FeatureStore):
 
         if missing_indices:
             # DB Fetch logic (optimized for labels vs embeddings)
-            val_col = "subject" if is_label else "embedding"
-            query = f"MATCH (n) WHERE n.id IN $node_ids RETURN n.id AS id, n.{val_col} AS value"
+            val_col = self.target_property if is_label else self.feature_property
+            query = f"MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids RETURN n.{self.nodeid_property} AS id, n.{val_col} AS value"
 
-            with self.driver.session() as session:
+            with self.driver.session(database=self.dataset_name) as session:
                 result = session.run(query, node_ids=missing_indices)
                 for record in result:
                     nid, val = record["id"], record["value"]
@@ -138,7 +159,12 @@ class PageRankCacheFeatureStore(FeatureStore):
                         if val not in self._labels: self._labels[val] = len(self._labels)
                         processed_val = self._labels[val]
                     else:
-                        processed_val = np.frombuffer(val, dtype=np.float32).copy()
+                        if self.feature_property_type == "byte[]":
+                            processed_val = np.frombuffer(val, dtype=np.float32).copy()
+                        elif self.feature_property_type == "f64[]":
+                            processed_val = np.asarray(val, dtype=np.float32)
+                        else:
+                            raise ValueError("feat wasn't assigned a value")
 
                     data_map[nid] = processed_val
                     
