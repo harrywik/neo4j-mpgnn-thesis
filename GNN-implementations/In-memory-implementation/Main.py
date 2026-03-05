@@ -1,3 +1,4 @@
+import os
 import sys
 import json
 from pathlib import Path
@@ -16,26 +17,36 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from evaluate import evaluate
 from models import GCN
 from feature_stores import InMemoryFeatureStore
-from graph_stores import InMemoryGS
+from graph_stores import InMemoryGS, BaseLineGS
 from samplers import InMemorySampler
 from Training import Trainer, put_nodeLoader_args_map
 from benchmarking_tools import Measurer
+from Neo4jConnection import Neo4jConnection
+
 
 def main(config: dict):
     # Get dataset
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
     graph = dataset[0]
+    # uri = os.environ["URI"]
+    # user = os.environ["USERNAME"]
+    # password = os.environ["PASSWORD"]
+    uri="bolt://localhost:7687"
+    user="neo4j"
+    password="thesis-db-0-pw"
+    dataset_name = 'cora'
+    driver = Neo4jConnection(uri, user, password).get_driver()
+    graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
+    train_indices = graph_store.get_split(
+            split="train",
+            shuffle=True,
+        ).to(torch.long)
 
     # set seed for reprodicability and create model
     model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=16, nbr_classes=7)
     criterion = nn.CrossEntropyLoss()
     lr = config.get("lr")
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
-    train_mask = graph.train_mask
-    test_mask = graph.test_mask
-    val_mask = graph.val_mask
-    
-    train_indices = torch.where(train_mask)[0]
 
     # train model
     nodeloader_args = put_nodeLoader_args_map(
@@ -56,7 +67,7 @@ def main(config: dict):
         optimizer=optimizer,
         criterion=criterion,
         train_indices=train_indices,
-        patience=patience, #config.get("patience"),
+        patience=config.get("patience"),
         min_delta=0.001,#config.get("min_delta"),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,

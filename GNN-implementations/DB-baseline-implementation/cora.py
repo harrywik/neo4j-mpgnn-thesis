@@ -3,6 +3,8 @@ import sys
 import json
 from pathlib import Path
 from dotenv import load_dotenv
+from torch_geometric.datasets import Planetoid
+import torch
 
 load_dotenv()
 # Allow running this file directly by adding GNN-implementations to sys.path
@@ -26,14 +28,20 @@ def main(config: dict):
     measurer = Measurer(config)
     
     dataset_name = "cora"
+    database_name = "neo4j"
+    
+    dataset = Planetoid(root='data/Planetoid', name='Cora')      
+    graph = dataset[0]
+    train_mask = graph.train_mask
+    train_indices = torch.where(train_mask)[0]
     
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = NoCacheFeatureStore(driver, measurer=measurer, dataset_name=dataset_name)
-    graph_store = BaseLineGS(driver, dataset_name=dataset_name) 
+    feature_store = NoCacheFeatureStore(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
+    graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
     num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
 
-    model_args = {"in_dim": 128, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 40}
+    model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 7}
     model = GCN(**model_args)
     lr = config.get("lr", 1e-2)
 
@@ -56,6 +64,7 @@ def main(config: dict):
         model=model,
         data=(feature_store, graph_store),
         sampler=sampler,
+        train_indices=train_indices,
         min_delta=config.get('min_delta'),
         patience=config.get('patience'),
         batch_size=config.get("batch_size"),
