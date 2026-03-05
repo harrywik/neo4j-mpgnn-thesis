@@ -16,7 +16,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from benchmarking_tools import Measurer
 
 class NoCacheFeatureStore(FeatureStore):
-    def __init__(self, driver: Driver, measurer:Measurer = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", feature_property_type:str = "f64[]") -> None:
+    def __init__(self, driver: Driver, measurer:Measurer = None, database_name = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", feature_property_type:str = "f64[]") -> None:
         super().__init__()
         self.driver = driver
         self._feat: Dict[Tuple[Optional[NodeType], str], torch.Tensor] = {}
@@ -29,6 +29,7 @@ class NoCacheFeatureStore(FeatureStore):
         self.split_property_type = split_property_type
         self.nodeid_property = nodeid_property
         self.feature_property_type = feature_property_type
+        self.database_name = database_name if database_name else dataset_name
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
@@ -40,13 +41,14 @@ class NoCacheFeatureStore(FeatureStore):
         MATCH (n)
         WHERE n.{self.nodeid_property} IN $node_ids
         RETURN n.{self.nodeid_property} AS id, n.{prop} AS value
+        ORDER BY n.{self.nodeid_property} ASC
         """
 
         if self.measurer:
             self.measurer.log_event("cache_hit", 0)
             self.measurer.log_event("cache_miss", len(node_ids))
             self.measurer.log_event("remote_feature_fetch", 1)
-        with self.driver.session(database=self.dataset_name) as session:
+        with self.driver.session(database=self.database_name) as session:
             result = session.run(query, node_ids=node_ids)
             data_map = {}
             if prop == self.feature_property:
@@ -61,7 +63,13 @@ class NoCacheFeatureStore(FeatureStore):
                     else:
                         raise ValueError("feat wasn't assigned a value")
             else:
-                data_map = {r["id"]: r["value"] for r in result}
+                for record in result:
+                    label_value = record["value"]
+                    if isinstance(label_value, str):
+                        if label_value not in self._labels:
+                            self._labels[label_value] = len(self._labels)
+                        label_value = self._labels[label_value]
+                    data_map[record["id"]] = label_value
         if self.measurer:
             self.measurer.log_event("remote_feature_recieved", 1)     
         # Reconstruct in correct order

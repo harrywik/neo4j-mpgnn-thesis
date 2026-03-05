@@ -6,7 +6,7 @@ import json
 from pathlib import Path
 
 class BaseLineGS(GraphStore):
-    def __init__(self, driver: Driver, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId"):
+    def __init__(self, driver: Driver, database_name:str = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId"):
         super().__init__()
         self.driver = driver
         self.feature_property = feature_property
@@ -15,6 +15,7 @@ class BaseLineGS(GraphStore):
         self.split_property_type = split_property_type
         self.nodeid_property = nodeid_property
         self.dataset_name = dataset_name
+        self.database_name = database_name if database_name else dataset_name
 
 
     def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
@@ -48,14 +49,14 @@ class BaseLineGS(GraphStore):
         RETURN n.{self.nodeid_property} AS id
         """
                 
-        with self.driver.session(database=self.dataset_name) as session:
+        with self.driver.session(database=self.database_name) as session:
             result = session.run(query, n=n, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
     def sample_from_nodes(self, kwargs, query:str):
-        with self.driver.session(database=self.dataset_name) as session:
+        with self.driver.session(database=self.database_name) as session:
             result = session.run(query, **kwargs)
             
             # Extract edges and format for PyG
