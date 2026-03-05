@@ -16,52 +16,57 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from benchmarking_tools import Measurer
 
 class NoCacheFeatureStore(FeatureStore):
-    def __init__(self, driver: Driver, measurer:Measurer = None) -> None:
+    def __init__(self, driver: Driver, measurer:Measurer = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", feature_property_type:str = "f64[]") -> None:
         super().__init__()
         self.driver = driver
         self._feat: Dict[Tuple[Optional[NodeType], str], torch.Tensor] = {}
         self._labels = {}
         self.measurer = measurer
+        self.dataset_name = dataset_name
+        self.feature_property = feature_property
+        self.target_property = target_property
+        self.split_property_name = split_property_name
+        self.split_property_type = split_property_type
+        self.nodeid_property = nodeid_property
+        self.feature_property_type = feature_property_type
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
 
-        prop = "subject" if attr.attr_name == "y" else "embedding"
+        prop = self.target_property if attr.attr_name == "y" else self.feature_property
 
         # `subject` is hardcoded as the categorical target for now
         query = f"""
         MATCH (n)
-        WHERE n.id IN $node_ids
-        RETURN n.id AS id, n.{prop} AS value
-        ORDER BY n.id ASC
+        WHERE n.{self.nodeid_property} IN $node_ids
+        RETURN n.{self.nodeid_property} AS id, n.{prop} AS value
         """
 
         if self.measurer:
             self.measurer.log_event("cache_hit", 0)
             self.measurer.log_event("cache_miss", len(node_ids))
             self.measurer.log_event("remote_feature_fetch", 1)
-        with self.driver.session() as session:
+        with self.driver.session(database=self.dataset_name) as session:
             result = session.run(query, node_ids=node_ids)
             data_map = {}
-            if prop == "embedding":
+            if prop == self.feature_property:
                 for record in result:
                     raw_blob = record["value"]
                     
                     # Asumption embedding is saved as float32 in DB
-                    feat = np.frombuffer(raw_blob, dtype=np.float32).copy()
-                    data_map[record["id"]] = feat
+                    if self.feature_property_type == "byte[]":
+                        data_map[record["id"]] = np.frombuffer(raw_blob, dtype=np.float32).copy()
+                    elif self.feature_property_type == "f64[]":
+                        data_map[record["id"]] = np.asarray(raw_blob, dtype=np.float32)
+                    else:
+                        raise ValueError("feat wasn't assigned a value")
             else:
-                for record in result:
-                    label_str = record["value"]
-                    if label_str not in self._labels:
-                        self._labels[label_str] = len(self._labels)
-                    num_label = self._labels[label_str]
-                    data_map[record["id"]] = num_label
+                data_map = {r["id"]: r["value"] for r in result}
         if self.measurer:
             self.measurer.log_event("remote_feature_recieved", 1)     
         # Reconstruct in correct order
         ordered_list = [data_map[i] for i in node_ids]
-        if prop == "embedding":
+        if prop == self.feature_property:
             # np.stack is faster than torch.stack for numpy inputs
             final_array = np.stack(ordered_list)
             

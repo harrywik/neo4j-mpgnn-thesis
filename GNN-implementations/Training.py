@@ -31,7 +31,8 @@ class Trainer:
         max_train_seconds: int = 3600,
         device: str = "cpu",
         nodeloader_args: dict | None = None,
-        criterion = None
+        criterion = None,
+        cpu_monitor_interval: float | None = 1,
     ) -> None:
         self.batch_size = batch_size
         # IF data is a tuple of (FeatureStore, GraphStore), then we need a sampler to create the train_loader.
@@ -62,6 +63,7 @@ class Trainer:
                     filter_per_worker=self.nodeloader_args["filter_per_worker"],
                     num_workers=self.nodeloader_args["num_workers"],
                     persistent_workers=self.nodeloader_args["persistent_workers"],
+                    multiprocessing_context="spawn",
                     prefetch_factor=self.nodeloader_args["prefetch_factor"],
                     pin_memory=self.nodeloader_args["pin_memory"],
                 )
@@ -108,6 +110,7 @@ class Trainer:
         self.early_stopping = EarlyStopping(min_delta=min_delta, patience=patience)
         self.validation_loss_minimum = None
         self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
+        self.cpu_monitor_interval = cpu_monitor_interval
         
 
     def _save_snapshot(self, epoch: int) -> None:
@@ -163,7 +166,7 @@ class Trainer:
         pr = cProfile.Profile()
         pr.enable()
         try:
-            start_cpu_monitor(self.measurer)
+            start_cpu_monitor(self.measurer, interval=self.cpu_monitor_interval)
             self._start_training(max_epochs, start_time)
         finally:
             pr.disable()

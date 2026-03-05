@@ -1,0 +1,19 @@
+{
+    "arxiv": {
+    "feature_property": "features",
+    "target_property": "category",
+    "split_property": {
+        "name": "split",
+        "type": "int"
+    },
+    "nodeid_property": "nodeId"},
+
+    "cora": {
+    "feature_property": "feature",
+    "target_property": "category",
+    "split_property": {
+        "name": "split",
+        "type": "str"
+    },
+    "nodeid_property": "nodeId"}
+}

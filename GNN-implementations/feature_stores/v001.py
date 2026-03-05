@@ -87,7 +87,7 @@ class Neo4jFeatureStore(FeatureStore):
 
             if missing_indices:
                 missing_indices.sort()
-                with self.driver.session() as session:
+                with self.driver.session(database=self.dataset_name) as session:
                     for chunk in self._chunked(missing_indices, self.db_batch_size):
                         result = session.run(query, node_ids=chunk)
                         for record in result:
@@ -131,7 +131,7 @@ class Neo4jFeatureStore(FeatureStore):
             """
 
             missing_indices.sort()
-            with self.driver.session() as session:
+            with self.driver.session(database=self.dataset_name) as session:
                 for chunk in self._chunked(missing_indices, self.db_batch_size):
                     result = session.run(query, node_ids=chunk)
                     for record in result:

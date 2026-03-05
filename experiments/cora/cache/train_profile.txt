@@ -1,0 +1,158 @@
+         21230345 function calls (20919744 primitive calls) in 8.980 seconds
+
+   Ordered by: cumulative time
+   List reduced from 644 to 150 due to restriction <150>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   170020    0.092    0.000   10.144    0.000 result.py:392(__iter__)
+        1    0.001    0.001    7.974    7.974 threading.py:1018(_bootstrap)
+      120    0.001    0.000    7.325    0.061 dataloader.py:736(__next__)
+      120    0.000    0.000    7.320    0.061 dataloader.py:799(_next_data)
+      114    0.001    0.000    7.318    0.064 fetch.py:49(fetch)
+      114    0.001    0.000    7.269    0.064 node_loader.py:143(collate_fn)
+   171030    0.038    0.000    7.105    0.000 _common.py:191(inner)
+   170304    0.086    0.000    7.000    0.000 _bolt.py:849(fetch_message)
+      114    0.005    0.000    6.737    0.059 UniformSampler.py:63(sample_from_nodes)
+      114    0.050    0.000    6.642    0.058 BaseLineGS.py:56(sample_from_nodes)
+   170304    0.107    0.000    6.041    0.000 _common.py:76(pop)
+ 1106/306    0.001    0.000    5.670    0.019 {built-in method builtins.next}
+   170304    0.124    0.000    5.535    0.000 _common.py:47(_buffer_one_chunk)
+        6    0.009    0.002    5.401    0.900 Training.py:97(_run_epoch)
+   340608    0.196    0.000    3.629    0.000 _common.py:334(receive_into_buffer)
+   340608    0.097    0.000    3.358    0.000 _bolt_socket.py:460(recv_into)
+   340608    0.118    0.000    3.185    0.000 _bolt_socket.py:389(_wait_for_read)
+609780/304890    0.099    0.000    2.533    0.000 _psosx.py:343(wrapper)
+   302827    0.046    0.000    2.444    0.000 _psosx.py:411(ppid)
+305302/304890    0.101    0.000    2.363    0.000 _common.py:367(wrapper)
+   304064    0.060    0.000    2.257    0.000 _psosx.py:370(_get_kinfo_proc)
+   304064    2.170    0.000    2.170    0.000 {built-in method psutil._psutil_osx.proc_kinfo_oneshot}
+        6    0.001    0.000    1.857    0.310 evaluate.py:9(evaluate)
+   340892    0.115    0.000    1.715    0.000 _bolt_socket.py:409(_wait_for_io)
+      412    0.045    0.000    1.632    0.004 __init__.py:251(_ppid_map)
+      412    0.024    0.000    1.598    0.004 __init__.py:951(children)
+      412    1.395    0.003    1.533    0.004 {built-in method time.sleep}
+      413    0.001    0.000    1.012    0.002 __init__.py:1025(cpu_percent)
+   340608    0.927    0.000    0.980    0.000 {method 'recv_into' of '_socket.socket' objects}
+1347/1316    0.004    0.000    0.918    0.001 Measurer.py:61(log_event)
+   170304    0.091    0.000    0.819    0.000 _bolt6.py:504(_process_message)
+      114    0.001    0.000    0.675    0.006 node_loader.py:154(filter_fn)
+   169862    0.052    0.000    0.660    0.000 _common.py:241(on_records)
+171378/170778    0.046    0.000    0.597    0.000 util.py:102(callback)
+   169862    0.054    0.000    0.537    0.000 result.py:240(on_records)
+   171630    0.096    0.000    0.522    0.000 _common.py:185(__getattr__)
+   169862    0.042    0.000    0.483    0.000 {method 'extend' of 'collections.deque' objects}
+   339724    0.108    0.000    0.441    0.000 result.py:250(<genexpr>)
+      114    0.001    0.000    0.428    0.004 utils.py:209(filter_custom_store)
+      114    0.000    0.000    0.423    0.004 feature_store.py:344(multi_get_tensor)
+      114    0.002    0.000    0.413    0.004 feature_store.py:337(_multi_get_tensor)
+      228    0.036    0.000    0.413    0.002 PageRankCacheFeatureStore.py:102(_get_tensor)
+   336388    0.118    0.000    0.394    0.000 _data.py:124(__getitem__)
+   171030    0.043    0.000    0.390    0.000 inspect.py:427(iscoroutinefunction)
+       96    0.003    0.000    0.337    0.004 Training.py:85(_run_batch)
+   169862    0.156    0.000    0.291    0.000 _data.py:59(__new__)
+   170304    0.048    0.000    0.218    0.000 __init__.py:456(unpack_structure_header)
+   171030    0.096    0.000    0.197    0.000 inspect.py:391(_has_code_flag)
+      158    0.001    0.000    0.181    0.001 session.py:254(run)
+ 1026/228    0.001    0.000    0.176    0.001 module.py:1772(_wrapped_call_impl)
+ 1026/228    0.006    0.000    0.176    0.001 module.py:1780(_call_impl)
+      158    0.001    0.000    0.173    0.001 result.py:180(_run)
+      114    0.001    0.000    0.166    0.001 GCN.py:11(forward)
+   336388    0.095    0.000    0.158    0.000 _data.py:158(index)
+      158    0.000    0.000    0.155    0.001 result.py:434(_attach)
+   171030    0.070    0.000    0.150    0.000 inspect.py:412(_has_coroutine_mark)
+      228    0.008    0.000    0.136    0.001 gcn_conv.py:227(forward)
+   340892    0.128    0.000    0.134    0.000 {method 'settimeout' of '_socket.socket' objects}
+2730862/2730730    0.132    0.000    0.133    0.000 {built-in method builtins.isinstance}
+        6    0.001    0.000    0.129    0.021 BaseLineGS.py:37(get_split)
+   170304    0.051    0.000    0.126    0.000 __init__.py:463(_unpack_structure_header)
+       96    0.001    0.000    0.107    0.001 optimizer.py:505(wrapper)
+       96    0.000    0.000    0.104    0.001 _tensor.py:575(backward)
+       96    0.001    0.000    0.104    0.001 __init__.py:252(backward)
+   336388    0.084    0.000    0.100    0.000 _data.py:74(_super_getitem_single)
+      114    0.096    0.001    0.099    0.001 shape_base.py:380(stack)
+   684120    0.068    0.000    0.098    0.000 inspect.py:306(ismethod)
+1347/1322    0.064    0.000    0.096    0.000 {built-in method _io.open}
+      228    0.004    0.000    0.089    0.000 torch_geometric.nn.conv.gcn_conv_GCNConv_propagate_73hs6zmg.py:116(propagate)
+       96    0.001    0.000    0.081    0.001 optimizer.py:60(_use_grad)
+       96    0.000    0.000    0.080    0.001 graph.py:856(_engine_run_backward)
+       96    0.000    0.000    0.080    0.001 adam.py:214(step)
+       96    0.000    0.000    0.077    0.001 optimizer.py:132(maybe_fallback)
+   508304    0.057    0.000    0.070    0.000 _conf.py:33(iter_items)
+       96    0.001    0.000    0.070    0.001 adam.py:902(adam)
+1298472/1298454    0.066    0.000    0.066    0.000 {built-in method builtins.len}
+   170304    0.026    0.000    0.066    0.000 __init__.py:289(unpack)
+      412    0.000    0.000    0.065    0.000 __init__.py:1482(pids)
+       96    0.063    0.001    0.063    0.001 {method 'run_backward' of 'torch._C._EngineBase' objects}
+   982255    0.062    0.000    0.062    0.000 {method 'append' of 'list' objects}
+   170304    0.027    0.000    0.059    0.000 __init__.py:281(read)
+      412    0.001    0.000    0.056    0.000 _psosx.py:319(pids)
+      412    0.055    0.000    0.055    0.000 {built-in method psutil._psutil_osx.pids}
+   342060    0.033    0.000    0.048    0.000 functools.py:424(_unwrap_partial)
+1347/1345    0.019    0.000    0.044    0.000 {method '__exit__' of '_io._IOBase' objects}
+   170304    0.027    0.000    0.043    0.000 __init__.py:284(read_u8)
+   340608    0.043    0.000    0.043    0.000 __init__.py:507(pop_u16)
+   339724    0.030    0.000    0.042    0.000 result.py:244(<genexpr>)
+   172180    0.027    0.000    0.041    0.000 __init__.py:1517(debug)
+   681784    0.040    0.000    0.040    0.000 _bolt_socket.py:371(_socket)
+       96    0.011    0.000    0.040    0.000 adam.py:347(_single_tensor_adam)
+   170304    0.040    0.000    0.040    0.000 {built-in method neo4j._rust.codec.packstream.v1.unpack}
+      228    0.000    0.000    0.040    0.000 message_passing.py:577(aggregate)
+      228    0.000    0.000    0.039    0.000 experimental.py:114(wrapper)
+      228    0.000    0.000    0.038    0.000 base.py:101(__call__)
+   170304    0.026    0.000    0.036    0.000 __init__.py:278(reset)
+   170304    0.032    0.000    0.032    0.000 __init__.py:492(read)
+   336388    0.032    0.000    0.032    0.000 {method 'index' of 'tuple' objects}
+      228    0.000    0.000    0.031    0.000 basic.py:19(forward)
+      228    0.000    0.000    0.031    0.000 base.py:173(reduce)
+      228    0.008    0.000    0.028    0.000 gcn_conv.py:45(gcn_norm)
+      342    0.028    0.000    0.028    0.000 {built-in method torch._C._nn.linear}
+      228    0.001    0.000    0.027    0.000 torch_geometric.nn.conv.gcn_conv_GCNConv_propagate_73hs6zmg.py:34(collect)
+   341050    0.026    0.000    0.026    0.000 {method '__exit__' of 'memoryview' objects}
+      228    0.000    0.000    0.026    0.000 linear.py:121(forward)
+   353035    0.024    0.000    0.025    0.000 {built-in method builtins.getattr}
+  228/114    0.000    0.000    0.025    0.000 _jit_internal.py:609(fn)
+   171030    0.017    0.000    0.024    0.000 inspect.py:378(isfunction)
+      456    0.002    0.000    0.021    0.000 _scatter.py:14(scatter)
+     1237    0.001    0.000    0.021    0.000 _psosx.py:474(create_time)
+      825    0.000    0.000    0.021    0.000 __init__.py:313(__init__)
+   343327    0.020    0.000    0.020    0.000 {built-in method builtins.callable}
+      825    0.002    0.000    0.020    0.000 __init__.py:316(_init)
+   170922    0.019    0.000    0.019    0.000 {built-in method __new__ of type object at 0x106432058}
+      228    0.000    0.000    0.019    0.000 message_passing.py:263(_index_select)
+      354    0.018    0.000    0.018    0.000 {built-in method torch.tensor}
+      825    0.001    0.000    0.018    0.000 __init__.py:363(_get_ident)
+      412    0.000    0.000    0.017    0.000 __init__.py:459(_raise_if_pid_reused)
+   178218    0.017    0.000    0.017    0.000 {method 'get' of 'dict' objects}
+      412    0.001    0.000    0.017    0.000 __init__.py:625(is_running)
+   170304    0.017    0.000    0.017    0.000 {method 'tobytes' of 'memoryview' objects}
+   170304    0.017    0.000    0.017    0.000 __init__.py:499(read_u8)
+   172828    0.014    0.000    0.014    0.000 {built-in method time.monotonic}
+      456    0.014    0.000    0.014    0.000 {method 'scatter_add_' of 'torch._C.TensorBase' objects}
+      228    0.007    0.000    0.014    0.000 loop.py:585(add_remaining_self_loops)
+   171030    0.014    0.000    0.014    0.000 _common.py:190(outer)
+   172180    0.013    0.000    0.013    0.000 __init__.py:1790(isEnabledFor)
+   170304    0.013    0.000    0.013    0.000 {method 'popleft' of 'collections.deque' objects}
+   303652    0.013    0.000    0.013    0.000 _psosx.py:365(__init__)
+   170959    0.012    0.000    0.012    0.000 {built-in method builtins.hasattr}
+      114    0.000    0.000    0.012    0.000 functional.py:1057(_return_inverse)
+      228    0.000    0.000    0.011    0.000 message_passing.py:269(_index_select_safe)
+      228    0.011    0.000    0.011    0.000 {method 'index_select' of 'torch._C.TensorBase' objects}
+      114    0.000    0.000    0.011    0.000 functional.py:786(_unique_impl)
+      114    0.010    0.000    0.010    0.000 {built-in method torch._unique2}
+      442    0.000    0.000    0.010    0.000 _bolt.py:802(_append)
+   170304    0.010    0.000    0.010    0.000 __init__.py:488(reset)
+     1152    0.009    0.000    0.009    0.000 {method 'mul_' of 'torch._C.TensorBase' objects}
+      442    0.001    0.000    0.009    0.000 _common.py:144(append_message)
+      412    0.009    0.000    0.009    0.000 {built-in method builtins.sorted}
+      284    0.000    0.000    0.009    0.000 result.py:239(_pull)
+      228    0.008    0.000    0.008    0.000 gcn_conv.py:270(message)
+      158    0.001    0.000    0.008    0.000 _bolt6.py:276(run)
+   124426    0.008    0.000    0.008    0.000 {method 'move_to_end' of 'collections.OrderedDict' objects}
+      312    0.001    0.000    0.007    0.000 profiler.py:806(__exit__)
+      228    0.000    0.000    0.007    0.000 feature_store.py:73(is_fully_specified)
+      284    0.001    0.000    0.007    0.000 _bolt6.py:370(pull)
+        1    0.000    0.000    0.007    0.007 Training.py:167(_start_training)
+      684    0.006    0.000    0.006    0.000 feature_store.py:68(is_set)
+      114    0.000    0.000    0.006    0.000 loss.py:1360(forward)
+
+

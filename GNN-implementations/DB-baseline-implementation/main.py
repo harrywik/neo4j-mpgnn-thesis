@@ -12,7 +12,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from models import GCN
 from Training import Trainer, put_nodeLoader_args_map
-from feature_stores import NoCacheFeatureStore
+from feature_stores import NoCacheFeatureStore, BulkFetchFeatureFS
 from graph_stores import BaseLineGS
 from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
@@ -25,15 +25,15 @@ def main(config: dict):
     
     measurer = Measurer(config)
     
+    dataset_name = "arxiv"
+    
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = NoCacheFeatureStore(driver, measurer=measurer)
-    graph_store = BaseLineGS(driver) 
+    feature_store = BulkFetchFeatureFS(driver, measurer=measurer, dataset_name=dataset_name)
+    graph_store = BaseLineGS(driver, dataset_name=dataset_name) 
     num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
-    
-    split_ratios = [0.6, 0.2, 0.2]
-    graph_store.train_val_test_split_db(split_ratios)
-    model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 7}
+
+    model_args = {"in_dim": 128, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 40}
     model = GCN(**model_args)
     lr = config.get("lr", 1e-2)
 
@@ -41,8 +41,9 @@ def main(config: dict):
     measurer.write_to_configresult("sampler", {"name": "UniformSampler", "num_neighbors": num_neighbors})
     measurer.write_to_configresult("feature_store", "NoCacheFeatureStore")
     measurer.write_to_configresult("graph_store", "BaseLineGS")
-    measurer.write_to_configresult("train_val_test_split", split_ratios)
+    # measurer.write_to_configresult("train_val_test_split", split_ratios)
     measurer.write_to_configresult("lr", lr)
+    measurer.write_to_configresult("dataset", dataset_name)
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,

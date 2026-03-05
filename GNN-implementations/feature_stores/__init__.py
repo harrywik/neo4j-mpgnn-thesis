@@ -4,6 +4,7 @@ from .PageRankCacheFeatureStore import PageRankCacheFeatureStore
 from .PickleSafeFeatureStore import PickleSafeFeatureStore
 from .SimpleCacheFeatureStore import SimpleCacheFeatureStore
 from .CachedPickleSafeFS import CachedPickleSafeFS
+from .BulkFetchFeatureFS import BulkFetchFeatureFS
 
 __all__ = [
     "InMemoryFeatureStore",
@@ -11,4 +12,5 @@ __all__ = [
     "PageRankCacheFeatureStore",
     "PickleSafeFeatureStore",
     "SimpleCacheFeatureStore",
+    "BulkFetchFeatureFS"
 ]
