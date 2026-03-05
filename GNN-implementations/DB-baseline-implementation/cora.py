@@ -12,7 +12,7 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from models import GCN
 from Training import Trainer, put_nodeLoader_args_map
-from feature_stores import NoCacheFeatureStore, BulkFetchFeatureFS
+from feature_stores import NoCacheFeatureStore
 from graph_stores import BaseLineGS
 from samplers import UniformSampler
 from Neo4jConnection import Neo4jConnection
@@ -25,10 +25,10 @@ def main(config: dict):
     
     measurer = Measurer(config)
     
-    dataset_name = "arxiv"
+    dataset_name = "cora"
     
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = BulkFetchFeatureFS(driver, measurer=measurer, dataset_name=dataset_name)
+    feature_store = NoCacheFeatureStore(driver, measurer=measurer, dataset_name=dataset_name)
     graph_store = BaseLineGS(driver, dataset_name=dataset_name) 
     num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
