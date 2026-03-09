@@ -29,24 +29,23 @@ class NewUniformSampler(BaseSampler):
         MATCH (s) WHERE s.{self.nodeid_property} IN $seed_ids
         WITH collect(s) AS startNodes,
              num_neighbors,
-             [] AS stepRels,
-             [] AS stepNodes,
+             [] AS edges,
+             [] AS nextFrontier,
              [n IN collect(s) | n.{self.nodeid_property}] AS visitedIds
         UNWIND range(0, size(num_neighbors) - 1) AS hop
         WITH hop,
             num_neighbors[hop] AS k,
             CASE hop
                 WHEN 0 THEN startNodes
-                ELSE stepNodes
-            END AS currentNodes,
-            startNodes,
+                ELSE nextFrontier
+            END AS frontier,
             num_neighbors,
-            stepRels,
-            stepNodes,
+            edges,
+            nextFrontier,
             visitedIds
-        CALL (currentNodes, k, visitedIds) {{
-            WITH currentNodes, k, visitedIds
-            UNWIND currentNodes AS ni
+        CALL (frontier, k, visitedIds) {{
+            WITH frontier, k, visitedIds
+            UNWIND frontier AS ni
             MATCH (ni){rel_pattern}(nj)
             WHERE (NOT {revisit_during_sampling}) OR NOT nj.{self.nodeid_property} IN visitedIds
             WITH ni, collect(DISTINCT nj) AS cand, k
@@ -60,14 +59,13 @@ class NewUniformSampler(BaseSampler):
                 apoc.coll.toSet(apoc.coll.flatten(collect(sampledIds))) AS newNodeIds
         }}
         WITH
-            startNodes,
             num_neighbors,
             hop,
-            coalesce(stepRels, []) + newEdges AS stepRels,
-            newNodes AS stepNodes,
+            coalesce(edges, []) + newEdges AS edges,
+            newNodes AS nextFrontier,
             apoc.coll.toSet(visitedIds + coalesce(newNodeIds, [])) AS visitedIds
 
-        UNWIND stepRels AS e
+        UNWIND edges AS e
         RETURN DISTINCT e.src AS src, e.dst AS dst
         """
 
