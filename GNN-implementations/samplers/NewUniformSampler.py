@@ -1,0 +1,96 @@
+from typing import List
+from torch_geometric.sampler import BaseSampler, SamplerOutput, NodeSamplerInput
+import torch
+from torch_geometric.data.graph_store import GraphStore
+
+
+class NewUniformSampler(BaseSampler):
+    """Sampling method that tracks visited nodes to avoid revisits across hops."""
+
+    _instance_counter = 0
+
+    def __init__(self, graph_store: GraphStore, num_neighbors: List[int], revisit_during_sampling: bool = False, sample_with_replacement:bool = False):
+        self.instance_id = NewUniformSampler._instance_counter
+        NewUniformSampler._instance_counter += 1
+        self.graph_store = graph_store
+        self.num_neighbors = num_neighbors
+        self.nodeid_property = graph_store.nodeid_property
+        self.query = self._build_fanout_query(revisit_during_sampling, sample_with_replacement)
+
+    def _build_fanout_query(self, revisit_during_sampling: bool, sample_with_replacement:bool) -> str:
+        # Homogeneous graph. Use directed or undirected:
+        rel_pattern = "--"  # change to "-[:REL]->" if you want directed
+        num_neighbors_literal = "[" + ", ".join(str(n) for n in self.num_neighbors) + "]"
+        revisit_during_sampling = "true" if revisit_during_sampling else "false"
+        sample_with_replacement = 'true' if sample_with_replacement else 'false'
+
+        return f"""
+        WITH {num_neighbors_literal} AS num_neighbors
+        MATCH (s) WHERE s.{self.nodeid_property} IN $seed_ids
+        WITH collect(s) AS startNodes,
+             num_neighbors,
+             [] AS stepRels,
+             [] AS stepNodes,
+             [n IN collect(s) | n.{self.nodeid_property}] AS visitedIds
+        UNWIND range(0, size(num_neighbors) - 1) AS hop
+        WITH hop,
+            num_neighbors[hop] AS k,
+            CASE hop
+                WHEN 0 THEN startNodes
+                ELSE stepNodes
+            END AS currentNodes,
+            startNodes,
+            num_neighbors,
+            stepRels,
+            stepNodes,
+            visitedIds
+        CALL (currentNodes, k, visitedIds) {{
+            WITH currentNodes, k, visitedIds
+            UNWIND currentNodes AS ni
+            MATCH (ni){rel_pattern}(nj)
+            WHERE (NOT {revisit_during_sampling}) OR NOT nj.{self.nodeid_property} IN visitedIds
+            WITH ni, collect(DISTINCT nj) AS cand, k
+            WITH ni, apoc.coll.randomItems(cand, k, {sample_with_replacement}) AS sampled_nodes
+            WITH ni, sampled_nodes,
+                 [x IN sampled_nodes | x.{self.nodeid_property}] AS sampledIds,
+                 [x IN sampled_nodes | {{src: ni.{self.nodeid_property}, dst: x.{self.nodeid_property}}}] AS sampledEdges
+            RETURN
+                apoc.coll.flatten(collect(sampledEdges)) AS newEdges,
+                apoc.coll.flatten(collect(sampled_nodes)) AS newNodes,
+                apoc.coll.toSet(apoc.coll.flatten(collect(sampledIds))) AS newNodeIds
+        }}
+        WITH
+            startNodes,
+            num_neighbors,
+            hop,
+            coalesce(stepRels, []) + newEdges AS stepRels,
+            newNodes AS stepNodes,
+            apoc.coll.toSet(visitedIds + coalesce(newNodeIds, [])) AS visitedIds
+
+        UNWIND stepRels AS e
+        RETURN DISTINCT e.src AS src, e.dst AS dst
+        """
+
+    def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
+        seeds = ns_input.node.to(torch.int64)
+        seeds_list = seeds.tolist()
+        seed_time = getattr(ns_input, "time", None)
+
+        if hasattr(self.graph_store, "sample_from_nodes"):
+            unique_nodes, edge_index_local = self.graph_store.sample_from_nodes(
+                kwargs={"seed_ids": seeds_list},
+                query=self.query,
+            )
+            return SamplerOutput(
+                node=unique_nodes,
+                row=edge_index_local[0],
+                col=edge_index_local[1],
+                edge=None,
+                batch=None,
+                metadata=(seeds, seed_time),
+            )
+        raise NotImplementedError("GraphStore lacks 'sample_from_nodes'.")
+
+    def sample_from_edges(self, index, neg_sampling=None):
+        raise NotImplementedError("Not implemented")
+

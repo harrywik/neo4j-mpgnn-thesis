@@ -35,6 +35,7 @@ class Trainer:
         cpu_monitor_interval: float | None = 1,
     ) -> None:
         self.batch_size = batch_size
+        self.measurer = measurer
         # IF data is a tuple of (FeatureStore, GraphStore), then we need a sampler to create the train_loader.
         # this is the case when the graph is stored in the database
         if isinstance(data, tuple) and len(data) == 2 and isinstance(data[0], FeatureStore) and isinstance(data[1], GraphStore):
@@ -101,7 +102,6 @@ class Trainer:
         self.optimizer = optimizer if optimizer is not None else optim.Adam(
             model.parameters(), lr=lr, weight_decay=5e-4
         )
-        self.measurer = measurer
         self.snapshot_path = snapshot_path
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0        
