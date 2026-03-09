@@ -5,7 +5,8 @@ from torch_geometric.data.graph_store import GraphStore
 
 
 class NewUniformSampler(BaseSampler):
-    """Sampling method that tracks visited nodes to avoid revisits across hops."""
+    """Uniform homogeneous neo4j sampler implemented as in graphSage paper, and as neighborsampler in pytorch.
+    A difference between this and the pytorch version is that it is possible revisit nodes during sampling, and sample with replacement, if one changes the default arguments"""
 
     _instance_counter = 0
 
@@ -19,7 +20,6 @@ class NewUniformSampler(BaseSampler):
 
     def _build_fanout_query(self, revisit_during_sampling: bool, sample_with_replacement:bool) -> str:
         # Homogeneous graph. Use directed or undirected:
-        rel_pattern = "--"  # change to "-[:REL]->" if you want directed
         revisit_during_sampling = "true" if revisit_during_sampling else "false"
         sample_with_replacement = 'true' if sample_with_replacement else 'false'
         q = []
@@ -32,7 +32,7 @@ class NewUniformSampler(BaseSampler):
             q.append(f"""
             CALL (frontier, visited, edges) {{
               UNWIND frontier AS src
-              MATCH (src){rel_pattern}(neighbor)
+              MATCH (src)--(neighbor)
               WHERE (NOT {revisit_during_sampling}) OR NOT neighbor IN visited
               WITH src, collect(DISTINCT neighbor) AS cand, visited, edges
               WITH src, apoc.coll.randomItems(cand, {i}, {sample_with_replacement}) AS picked, visited, edges
