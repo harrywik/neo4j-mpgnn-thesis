@@ -183,14 +183,14 @@ class Trainer:
                 model=self.model,
                 data=self.data,
                 num_neighbors=self.num_neighbors,
-                split="val",
+                split="test",
             )
         else:
             test_accuracy, _ = evaluate(
                 model=self.model,
                 data=(self.feature_store, self.graph_store),
                 sampler=self.sampler,
-                split="val",
+                split="test",
             )
         self.measurer.log_event("test_accuracy", test_accuracy)
         try:
