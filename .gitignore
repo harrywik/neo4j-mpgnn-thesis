@@ -32,3 +32,4 @@ experiments/results
 !**/measurements.csv
 
 .env
+notes

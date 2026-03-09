@@ -76,6 +76,7 @@ class Trainer:
                     shuffle=self.nodeloader_args["shuffle"],
                     pin_memory=self.nodeloader_args["pin_memory"],
                 )
+            self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
         # If data is not a tuple, we assume it's already a Data or HeteroData object ready for training, and we don't use a sampler.
         # This is the case when the graph is stored in RAM
         else:
@@ -95,6 +96,7 @@ class Trainer:
                 batch_size=batch_size,
                 input_nodes=data.train_mask,
             )
+            self.measurer.log_event("nbr_training_datapoints", int(data.train_mask.sum().item()))
         self.model = model
         self.optimizer = optimizer if optimizer is not None else optim.Adam(
             model.parameters(), lr=lr, weight_decay=5e-4
@@ -106,7 +108,6 @@ class Trainer:
         self.device = torch.device(device)
         self.model.to(self.device)
         self.nbr_training_datapoints = len(self.train_indices)
-        self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
         self.early_stopping = EarlyStopping(min_delta=min_delta, patience=patience)
         self.validation_loss_minimum = None
         self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion

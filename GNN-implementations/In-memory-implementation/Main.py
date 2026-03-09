@@ -28,19 +28,9 @@ def main(config: dict):
     # Get dataset
     dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
     graph = dataset[0]
-    # uri = os.environ["URI"]
-    # user = os.environ["USERNAME"]
-    # password = os.environ["PASSWORD"]
-    uri="bolt://localhost:7687"
-    user="neo4j"
-    password="thesis-db-0-pw"
     dataset_name = 'cora'
-    driver = Neo4jConnection(uri, user, password).get_driver()
-    graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
-    train_indices = graph_store.get_split(
-            split="train",
-            shuffle=True,
-        ).to(torch.long)
+    train_indices = torch.where(graph.train_mask.reshape(-1))[0].tolist()
+
 
     # set seed for reprodicability and create model
     model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=16, nbr_classes=7)
