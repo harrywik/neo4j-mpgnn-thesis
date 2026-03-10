@@ -155,6 +155,7 @@ class Trainer:
             self.measurer.log_event("end_batch_fetch", 1)
 
             self.measurer.log_event("start_batch_processing", 1)
+            print(batch)
             self._run_batch(batch)
             self.measurer.log_event("end_batch_processing", 1)                    
                 

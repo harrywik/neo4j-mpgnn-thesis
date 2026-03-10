@@ -5,51 +5,85 @@ from torch_geometric.data.graph_store import GraphStore
 
 
 class NewUniformSampler(BaseSampler):
-    """Uniform homogeneous neo4j sampler implemented as in graphSage paper, and as neighborsampler in pytorch.
-    A difference between this and the pytorch version is that it is possible revisit nodes during sampling, and sample with replacement, if one changes the default arguments"""
+    """Uniform homogeneous neo4j sampler (GraphSAGE-style neighbor sampling).
+
+    Difference vs. PyG NeighborSampler:
+    - Can revisit nodes during sampling (if revisit_nodes=True), and expand them again (if expand_revisited=True).
+    """
 
     _instance_counter = 0
 
-    def __init__(self, graph_store: GraphStore, num_neighbors: List[int], revisit_during_sampling: bool = False, sample_with_replacement:bool = False):
+    def __init__(
+        self,
+        graph_store: GraphStore,
+        num_neighbors: List[int],
+        sample_with_replacement: bool = False,
+        revisit_nodes: bool = True, # this should be true for it to work like the pyg-lib sampler
+        expand_revisited: bool = False, # only matters is revisit_nodes is set to true
+    ):
+        """Create a sampler.
+
+        Args:
+            graph_store: Neo4j-backed GraphStore instance.
+            num_neighbors: Fanout per hop, e.g. [10, 5, 5].
+            revisit_nodes: If True, allow already visited nodes to be sampled again.
+            sample_with_replacement: If True, sample neighbors with replacement.
+            expand_revisited: If True, allow revisited nodes to be expanded again.
+        """
         self.instance_id = NewUniformSampler._instance_counter
         NewUniformSampler._instance_counter += 1
         self.graph_store = graph_store
-        self.num_neighbors = num_neighbors
-        self.nodeid_property = graph_store.nodeid_property
-        self.query = self._build_fanout_query(revisit_during_sampling, sample_with_replacement)
+        self.query = self._build_fanout_query(
+            num_neighbors,
+            revisit_nodes,
+            sample_with_replacement,
+            expand_revisited,
+            graph_store.nodeid_property,
+        )
 
-    def _build_fanout_query(self, revisit_during_sampling: bool, sample_with_replacement:bool) -> str:
+    def _build_fanout_query(
+        self,
+        num_neighbors: List[int],
+        revisit_nodes: bool,
+        sample_with_replacement: bool,
+        expand_revisited: bool,
+        nodeid_property,
+    ) -> str:
         # Homogeneous graph. Use directed or undirected:
-        revisit_during_sampling = "true" if revisit_during_sampling else "false"
+        revisit_nodes = "true" if revisit_nodes else "false"
         sample_with_replacement = 'true' if sample_with_replacement else 'false'
+        expand_revisited = "true" if expand_revisited else "false"
         q = []
         q.append(f"""
-        MATCH (s) WHERE s.{self.nodeid_property} IN $seed_ids
+        MATCH (s) WHERE s.{nodeid_property} IN $seed_ids
         WITH s, [s] AS frontier, [s] AS visited, [] AS edges
         """)
 
-        for i in self.num_neighbors:
+        for i in num_neighbors:
             q.append(f"""
             CALL (frontier, visited, edges) {{
               UNWIND frontier AS src
               MATCH (src)--(neighbor)
-              WHERE (NOT {revisit_during_sampling}) OR NOT neighbor IN visited
+              WHERE ({revisit_nodes}) OR NOT neighbor IN visited
               WITH src, collect(DISTINCT neighbor) AS cand, visited, edges
               WITH src, apoc.coll.randomItems(cand, {i}, {sample_with_replacement}) AS picked, visited, edges
 
               // aggregate first, then concatenate (avoids implicit grouping error)
               WITH visited, edges,
-                   collect(picked) AS dsts_list,
-                   collect([d IN picked | {{src_id: src.{self.nodeid_property}, dst_id: d.{self.nodeid_property}}}]) AS es_list
+                   CASE
+                     WHEN {expand_revisited} THEN collect(picked)
+                     ELSE collect([n IN picked WHERE NOT n IN visited])
+                   END AS dsts_list,
+                   collect([d IN picked | {{src_id: src.{nodeid_property}, dst_id: d.{nodeid_property}}}]) AS es_list
 
               WITH visited, edges,
                    apoc.coll.toSet(apoc.coll.flatten(dsts_list)) AS next_frontier,
                    apoc.coll.flatten(es_list) AS new_edges
 
-                    RETURN
-                        next_frontier,
-                        visited + next_frontier AS next_visited,
-                        edges + new_edges AS next_edges
+              RETURN
+                  next_frontier,
+                  visited + next_frontier AS next_visited,
+                  edges + new_edges AS next_edges
             }}
             WITH next_frontier AS frontier,
                  next_visited AS visited,
@@ -92,19 +126,19 @@ class NewUniformSampler(BaseSampler):
 
 #     _instance_counter = 0
 
-#     def __init__(self, graph_store: GraphStore, num_neighbors: List[int], revisit_during_sampling: bool = False, sample_with_replacement:bool = False):
+#     def __init__(self, graph_store: GraphStore, num_neighbors: List[int], revisit_nodes: bool = False, sample_with_replacement:bool = False):
 #         self.instance_id = NewUniformSampler._instance_counter
 #         NewUniformSampler._instance_counter += 1
 #         self.graph_store = graph_store
 #         self.num_neighbors = num_neighbors
 #         self.nodeid_property = graph_store.nodeid_property
-#         self.query = self._build_fanout_query(revisit_during_sampling, sample_with_replacement)
+#         self.query = self._build_fanout_query(revisit_nodes, sample_with_replacement)
 
-#     def _build_fanout_query(self, revisit_during_sampling: bool, sample_with_replacement:bool) -> str:
+#     def _build_fanout_query(self, revisit_nodes: bool, sample_with_replacement:bool) -> str:
 #         # Homogeneous graph. Use directed or undirected:
 #         rel_pattern = "--"  # change to "-[:REL]->" if you want directed
 #         num_neighbors_literal = "[" + ", ".join(str(n) for n in self.num_neighbors) + "]"
-#         revisit_during_sampling = "true" if revisit_during_sampling else "false"
+#         revisit_nodes = "true" if revisit_nodes else "false"
 #         sample_with_replacement = 'true' if sample_with_replacement else 'false'
 
 #         return f"""
@@ -130,7 +164,7 @@ class NewUniformSampler(BaseSampler):
 #             WITH frontier, k, visitedIds
 #             UNWIND frontier AS ni
 #             MATCH (ni){rel_pattern}(nj)
-#             WHERE (NOT {revisit_during_sampling}) OR NOT nj.{self.nodeid_property} IN visitedIds
+#             WHERE (NOT {revisit_nodes}) OR NOT nj.{self.nodeid_property} IN visitedIds
 #             WITH ni, collect(DISTINCT nj) AS cand, k
 #             WITH ni, apoc.coll.randomItems(cand, k, {sample_with_replacement}) AS sampled_nodes
 #             WITH ni, sampled_nodes,
