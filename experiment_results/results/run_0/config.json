@@ -1,0 +1,7 @@
+{
+    "lr": 0.01,
+    "batch_size": 70,
+    "max_epochs": 10,
+    "patience": 100,
+    "min_delta": 0.001
+}
