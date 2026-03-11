@@ -16,7 +16,7 @@ from models import GCN
 from Training import Trainer, put_nodeLoader_args_map
 from feature_stores import NoCacheFeatureStore
 from graph_stores import BaseLineGS
-from samplers import UniformSampler, NewUniformSampler
+from samplers import UniformSampler, NeighborSampler
 from Neo4jConnection import Neo4jConnection
 from benchmarking_tools import Measurer
 
@@ -34,14 +34,14 @@ def main(config: dict):
     feature_store = NoCacheFeatureStore(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
     graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
     num_neighbors = [10, 5]
-    sampler = NewUniformSampler(graph_store, num_neighbors=num_neighbors)
+    sampler = NeighborSampler(graph_store, num_neighbors=num_neighbors)
 
     model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 7}
     model = GCN(**model_args)
     lr = config.get("lr", 1e-2)
 
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
-    measurer.write_to_configresult("sampler", {"name": "UniformSampler", "num_neighbors": num_neighbors})
+    measurer.write_to_configresult("sampler", {"name": "NeighborSampler", "num_neighbors": num_neighbors})
     measurer.write_to_configresult("feature_store", "NoCacheFeatureStore")
     measurer.write_to_configresult("graph_store", "BaseLineGS")
     # measurer.write_to_configresult("train_val_test_split", split_ratios)

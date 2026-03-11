@@ -4,16 +4,17 @@ import torch
 from torch_geometric.data.graph_store import GraphStore
 
 
-class NewUniformSampler(BaseSampler):
+class NeighborSampler(BaseSampler):
     """Uniform homogeneous neo4j sampler (GraphSAGE-style neighbor sampling).
 
-    Changes to better match PyG NeighborSampler (NeighborLoader default):
-    - Single sampling run for the whole seed batch (disjoint=False semantics):
-      uses collect(s) so frontier/visited are global to the mini-batch.
-    - Direction control: if directed=True, sample only out-neighbors (src)->(nbr).
-    - Sample edges (relationships) instead of DISTINCT neighbor nodes:
-      avoids bias differences when parallel rels exist.
-    - Do NOT DISTINCT at the end (to better match PyG edge semantics).
+    Args:
+    - graph_store: GraphStore instance to execute sampling queries against.
+    - num_neighbors: List of fanout sizes per GNN layer (e.g. [10, 5] for 2 layers).
+    - sample_with_replacement: Whether to sample neighbors with replacement (default False).
+    - expand_revisited: Whether to allow already visited nodes to be included in the frontier for further expansion (default False).
+    - direction: Sampling direction: 'outgoing' (src)->(nbr), 'incoming' (src)<-(nbr), or 'both' (undirected) (default 'both').
+    - rel_type: Optional relationship type to restrict sampling to (default None for all types).
+    - node_label: Optional node label to restrict seeds and neighbors to (default None for all labels).
     """
 
     _instance_counter = 0
@@ -23,56 +24,40 @@ class NewUniformSampler(BaseSampler):
         graph_store: GraphStore,
         num_neighbors: List[int],
         sample_with_replacement: bool = False,
-        revisit_nodes: bool = False,
         expand_revisited: bool = False,
         direction: str = 'both', #'outgoing', 'incoming', 'both' (default)
         rel_type: str = None,  # optional: restrict to a relationship type
         node_label: str = None,  # optional: restrict seed/neighbor label
     ):
-        self.instance_id = NewUniformSampler._instance_counter
-        NewUniformSampler._instance_counter += 1
+        self.instance_id = NeighborSampler._instance_counter
+        NeighborSampler._instance_counter += 1
         self.graph_store = graph_store
-        self.query = self._build_fanout_query(
-            num_neighbors=num_neighbors,
-            revisit_nodes=revisit_nodes,
-            sample_with_replacement=sample_with_replacement,
-            expand_revisited=expand_revisited,
-            nodeid_property=graph_store.nodeid_property,
-            direction=direction,
-            rel_type=rel_type,
-            directed=(direction != 'both'),
-            node_label=node_label,
-        )
+        self.num_neighbors=num_neighbors
+        self.sample_with_replacement=sample_with_replacement
+        self.expand_revisited=expand_revisited
+        self.nodeid_property=graph_store.nodeid_property
+        self.direction=direction
+        self.rel_type=rel_type
+        self.directed=(self.direction != 'both')
+        self.node_label=node_label
+        self.query = self._build_fanout_query()
 
-    def _build_fanout_query(
-        self,
-        num_neighbors: List[int],
-        revisit_nodes: bool,
-        sample_with_replacement: bool,
-        expand_revisited: bool,
-        nodeid_property: str,
-        directed: bool,
-        direction: str,
-        rel_type: str = None,
-        node_label: str = None,
-    ) -> str:
-        revisit_nodes_s = "true" if revisit_nodes else "false"
-        replace_s = "true" if sample_with_replacement else "false"
-        expand_revisited_s = "true" if expand_revisited else "false"
+    def _build_fanout_query(self) -> str:
+        replace_s = "true" if self.sample_with_replacement else "false"
+        expand_revisited_s = "true" if self.expand_revisited else "false"
 
         # Relationship pattern:
         # - direction='out'  => (src)-[r]->(nbr)
         # - direction='in'   => (src)<-[r]-(nbr)
         # - direction='both' => (src)-[r]-(nbr)
-        rel = "" if rel_type is None else f":{rel_type}"
+        rel = "" if self.rel_type is None else f":{self.rel_type}"
         
         endpoint_selector = None
         edge_pat = None
-        if direction == 'incoming':
-            arrow = "<"
-            edge_pat = f"{arrow}-[r{rel}]-"
+        if self.direction == 'incoming':
+            edge_pat = f"<-[r{rel}]-"
             endpoint_selector = "startNode"
-        elif direction == 'outgoing':
+        elif self.direction == 'outgoing':
             edge_pat = f"-[r{rel}]->"
             endpoint_selector = "endNode"
         else:
@@ -80,27 +65,24 @@ class NewUniformSampler(BaseSampler):
             endpoint_selector = "endNode"  # arbitrary for undirected
 
         # Optional label constraints:
-        seed_label = "" if node_label is None else f":{node_label}"
-        nbr_label = "" if node_label is None else f":{node_label}"
+        seed_label = "" if self.node_label is None else f":{self.node_label}"
+        nbr_label = "" if self.node_label is None else f":{self.node_label}"
 
         q = []
 
         # IMPORTANT: batch seeds into a single row (global frontier/visited)
         q.append(f"""
         MATCH (s{seed_label})
-        WHERE s.{nodeid_property} IN $seed_ids
+        WHERE s.{self.nodeid_property} IN $seed_ids
         WITH collect(s) AS frontier, collect(s) AS visited, [] AS edges
         """)
 
-        for k in num_neighbors:
+        for k in self.num_neighbors:
             q.append(f"""
             CALL (frontier, visited, edges) {{
               // expand all nodes in the current frontier
               UNWIND frontier AS src
               MATCH (src){edge_pat}(neighbor{nbr_label})
-
-              // visit filtering (PyG disjoint=False does global dedup via mapper)
-              WHERE ({revisit_nodes_s}) OR NOT neighbor IN visited
 
               // IMPORTANT: sample EDGES (r) not DISTINCT neighbors
               WITH src, collect(r) AS cand_rels, visited, edges
@@ -112,17 +94,17 @@ class NewUniformSampler(BaseSampler):
               WITH visited, edges,
                    // neighbors corresponding to picked edges
                    collect([rel IN picked_rels | 
-                     CASE WHEN {str(directed).lower()} THEN {endpoint_selector}(rel) 
+                     CASE WHEN {str(self.directed).lower()} THEN {endpoint_selector}(rel) 
                           ELSE CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
                      END
                    ]) AS picked_nbrs_list,
                    collect([rel IN picked_rels | {{
-                     src_id: src.{nodeid_property},
+                     src_id: src.{self.nodeid_property},
                      dst_id: (
-                       CASE WHEN {str(directed).lower()} THEN {endpoint_selector}(rel)
+                       CASE WHEN {str(self.directed).lower()} THEN {endpoint_selector}(rel)
                             ELSE CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
                        END
-                     ).{nodeid_property}
+                     ).{self.nodeid_property}
                    }}]) AS es_list
 
               WITH visited, edges,
