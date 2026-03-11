@@ -1,0 +1,158 @@
+         109195 function calls (105295 primitive calls) in 2.036 seconds
+
+   Ordered by: cumulative time
+   List reduced from 480 to 150 due to restriction <150>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    2.036    2.036 threading.py:1117(join)
+        2    1.816    0.908    1.816    0.908 {built-in method time.sleep}
+        1    0.000    0.000    1.030    1.030 threading.py:1155(_wait_for_tstate_lock)
+      8/6    0.000    0.000    1.030    0.172 {method 'acquire' of '_thread.lock' objects}
+        1    0.000    0.000    1.030    1.030 threading.py:1018(_bootstrap)
+        1    0.000    0.000    1.030    1.030 threading.py:1058(_bootstrap_inner)
+        2    0.000    0.000    1.005    0.503 __init__.py:1025(cpu_percent)
+        1    0.000    0.000    0.811    0.811 threading.py:1001(run)
+        1    0.000    0.000    0.811    0.811 CPU_utilization_logger.py:15(monitor)
+        1    0.000    0.000    0.219    0.219 Training.py:215(_start_training)
+       10    0.001    0.000    0.155    0.015 Training.py:150(_run_epoch)
+       50    0.001    0.000    0.107    0.002 Training.py:138(_run_batch)
+  630/140    0.001    0.000    0.065    0.000 module.py:1747(_wrapped_call_impl)
+  630/140    0.001    0.000    0.065    0.000 module.py:1755(_call_impl)
+       10    0.001    0.000    0.064    0.006 evaluate.py:9(evaluate)
+       70    0.000    0.000    0.060    0.001 GCN.py:11(forward)
+      140    0.003    0.000    0.055    0.000 gcn_conv.py:227(forward)
+       80    0.000    0.000    0.039    0.000 dataloader.py:728(__next__)
+       50    0.000    0.000    0.037    0.001 _tensor.py:592(backward)
+       50    0.000    0.000    0.037    0.001 __init__.py:243(backward)
+       50    0.000    0.000    0.036    0.001 graph.py:815(_engine_run_backward)
+       50    0.036    0.001    0.036    0.001 {method 'run_backward' of 'torch._C._EngineBase' objects}
+       80    0.000    0.000    0.035    0.000 dataloader.py:787(_next_data)
+       70    0.000    0.000    0.035    0.000 fetch.py:47(fetch)
+       70    0.000    0.000    0.034    0.000 node_loader.py:143(collate_fn)
+       50    0.001    0.000    0.031    0.001 optimizer.py:465(wrapper)
+       50    0.000    0.000    0.029    0.001 optimizer.py:60(_use_grad)
+       50    0.000    0.000    0.028    0.001 adam.py:212(step)
+       50    0.000    0.000    0.027    0.001 optimizer.py:130(maybe_fallback)
+       70    0.002    0.000    0.026    0.000 node_loader.py:154(filter_fn)
+       50    0.000    0.000    0.026    0.001 adam.py:865(adam)
+       50    0.006    0.000    0.026    0.001 adam.py:344(_single_tensor_adam)
+       20    0.000    0.000    0.025    0.001 dataloader.py:480(__iter__)
+       20    0.000    0.000    0.025    0.001 node_loader.py:265(_get_iterator)
+    80/50    0.000    0.000    0.025    0.000 {built-in method builtins.iter}
+       20    0.000    0.000    0.024    0.001 dataloader.py:419(_get_iterator)
+       70    0.000    0.000    0.022    0.000 utils.py:159(filter_data)
+      140    0.002    0.000    0.021    0.000 torch_geometric.nn.conv.gcn_conv_GCNConv_propagate_wy1z_zhn.py:116(propagate)
+   140/90    0.000    0.000    0.021    0.000 {built-in method builtins.next}
+ 1864/932    0.001    0.000    0.021    0.000 _psosx.py:343(wrapper)
+  933/932    0.001    0.000    0.019    0.000 _common.py:367(wrapper)
+      924    0.000    0.000    0.019    0.000 _psosx.py:411(ppid)
+       70    0.001    0.000    0.019    0.000 utils.py:85(filter_node_store_)
+       20    0.000    0.000    0.018    0.001 dataloader.py:766(__init__)
+       20    0.000    0.000    0.018    0.001 dataloader.py:634(__init__)
+      928    0.001    0.000    0.018    0.000 _psosx.py:370(_get_kinfo_proc)
+        1    0.000    0.000    0.018    0.018 __init__.py:951(children)
+      140    0.006    0.000    0.018    0.000 gcn_conv.py:45(gcn_norm)
+        1    0.001    0.001    0.017    0.017 __init__.py:251(_ppid_map)
+      928    0.017    0.000    0.017    0.000 {built-in method psutil._psutil_osx.proc_kinfo_oneshot}
+      350    0.000    0.000    0.016    0.000 utils.py:32(index_select)
+      350    0.000    0.000    0.015    0.000 hash_tensor.py:668(_new_index_select)
+      350    0.014    0.000    0.014    0.000 {built-in method torch.index_select}
+      210    0.013    0.000    0.013    0.000 {built-in method torch._C._nn.linear}
+      140    0.000    0.000    0.012    0.000 linear.py:121(forward)
+      280    0.001    0.000    0.012    0.000 _scatter.py:14(scatter)
+      140    0.000    0.000    0.011    0.000 message_passing.py:577(aggregate)
+      140    0.000    0.000    0.011    0.000 experimental.py:114(wrapper)
+      140    0.000    0.000    0.011    0.000 base.py:101(__call__)
+      140    0.000    0.000    0.010    0.000 basic.py:19(forward)
+      140    0.000    0.000    0.010    0.000 base.py:173(reduce)
+      140    0.005    0.000    0.008    0.000 loop.py:585(add_remaining_self_loops)
+      280    0.007    0.000    0.007    0.000 {method 'scatter_add_' of 'torch._C.TensorBase' objects}
+      260    0.000    0.000    0.007    0.000 _ops.py:1147(__call__)
+       70    0.000    0.000    0.006    0.000 neighbor_sampler.py:399(sample_from_nodes)
+       70    0.000    0.000    0.006    0.000 neighbor_sampler.py:798(node_sample)
+       70    0.001    0.000    0.006    0.000 neighbor_sampler.py:429(_sample)
+       70    0.005    0.000    0.005    0.000 {built-in method torch._ops.pyg.neighbor_sample}
+       70    0.000    0.000    0.005    0.000 loss.py:1296(forward)
+       70    0.000    0.000    0.004    0.000 functional.py:3404(cross_entropy)
+       70    0.000    0.000    0.004    0.000 data.py:358(to)
+       70    0.000    0.000    0.004    0.000 data.py:338(apply)
+       70    0.004    0.000    0.004    0.000 {built-in method torch._C._nn.cross_entropy_loss}
+       70    0.000    0.000    0.004    0.000 storage.py:196(apply)
+       70    0.004    0.000    0.004    0.000 {built-in method torch.isin}
+      140    0.001    0.000    0.004    0.000 torch_geometric.nn.conv.gcn_conv_GCNConv_propagate_wy1z_zhn.py:34(collect)
+      180    0.001    0.000    0.004    0.000 profiler.py:776(__exit__)
+      180    0.000    0.000    0.003    0.000 _ops.py:981(__call__)
+     1820    0.001    0.000    0.003    0.000 storage.py:120(__setitem__)
+       10    0.000    0.000    0.003    0.000 neighbor_loader.py:203(__init__)
+      140    0.000    0.000    0.003    0.000 message_passing.py:263(_index_select)
+      300    0.003    0.000    0.003    0.000 {method 'mul_' of 'torch._C.TensorBase' objects}
+      300    0.003    0.000    0.003    0.000 {method 'add' of 'torch._C.TensorBase' objects}
+      300    0.003    0.000    0.003    0.000 {method 'addcdiv_' of 'torch._C.TensorBase' objects}
+      140    0.000    0.000    0.003    0.000 message_passing.py:269(_index_select_safe)
+      140    0.003    0.000    0.003    0.000 {method 'index_select' of 'torch._C.TensorBase' objects}
+      300    0.003    0.000    0.003    0.000 {method 'add_' of 'torch._C.TensorBase' objects}
+      300    0.003    0.000    0.003    0.000 {method 'lerp_' of 'torch._C.TensorBase' objects}
+      140    0.002    0.000    0.003    0.000 gcn_conv.py:270(message)
+      300    0.003    0.000    0.003    0.000 {method 'addcmul_' of 'torch._C.TensorBase' objects}
+      300    0.003    0.000    0.003    0.000 {method 'sqrt' of 'torch._C.TensorBase' objects}
+      140    0.003    0.000    0.003    0.000 {method 'relu_' of 'torch._C.TensorBase' objects}
+      180    0.000    0.000    0.003    0.000 _ops.py:1035(_must_dispatch_in_python)
+     1820    0.001    0.000    0.002    0.000 storage.py:82(_pop_cache)
+      180    0.000    0.000    0.002    0.000 _pytree.py:1410(tree_any)
+     3862    0.001    0.000    0.002    0.000 {built-in method builtins.getattr}
+        1    0.000    0.000    0.002    0.002 __init__.py:1482(pids)
+ 1190/840    0.001    0.000    0.002    0.000 storage.py:903(recursive_apply)
+  183/182    0.000    0.000    0.002    0.000 {built-in method builtins.any}
+      280    0.002    0.000    0.002    0.000 {method 'new_zeros' of 'torch._C.TensorBase' objects}
+        1    0.000    0.000    0.002    0.002 _psosx.py:319(pids)
+        1    0.002    0.002    0.002    0.002 {built-in method psutil._psutil_osx.pids}
+       10    0.000    0.000    0.002    0.000 neighbor_sampler.py:44(__init__)
+11981/11761    0.001    0.000    0.002    0.000 {built-in method builtins.isinstance}
+       50    0.000    0.000    0.002    0.000 _compile.py:41(inner)
+ 1260/360    0.001    0.000    0.002    0.000 _pytree.py:1071(tree_iter)
+       50    0.000    0.000    0.002    0.000 eval_frame.py:829(_fn)
+       10    0.000    0.000    0.002    0.000 utils.py:46(to_csc)
+      560    0.000    0.000    0.002    0.000 data.py:564(__setattr__)
+      771    0.000    0.000    0.002    0.000 storage.py:100(__setattr__)
+       50    0.000    0.000    0.002    0.000 optimizer.py:931(zero_grad)
+       70    0.000    0.000    0.002    0.000 utils.py:101(filter_edge_store_)
+      180    0.000    0.000    0.002    0.000 profiler.py:770(__enter__)
+       70    0.001    0.000    0.001    0.000 base.py:90(__getitem__)
+     2090    0.001    0.000    0.001    0.000 storage.py:89(__getattr__)
+      498    0.000    0.000    0.001    0.000 {built-in method builtins.setattr}
+      180    0.001    0.000    0.001    0.000 {built-in method torch._ops.profiler._record_function_enter_new}
+      483    0.000    0.000    0.001    0.000 Measurer.py:73(log_event)
+       70    0.000    0.000    0.001    0.000 linear.py:124(forward)
+       50    0.001    0.000    0.001    0.000 adam.py:137(_init_group)
+      280    0.000    0.000    0.001    0.000 _scatter.py:141(broadcast)
+       10    0.000    0.000    0.001    0.000 utils.py:24(sort_csc)
+      140    0.001    0.000    0.001    0.000 {built-in method torch.cat}
+      150    0.000    0.000    0.001    0.000 data.py:145(keys)
+      140    0.000    0.000    0.001    0.000 data.py:156(__contains__)
+      140    0.001    0.000    0.001    0.000 {method 'repeat' of 'torch._C.TensorBase' objects}
+   221/81    0.000    0.000    0.001    0.000 copy.py:61(copy)
+      483    0.001    0.000    0.001    0.000 {method 'writerow' of '_csv.writer' objects}
+     1260    0.000    0.000    0.001    0.000 _pytree.py:829(_get_node_type)
+      720    0.000    0.000    0.001    0.000 _pytree.py:836(_is_leaf)
+       10    0.000    0.000    0.001    0.000 node_loader.py:90(__init__)
+      140    0.000    0.000    0.001    0.000 message_passing.py:204(_check_input)
+      570    0.001    0.000    0.001    0.000 {method 'view' of 'torch._C.TensorBase' objects}
+       70    0.000    0.000    0.001    0.000 data.py:587(__copy__)
+        3    0.000    0.000    0.001    0.000 __init__.py:313(__init__)
+     1070    0.000    0.000    0.001    0.000 <frozen abc>:117(__instancecheck__)
+      678    0.000    0.000    0.001    0.000 sparse.py:132(is_sparse)
+        3    0.000    0.000    0.001    0.000 __init__.py:316(_init)
+     1570    0.001    0.000    0.001    0.000 {method 'to' of 'torch._C.TensorBase' objects}
+      420    0.000    0.000    0.001    0.000 storage.py:783(is_node_attr)
+       76    0.001    0.000    0.001    0.000 {built-in method torch.tensor}
+       50    0.000    0.000    0.001    0.000 __init__.py:89(_make_grads)
+        4    0.000    0.000    0.001    0.000 _psosx.py:474(create_time)
+        3    0.000    0.000    0.001    0.000 __init__.py:363(_get_ident)
+      990    0.000    0.000    0.001    0.000 _compile.py:9(is_compiling)
+      398    0.000    0.000    0.001    0.000 data.py:649(__cat_dim__)
+        1    0.000    0.000    0.001    0.001 __init__.py:459(_raise_if_pid_reused)
+        1    0.000    0.000    0.001    0.001 __init__.py:625(is_running)
+     1260    0.000    0.000    0.001    0.000 _pytree.py:818(_is_namedtuple_instance)
+     1050    0.000    0.000    0.001    0.000 data.py:364(<lambda>)
+
+
