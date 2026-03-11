@@ -14,10 +14,10 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from training.evaluate import evaluate
 from training.Training import Trainer, put_nodeLoader_args_map
-from models.GCN import GCN
-from feature_stores import CachedPickleSafeFS
-from graph_stores import PickleSafeGS
-from samplers import UniformSampler
+from neo4j_pyg.models.GCN import GCN
+from neo4j_pyg.feature_stores import CachedPickleSafeFS
+from neo4j_pyg.graph_stores import PickleSafeGS
+from neo4j_pyg.samplers import UniformSampler
 from benchmarking_tools import Measurer
 
 def main(config: dict):
@@ -25,9 +25,26 @@ def main(config: dict):
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
-    feature_store = CachedPickleSafeFS(uri, user, password)
+    feature_store = CachedPickleSafeFS(
+        uri,
+        user,
+        password,
+        dataset_name="neo4j",
+        feature_property="embedding",
+        target_property="subject",
+        nodeid_property="id",
+        feature_property_type="byte[]",
+    )
         
-    graph_store = PickleSafeGS(uri, user, password) 
+    graph_store = PickleSafeGS(
+        uri,
+        user,
+        password,
+        dataset_name="neo4j",
+        split_property_name="split",
+        split_property_type="str",
+        nodeid_property="id",
+    )
     num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     split_ratios = [0.6, 0.2, 0.2]
@@ -73,7 +90,7 @@ def main(config: dict):
 
 
 if __name__ == "__main__":
-    config = "GNN-implementations/train_config.json"
+    config = "src/train_config.json"
     if not os.path.exists(config):
         raise FileNotFoundError(f"Config not found: {config}")
     with open(config, "r") as f:
