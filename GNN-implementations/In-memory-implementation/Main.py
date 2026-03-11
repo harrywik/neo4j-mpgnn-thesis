@@ -33,7 +33,7 @@ def main(config: dict):
 
 
     # set seed for reprodicability and create model
-    model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=16, nbr_classes=7)
+    model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=32, nbr_classes=7)
     criterion = nn.CrossEntropyLoss()
     lr = config.get("lr")
     optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
@@ -48,7 +48,6 @@ def main(config: dict):
     
     measurer = Measurer(config)
     
-    patience = 20
 
     trainer = Trainer(
         model=model,

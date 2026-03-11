@@ -168,6 +168,19 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
     batch_losses = df.loc[df["Event"] == "batch_train_loss", "Value"]
     batch_loss_mean = float(pd.to_numeric(batch_losses, errors="coerce").dropna().mean()) if len(batch_losses) else None
 
+    batch_nodes = pd.to_numeric(df.loc[df["Event"] == "batch_nbr_nodes_total", "Value"], errors="coerce").dropna()
+    batch_edges = pd.to_numeric(df.loc[df["Event"] == "batch_nbr_edges_total", "Value"], errors="coerce").dropna()
+    batch_seed_nodes = pd.to_numeric(df.loc[df["Event"] == "batch_nbr_seed_nodes", "Value"], errors="coerce").dropna()
+
+    avg_batch_nodes = float(batch_nodes.mean()) if len(batch_nodes) else None
+    avg_batch_edges = float(batch_edges.mean()) if len(batch_edges) else None
+
+    avg_seed_node_ratio = None
+    if len(batch_seed_nodes) and len(batch_nodes):
+        n = min(len(batch_seed_nodes), len(batch_nodes))
+        ratios = batch_seed_nodes.iloc[:n].to_numpy() / batch_nodes.iloc[:n].to_numpy()
+        avg_seed_node_ratio = float(pd.Series(ratios, dtype="float64").mean())
+
     remote_feature_total_s = paired_stats.get("remote_feature_latency_s", {}).get("total_s", 0.0) or 0.0
 
     cpu_values = df.loc[df["Event"] == "cpu_utilization_percentage", "Value"]
@@ -209,6 +222,9 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "validation_time_s": paired_stats["validation_time_s"],
             "saving_weights_time_s": paired_stats["saving_weights_time_s"],
             "batch_train_loss_mean": batch_loss_mean,
+            "avg_batch_nodes": avg_batch_nodes,
+            "avg_batch_edges": avg_batch_edges,
+            "avg_seed_node_ratio": avg_seed_node_ratio,
         },
         "notes": [
             "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",

@@ -95,7 +95,10 @@ class Trainer:
                 num_neighbors=num_neighbors,
                 # Use a batch size of 128 for sampling training nodes
                 batch_size=batch_size,
+                replace=False, # default is false too
+                disjoint=False, # default is false too
                 input_nodes=data.train_mask,
+                subgraph_type="directional" #bidirectional, induced, directional (default)
             )
             self.measurer.log_event("nbr_training_datapoints", int(data.train_mask.sum().item()))
         self.model = model
@@ -154,8 +157,12 @@ class Trainer:
             batch = next(it) 
             self.measurer.log_event("end_batch_fetch", 1)
 
+            self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
+            self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))
+            if hasattr(batch, "input_id"):
+                self.measurer.log_event("batch_nbr_seed_nodes", int(batch.input_id.shape[0]))
+            
             self.measurer.log_event("start_batch_processing", 1)
-            print(batch)
             self._run_batch(batch)
             self.measurer.log_event("end_batch_processing", 1)                    
                 
@@ -167,10 +174,15 @@ class Trainer:
         txt_path = run_dir / "train_profile.txt"
         pr = cProfile.Profile()
         pr.enable()
+        monitor = None
         try:
-            start_cpu_monitor(self.measurer, interval=self.cpu_monitor_interval)
+            monitor = start_cpu_monitor(self.measurer, interval=self.cpu_monitor_interval)
             self._start_training(max_epochs, start_time)
         finally:
+            if monitor is not None:
+                stop_event, thread = monitor
+                stop_event.set()
+                thread.join(timeout=max(1.0, float(self.cpu_monitor_interval or 1)))
             pr.disable()
             stats = pstats.Stats(pr).strip_dirs().sort_stats("cumtime")
             with txt_path.open("w") as f:
@@ -194,6 +206,7 @@ class Trainer:
                 split="test",
             )
         self.measurer.log_event("test_accuracy", test_accuracy)
+        self.measurer.close()
         try:
             self.measurer.summarize()
         except Exception as e:

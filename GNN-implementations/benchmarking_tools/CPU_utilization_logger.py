@@ -10,8 +10,10 @@ def start_cpu_monitor(measurer, interval=1):
     process = psutil.Process()
     process.cpu_percent(1)  # warmup
 
+    stop_event = threading.Event()
+
     def monitor():
-        while True:
+        while not stop_event.is_set():
             procs = [process] + process.children(recursive=True)
             cpu = 0.0
             for p in procs:
@@ -33,4 +35,4 @@ def start_cpu_monitor(measurer, interval=1):
 
     t = threading.Thread(target=monitor, daemon=True)
     t.start()
-    return t
+    return stop_event, t
