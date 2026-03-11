@@ -3,11 +3,11 @@ import time
 import math
 import torch
 
-from training.evaluate import evaluate
+from src.training.evaluate import evaluate
 from torch_geometric.loader import NodeLoader
 from torch.nn.parallel import DistributedDataParallel as DDP
 import torch.distributed as dist
-from training.Training import put_nodeLoader_args_map
+from src.training.Training import put_nodeLoader_args_map
 
 
 class DistributedTrainer:
