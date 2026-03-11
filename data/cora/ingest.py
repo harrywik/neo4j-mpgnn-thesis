@@ -33,6 +33,7 @@ def ingest_cora_binary(tgz_path, uri, user, password):
         split[graph.train_mask.numpy()] = "train"
         split[graph.val_mask.numpy()] = "val"
         split[graph.test_mask.numpy()] = "test"
+        
 
         print(f"Ingesting {len(df)} nodes...")
         with driver.session() as session:

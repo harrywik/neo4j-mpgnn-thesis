@@ -73,6 +73,16 @@ class Measurer:
     def log_event(self, event_name: str, value: int | float = 1):
         self._writer.writerow([event_name, time.monotonic(), value])
 
+    def close(self) -> None:
+        """Flush and close measurement outputs explicitly."""
+        if not hasattr(self, "measurements_path"):
+            return
+        try:
+            self._csvfile.flush()
+            self._csvfile.close()
+        except Exception:
+            pass
+
     def __del__(self):
         if not hasattr(self, "measurements_path"):
             return
