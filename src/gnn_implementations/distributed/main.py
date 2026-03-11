@@ -15,13 +15,11 @@ if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
 from training.evaluate import evaluate
-from DistributedTraining import DistributedTrainer
+from training.DistributedTraining import DistributedTrainer
 from neo4j_pyg.models.GCN import GCN
 from neo4j_pyg.feature_stores.PickleSafeFeatureStore import PickleSafeFeatureStore
 from neo4j_pyg.graph_stores import PickleSafeGS
 from neo4j_pyg.samplers.UniformSampler import UniformSampler
-
-
 
 def ddp_setup() -> None:
     # Check if we are actually in a distributed environment

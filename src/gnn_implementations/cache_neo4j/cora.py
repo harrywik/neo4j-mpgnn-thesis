@@ -14,11 +14,11 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from training.Training import Trainer, put_nodeLoader_args_map
 from neo4j_pyg.models.GCN import GCN
-from Neo4jConnection import Neo4jConnection
 from neo4j_pyg.feature_stores.PageRankCacheFeatureStore import PageRankCacheFeatureStore
 from neo4j_pyg.graph_stores import BaseLineGS
 from neo4j_pyg.samplers.UniformSampler import UniformSampler
 from benchmarking_tools import Measurer
+from Neo4jConnection import Neo4jConnection
 
 def main(config: dict):
     # Demo local user with unsecure passwd
@@ -28,19 +28,30 @@ def main(config: dict):
     measurer = Measurer(config)
 
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = PageRankCacheFeatureStore(driver)
+    feature_store = PageRankCacheFeatureStore(
+        driver,
+        dataset_name="neo4j",
+        feature_property="embedding",
+        target_property="subject",
+        nodeid_property="id",
+        feature_property_type="byte[]",
+    )
     
-    graph_store = BaseLineGS(driver) 
+    graph_store = BaseLineGS(
+        driver,
+        dataset_name="neo4j",
+        split_property_name="split",
+        split_property_type="str",
+        nodeid_property="id",
+    )
     num_neighbors = [10, 5]
     sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
     split_ratios = [0.6, 0.2, 0.2]
-    graph_store.train_val_test_split_db(split_ratios)
     model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 16, "nbr_classes": 7}
     model = GCN(**model_args)
     lr = config.get("lr", 1e-2)
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss()
-
     feature_store_version = config.get("feature_store_version", "002")
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
     measurer.write_to_configresult("sampler", {"name": "UniformSampler", "num_neighbors": num_neighbors})
