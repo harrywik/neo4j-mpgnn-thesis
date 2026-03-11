@@ -28,7 +28,7 @@ data/Planetoid/
 random_notes.txt
 GNN-implementations/data
 GNN-implementations/profiles
-experiments/results
+experiment_results/results
 !**/measurements.csv
 
 .env

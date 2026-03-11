@@ -11,7 +11,7 @@ from .measurements_plots import plot_phase_summary, plot_validation_convergence,
 class Measurer:
     def __init__(self, config: dict):
         # Handles all results path logic internally
-        results_path = Path(__file__).parent.parent.parent / "experiments" / "results"
+        results_path = Path(__file__).parent.parent.parent / "experiment_results" / "results"
         results_path.mkdir(parents=True, exist_ok=True)
 
         # Find next available run_N
