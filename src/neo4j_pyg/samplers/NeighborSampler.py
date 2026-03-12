@@ -27,7 +27,7 @@ class NeighborSampler(BaseSampler):
         expand_revisited: bool = False,
         direction: str = 'both', #'outgoing', 'incoming', 'both' (default)
         rel_type: str = None,  # optional: restrict to a relationship type
-        node_label: str = None,  # optional: restrict seed/neighbor label
+        node_label: str = None,  # optional: restrict node label
     ):
         self.instance_id = NeighborSampler._instance_counter
         NeighborSampler._instance_counter += 1
@@ -84,7 +84,6 @@ class NeighborSampler(BaseSampler):
               UNWIND frontier AS src
               MATCH (src){edge_pat}(neighbor{nbr_label})
 
-              // IMPORTANT: sample EDGES (r) not DISTINCT neighbors
               WITH src, collect(r) AS cand_rels, visited, edges
               WITH src,
                    apoc.coll.randomItems(cand_rels, {k}, {replace_s}) AS picked_rels,
@@ -94,16 +93,12 @@ class NeighborSampler(BaseSampler):
               WITH visited, edges,
                    // neighbors corresponding to picked edges
                    collect([rel IN picked_rels | 
-                     CASE WHEN {str(self.directed).lower()} THEN {endpoint_selector}(rel) 
-                          ELSE CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
-                     END
+                     CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
                    ]) AS picked_nbrs_list,
                    collect([rel IN picked_rels | {{
                      src_id: src.{self.nodeid_property},
                      dst_id: (
-                       CASE WHEN {str(self.directed).lower()} THEN {endpoint_selector}(rel)
-                            ELSE CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
-                       END
+                       CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END
                      ).{self.nodeid_property}
                    }}]) AS es_list
 
@@ -136,9 +131,10 @@ class NeighborSampler(BaseSampler):
 
         q.append(f"""
         UNWIND edges AS e
-        // no DISTINCT: closer to PyG semantics (edge multiplicity preserved)
         RETURN e.src_id AS src, e.dst_id AS dst
         """)
+        
+        print("\n".join(q))
 
         return "\n".join(q)
 

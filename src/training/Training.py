@@ -89,6 +89,17 @@ class Trainer:
             self.graph_store = None
             self.sampler = None
             self.num_neighbors = num_neighbors
+            import torch_geometric.typing as T
+
+            if T.WITH_PYG_LIB and T.WITH_TORCH_SPARSE:
+                backend = "pyg-lib"
+            elif T.WITH_PYG_LIB:
+                backend = "pyg-lib"
+            elif T.WITH_TORCH_SPARSE:
+                backend = "torch-sparse"
+            else:
+                backend = "pure-python"
+            self.measurer.log_event("sampling_backend", backend)
             self.train_loader = NeighborLoader(
                 data,
                 # Sample 30 neighbors for each node for 2 iterations

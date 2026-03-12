@@ -7,21 +7,15 @@ from torch_geometric.transforms import NormalizeFeatures
 import torch.nn as nn
 import torch
 from torch import optim
-from torch_geometric.data.graph_store import EdgeLayout
 
 # Allow running this file directly by adding GNN-implementations to sys.path
 # GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 # if str(GNN_IMPL_DIR) not in sys.path:
 #     sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from training.evaluate import evaluate
 from neo4j_pyg.models import GCN
-from neo4j_pyg.feature_stores import InMemoryFeatureStore
-from neo4j_pyg.graph_stores import InMemoryGS, BaseLineGS
-from neo4j_pyg.samplers import InMemorySampler
 from training.Training import Trainer, put_nodeLoader_args_map
 from benchmarking_tools import Measurer
-from Neo4jConnection import Neo4jConnection
 
 
 def main(config: dict):
