@@ -20,7 +20,7 @@ from benchmarking_tools import Measurer
 
 def main(config: dict):
     # Get dataset
-    dataset = Planetoid(root='data/Planetoid', name='Cora', transform=NormalizeFeatures())      
+    dataset = Planetoid(root='data/Planetoid', name='Cora')      
     graph = dataset[0]
     dataset_name = 'cora'
     train_indices = torch.where(graph.train_mask.reshape(-1))[0].tolist()

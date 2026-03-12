@@ -25,7 +25,7 @@ class NeighborSampler(BaseSampler):
         num_neighbors: List[int],
         sample_with_replacement: bool = False,
         expand_revisited: bool = False,
-        direction: str = 'both', #'outgoing', 'incoming', 'both' (default)
+        direction: str = 'incoming', #'outgoing', 'incoming', 'both' (default)
         rel_type: str = None,  # optional: restrict to a relationship type
         node_label: str = None,  # optional: restrict node label
     ):
@@ -52,17 +52,13 @@ class NeighborSampler(BaseSampler):
         # - direction='both' => (src)-[r]-(nbr)
         rel = "" if self.rel_type is None else f":{self.rel_type}"
         
-        endpoint_selector = None
         edge_pat = None
         if self.direction == 'incoming':
             edge_pat = f"<-[r{rel}]-"
-            endpoint_selector = "startNode"
         elif self.direction == 'outgoing':
             edge_pat = f"-[r{rel}]->"
-            endpoint_selector = "endNode"
         else:
             edge_pat = f"-[r{rel}]-"
-            endpoint_selector = "endNode"  # arbitrary for undirected
 
         # Optional label constraints:
         seed_label = "" if self.node_label is None else f":{self.node_label}"
@@ -70,7 +66,6 @@ class NeighborSampler(BaseSampler):
 
         q = []
 
-        # IMPORTANT: batch seeds into a single row (global frontier/visited)
         q.append(f"""
         MATCH (s{seed_label})
         WHERE s.{self.nodeid_property} IN $seed_ids
@@ -134,8 +129,6 @@ class NeighborSampler(BaseSampler):
         RETURN e.src_id AS src, e.dst_id AS dst
         """)
         
-        print("\n".join(q))
-
         return "\n".join(q)
 
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
@@ -148,6 +141,11 @@ class NeighborSampler(BaseSampler):
                 kwargs={"seed_ids": seeds_list},
                 query=self.query,
             )
+            # Ensure seeds are included even if no edges are sampled.
+            if isinstance(unique_nodes, torch.Tensor):
+                unique_nodes = torch.unique(torch.cat([unique_nodes, seeds]))
+            else:
+                unique_nodes = list(set(unique_nodes).union(seeds_list))
             return SamplerOutput(
                 node=unique_nodes,
                 row=edge_index_local[0],
