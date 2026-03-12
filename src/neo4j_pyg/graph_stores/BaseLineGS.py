@@ -33,14 +33,6 @@ class BaseLineGS(GraphStore):
         elif self.split_property_type != "str":
             raise ValueError(f"Unsupported split property type: {self.split_property_type}")
 
-        # query = """
-        # MATCH (n { $splitkeyname: $split })
-        # """ + shuffle_clause + f"""
-        # LIMIT toInteger(coalesce($n, 9223372036854775807))
-        # SKIP toInteger(coalesce($offset, 0))
-        # RETURN n.{self.dataset_cfg["nodeid_property"]} AS id
-        # """
-        
         query = """
         MATCH (n { """ + self.split_property_name + """: $split })
         """ + shuffle_clause + f"""
