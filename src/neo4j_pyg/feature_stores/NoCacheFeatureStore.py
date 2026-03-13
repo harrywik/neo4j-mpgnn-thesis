@@ -32,11 +32,17 @@ class NoCacheFeatureStore(FeatureStore):
         self.database_name = database_name if database_name else dataset_name
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
-        node_ids: list = attr.index.tolist()
-
         prop = self.target_property if attr.attr_name == "y" else self.feature_property
 
-        # `subject` is hardcoded as the categorical target for now
+        # Sort node IDs to align with the query's ORDER BY ASC, then restore
+        # the original order at the end via a single numpy fancy-index.
+        # This eliminates the data_map dict, the ordered-list comprehension,
+        # and per-record numpy allocations.
+        node_ids_arr = np.asarray(attr.index, dtype=np.int64)
+        sort_perm = np.argsort(node_ids_arr, kind="stable")
+        inv_perm = np.argsort(sort_perm, kind="stable")
+        sorted_ids = node_ids_arr[sort_perm].tolist()
+
         query = f"""
         MATCH (n)
         WHERE n.{self.nodeid_property} IN $node_ids
@@ -46,41 +52,51 @@ class NoCacheFeatureStore(FeatureStore):
 
         if self.measurer:
             self.measurer.log_event("cache_hit", 0)
-            self.measurer.log_event("cache_miss", len(node_ids))
+            self.measurer.log_event("cache_miss", len(sorted_ids))
             self.measurer.log_event("remote_feature_fetch", 1)
+
         with self.driver.session(database=self.database_name) as session:
-            result = session.run(query, node_ids=node_ids)
-            data_map = {}
-            if prop == self.feature_property:
-                for record in result:
-                    raw_blob = record["value"]
-                    
-                    # Asumption embedding is saved as float32 in DB
-                    if self.feature_property_type == "byte[]":
-                        data_map[record["id"]] = np.frombuffer(raw_blob, dtype=np.float32).copy()
-                    elif self.feature_property_type == "f64[]":
-                        data_map[record["id"]] = np.asarray(raw_blob, dtype=np.float32)
-                    else:
-                        raise ValueError("feat wasn't assigned a value")
-            else:
-                for record in result:
-                    label_value = record["value"]
-                    if isinstance(label_value, str):
-                        if label_value not in self._labels:
-                            self._labels[label_value] = len(self._labels)
-                        label_value = self._labels[label_value]
-                    data_map[record["id"]] = label_value
+            result = session.run(query, node_ids=sorted_ids)
+            records = list(result)
+
         if self.measurer:
-            self.measurer.log_event("remote_feature_recieved", 1)     
-        # Reconstruct in correct order
-        ordered_list = [data_map[i] for i in node_ids]
+            self.measurer.log_event("remote_feature_recieved", 1)
+
+        n = len(records)
+        if n == 0:
+            if prop == self.feature_property:
+                return torch.zeros((0, 0), dtype=torch.float32)
+            return torch.zeros(0, dtype=torch.int64)
+
         if prop == self.feature_property:
-            # np.stack is faster than torch.stack for numpy inputs
-            final_array = np.stack(ordered_list)
-            
-            return torch.from_numpy(final_array)
-        
-        return torch.tensor(ordered_list, dtype=torch.int64)
+            # Pre-allocate the full feature matrix and fill row-by-row.
+            # Records arrive in sorted order (ORDER BY matches sorted_ids),
+            # so no dict is needed — inv_perm restores the original order.
+            if self.feature_property_type == "byte[]":
+                feat_dim = len(np.frombuffer(bytes(records[0]["value"]), dtype=np.float32))
+                final_array = np.empty((n, feat_dim), dtype=np.float32)
+                for i, rec in enumerate(records):
+                    final_array[i] = np.frombuffer(bytes(rec["value"]), dtype=np.float32)
+            elif self.feature_property_type == "f64[]":
+                feat_dim = len(records[0]["value"])
+                final_array = np.empty((n, feat_dim), dtype=np.float32)
+                for i, rec in enumerate(records):
+                    final_array[i] = rec["value"]
+            else:
+                raise ValueError(f"Unsupported feature_property_type: {self.feature_property_type!r}")
+
+            return torch.from_numpy(final_array[inv_perm])
+
+        # Labels: collect in sorted order, encode strings, restore order.
+        label_ints = np.empty(n, dtype=np.int64)
+        for i, rec in enumerate(records):
+            v = rec["value"]
+            if isinstance(v, str):
+                if v not in self._labels:
+                    self._labels[v] = len(self._labels)
+                v = self._labels[v]
+            label_ints[i] = v
+        return torch.from_numpy(label_ints[inv_perm])
 
     @staticmethod
     def _key(attr: TensorAttr) -> Tuple[Optional[NodeType], str]:

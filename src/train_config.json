@@ -1,7 +1,10 @@
 {
-  "lr": 0.01,
-  "batch_size": 140,
-  "max_epochs": 30,
-  "patience": 100,
-  "min_delta": 0.001
+  "lr": 1e-3,
+  "batch_size": 50,
+  "max_epochs": 200,
+  "patience": 200,
+  "min_delta": 0.01,
+  "shuffle":"False",
+  "initialise_weights":"True",
+  "drop_last": "True"
 }

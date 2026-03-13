@@ -1,0 +1,74 @@
+{
+  "Neo4jNeighborSampler": {
+    "n_runs_completed": 15,
+    "num_epochs_in_plot": 100,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7745333568019986,
+      "final_validation_accuracy": 0.7609333564606214,
+      "throughput_samples_per_s": 305.0572346439041,
+      "time_to_best_accuracy_s": 37.675463927801076,
+      "training_time_s": 45.895035177795215,
+      "avg_batch_nodes": 354.7096666666667,
+      "avg_batch_edges": 566.3145000000001,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.03035421561992553,
+      "training_mean_s": 0.0014741742503586767,
+      "sampling_overhead_fraction": 0.9536587493799679,
+      "batch_nodes_cv": 0.08654815629076933,
+      "epochs_to_best_accuracy": 78.13333333333334,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.01046815314864726,
+      "final_validation_accuracy": 0.012041410518897847,
+      "throughput_samples_per_s": 2.023167163914286,
+      "time_to_best_accuracy_s": 7.9984947230740335,
+      "training_time_s": 0.30275685568249255,
+      "avg_batch_nodes": 10.603695105428532,
+      "avg_batch_edges": 17.920032603206934,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0007143492358230823,
+      "training_mean_s": 4.4960293647334086e-05,
+      "sampling_overhead_fraction": 0.001792806400030896,
+      "batch_nodes_cv": 0.03602711754817262,
+      "epochs_to_best_accuracy": 17.346917753755434,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "PyGNeighborLoader": {
+    "n_runs_completed": 15,
+    "num_epochs_in_plot": 100,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7860000239794596,
+      "final_validation_accuracy": 0.7754666903537132,
+      "throughput_samples_per_s": 12382.925449145521,
+      "time_to_best_accuracy_s": 2.46440265000565,
+      "training_time_s": 1.1309233389329165,
+      "avg_batch_nodes": 353.2671666666667,
+      "avg_batch_edges": 569.4291666666667,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0003387763322389219,
+      "training_mean_s": 0.001231198597951637,
+      "sampling_overhead_fraction": 0.2157823653874697,
+      "batch_nodes_cv": 0.1071480518476718,
+      "epochs_to_best_accuracy": 83.13333333333334,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.002190890250226078,
+      "final_validation_accuracy": 0.006427717998387749,
+      "throughput_samples_per_s": 212.4006353173889,
+      "time_to_best_accuracy_s": 0.12387615402103799,
+      "training_time_s": 0.01949261415378701,
+      "avg_batch_nodes": 0.22360654929784263,
+      "avg_batch_edges": 0.14219606964408613,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 1.2733242430441288e-05,
+      "training_mean_s": 2.9098686518762847e-05,
+      "sampling_overhead_fraction": 0.006439653496978116,
+      "batch_nodes_cv": 0.000553203682462709,
+      "epochs_to_best_accuracy": 10.953639679221798,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  }
+}

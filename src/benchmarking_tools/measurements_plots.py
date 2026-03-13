@@ -5,6 +5,7 @@ from pathlib import Path
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 import pandas as pd
 import numpy as np
 
@@ -37,15 +38,30 @@ def plot_validation_convergence(csv_path: Path, df: pd.DataFrame) -> None:
     val_accs = get_validation_accuracies(df).copy()
     if len(val_accs):
         val_accs = val_accs.reset_index(drop=True)
-        epochs = list(range(1, len(val_accs) + 1))
+        epochs = np.arange(1, len(val_accs) + 1, dtype=float)
         acc_values = pd.to_numeric(val_accs["Value"], errors="coerce")
+        mask = acc_values.notna()
+        if not mask.any():
+            return
+
+        epochs = epochs[mask.to_numpy()]
+        acc_values = acc_values[mask].to_numpy(dtype=float)
+
         fig, ax = plt.subplots(figsize=(6, 4))
-        ax.plot(epochs, acc_values, marker="o", linestyle="-")
+
+        if len(epochs) >= 2:
+            interp_epochs = np.linspace(float(epochs.min()), float(epochs.max()), num=max(200, len(epochs) * 10))
+            interp_acc = np.interp(interp_epochs, epochs, acc_values)
+            ax.plot(interp_epochs, interp_acc, linestyle="-", color="#4C78A8", linewidth=1.8)
+
+        ax.scatter(epochs, acc_values, color="#4C78A8", s=18, zorder=3)
         ax.set_title("Validation accuracy convergence")
         ax.set_xlabel("epoch")
         ax.set_ylabel("validation accuracy")
         ax.set_ylim(0.0, 1.0)
-        ax.set_xticks(epochs)
+        ax.set_xlim(float(epochs.min()), float(epochs.max()))
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True))
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
         fig.tight_layout()
         conv_path = csv_path.with_name("validation_convergence.png")
         fig.savefig(conv_path, dpi=150)

@@ -29,7 +29,9 @@ random_notes.txt
 GNN-implementations/data
 GNN-implementations/profiles
 experiment_results/results
+experiment_results/sampler_comparison
 !**/measurements.csv
 
 .env
 notes
+

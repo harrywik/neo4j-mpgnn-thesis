@@ -16,7 +16,7 @@ from neo4j_pyg.models import GCN
 from training.Training import Trainer, put_nodeLoader_args_map
 from neo4j_pyg.feature_stores import NoCacheFeatureStore
 from neo4j_pyg.graph_stores import BaseLineGS
-from neo4j_pyg.samplers import UniformSampler, NeighborSampler
+from neo4j_pyg.samplers import UniformSampler, OldNeighborSampler, Neo4jNeighborSampler
 from Neo4jConnection import Neo4jConnection
 from benchmarking_tools import Measurer
 
@@ -34,23 +34,20 @@ def main(config: dict):
     feature_store = NoCacheFeatureStore(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
     graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
     num_neighbors = [10, 5]
-    sampler = NeighborSampler(graph_store, num_neighbors=num_neighbors)
+    sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors)
 
-    model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 7}
+    model_args = {"in_dim": 1433, "hidden_dim1": 12, "hidden_dim2": 12, "nbr_classes": 7, "init_weights": config.get("init_weights")}
     model = GCN(**model_args)
-    lr = config.get("lr", 1e-2)
 
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
     measurer.write_to_configresult("sampler", {"name": "NeighborSampler", "num_neighbors": num_neighbors})
     measurer.write_to_configresult("feature_store", "NoCacheFeatureStore")
     measurer.write_to_configresult("graph_store", "BaseLineGS")
-    # measurer.write_to_configresult("train_val_test_split", split_ratios)
-    measurer.write_to_configresult("lr", lr)
     measurer.write_to_configresult("dataset", dataset_name)
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,
-        shuffle=True,
+        shuffle=config.get("shuffle"),
     )
     measurer.write_to_configresult("nodeloader_args", nodeloader_args)
     
@@ -60,11 +57,11 @@ def main(config: dict):
         data=(feature_store, graph_store),
         sampler=sampler,
         min_delta=config.get('min_delta'),
+        lr=config.get('lr'),
         patience=config.get('patience'),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         measurer=measurer,
-        lr=lr
     )
 
     trainer.train(max_epochs=config.get("max_epochs"))

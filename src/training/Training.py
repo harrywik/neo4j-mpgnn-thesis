@@ -21,12 +21,13 @@ class Trainer:
         patience:int,
         min_delta:float,
         measurer: Measurer,
+        lr:float,
         num_neighbors: list[int] | None = None,
         train_indices: torch.Tensor | None = None,
         sampler: BaseSampler = None,
         snapshot_path: str | None = None,
         batch_size: int = 100,
-        lr:float = 1e-2,
+        drop_last: bool = True,
         optimizer: optim.Optimizer = None,
         max_train_seconds: int = 3600,
         device: str = "cpu",
@@ -53,6 +54,7 @@ class Trainer:
                 persistent_workers=True,
                 pin_memory=False,
                 shuffle=False,
+                drop_last=drop_last,
             )
             if self.nodeloader_args["pickle_safe"]:
                 self.train_loader = NodeLoader(
@@ -67,6 +69,7 @@ class Trainer:
                     multiprocessing_context="spawn",
                     prefetch_factor=self.nodeloader_args["prefetch_factor"],
                     pin_memory=self.nodeloader_args["pin_memory"],
+                    drop_last=drop_last
                 )
             else:
                 self.train_loader = NodeLoader(
@@ -76,6 +79,7 @@ class Trainer:
                     batch_size=self.batch_size,
                     shuffle=self.nodeloader_args["shuffle"],
                     pin_memory=self.nodeloader_args["pin_memory"],
+                    drop_last=drop_last
                 )
             self.measurer.log_event("nbr_training_datapoints", len(self.train_indices))
         # If data is not a tuple, we assume it's already a Data or HeteroData object ready for training, and we don't use a sampler.
@@ -109,7 +113,8 @@ class Trainer:
                 replace=False, # default is false too
                 disjoint=False, # default is false too
                 input_nodes=data.train_mask,
-                subgraph_type="directional" #bidirectional, induced, directional (default)
+                subgraph_type="directional", #bidirectional, induced, directional (default)
+                drop_last=drop_last
             )
             self.measurer.log_event("nbr_training_datapoints", int(data.train_mask.sum().item()))
         self.model = model
