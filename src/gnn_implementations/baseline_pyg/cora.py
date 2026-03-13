@@ -13,9 +13,10 @@ from torch import optim
 # if str(GNN_IMPL_DIR) not in sys.path:
 #     sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from neo4j_pyg.models import GCN
+from neo4j_pyg.models import GCN, TinyGCN
 from training.Training import Trainer, put_nodeLoader_args_map
 from benchmarking_tools import Measurer
+from training.evaluate import evaluate
 
 
 def main(config: dict):
@@ -27,15 +28,13 @@ def main(config: dict):
 
 
     # set seed for reprodicability and create model
-    model = GCN(in_dim=1433, hidden_dim1=32, hidden_dim2=32, nbr_classes=7)
-    criterion = nn.CrossEntropyLoss()
-    lr = config.get("lr")
-    optimizer = optim.Adam(model.parameters(), lr=lr, weight_decay=5e-4)
+    model = GCN(in_dim=1433, hidden_dim1=12, hidden_dim2=12, nbr_classes=7, init_weights=config.get("init_weights"))
+    # model = TinyGCN(in_dim=1433, hidden_dim=20, nbr_classes=7, init_weights=config.get("init_weights"))
 
     # train model
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=False,
-        shuffle=True,
+        shuffle=config.get("shuffle"),
     )
     
     num_neighbors = [10, 5]
@@ -47,11 +46,10 @@ def main(config: dict):
         model=model,
         data=graph,
         measurer=measurer,
-        optimizer=optimizer,
-        criterion=criterion,
         train_indices=train_indices,
         patience=config.get("patience"),
-        min_delta=0.001,#config.get("min_delta"),
+        min_delta=config.get("min_delta"),
+        lr=config.get("lr"),
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         num_neighbors=num_neighbors,

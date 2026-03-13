@@ -1,5 +1,6 @@
-from .GCN import GCN
+from .GCN import GCN, TinyGCN
 
 __all__ = [
     "GCN",
+    "TinyGCN",
 ]

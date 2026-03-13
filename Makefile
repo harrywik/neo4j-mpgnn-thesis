@@ -5,10 +5,11 @@ GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	cache_multsampler cache_neo4j distributed
+EXPERIMENTS := sampler_comparison
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS)
 
 help:
 	@echo "Usage: make <implementation_folder> [DATASET=cora]"
@@ -43,3 +44,6 @@ cache_neo4j_cora:
 
 cache_neo4j_arxiv:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/cache_neo4j/arxiv.py
+
+sampler_comparison:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) src/comparison_experiments/sampler_comparison/run_experiment.py

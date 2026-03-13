@@ -1,0 +1,99 @@
+{
+  "run": {
+    "csv": "/Users/victorpekkari/Desktop/neo4j-mpgnn-thesis/experiment_results/sampler_comparison/comparison_15/Neo4jNeighborSampler/run_7/measurements.csv",
+    "runtime_s": 48.17689937498653,
+    "training_time_s": 46.31033129099524,
+    "epochs_completed": 100,
+    "batches_seen": 400,
+    "nbr_training_datapoints": 140.0
+  },
+  "metrics": {
+    "throughput_samples_per_s": 302.3083534434187,
+    "epoch_time_s": {
+      "count": 100,
+      "total_s": 13.146526284166612,
+      "mean_s": 0.13146526284166613,
+      "p50_s": 0.1288009374839021,
+      "p90_s": 0.13816814578603953,
+      "p99_s": 0.18800113949662775,
+      "min_s": 0.12011133402120322,
+      "max_s": 0.19409929201356135
+    },
+    "sampling_phase_time_s": {
+      "count": 400,
+      "total_s": 12.51759017095901,
+      "mean_s": 0.03129397542739753,
+      "p50_s": 0.03149150050012395,
+      "p90_s": 0.0364754999987781,
+      "p99_s": 0.04707181734120236,
+      "min_s": 0.024758792016655207,
+      "max_s": 0.0837097920011729
+    },
+    "training_phase_time_s": {
+      "count": 400,
+      "total_s": 0.5947129990963731,
+      "mean_s": 0.0014867824977409327,
+      "p50_s": 0.0014481455000350252,
+      "p90_s": 0.0017215375090017914,
+      "p99_s": 0.0020058554114075373,
+      "min_s": 0.0010620829998515546,
+      "max_s": 0.01275033300044015
+    },
+    "convergence_time_s": null,
+    "converged_epoch": null,
+    "avg_cpu_utilization": 57.258695652173905,
+    "final_validation_accuracy": 0.7700000235192539,
+    "best_validation_accuracy": 0.7920000241290717,
+    "time_to_first_validation_accuracy_s": 1.9643024999822956,
+    "time_to_best_accuracy_s": 38.84440008297679,
+    "final_validation_loss": 0.8052564859390259,
+    "best_validation_loss": 0.8052564859390259,
+    "time_to_best_loss_s": 48.17688758298755,
+    "final_test_accuracy": 0.7910000239940489,
+    "best_test_accuracy": 0.7910000239940489,
+    "time_to_best_test_accuracy_s": 48.655643040983705,
+    "remote_feature_latency_s": {
+      "count": 0,
+      "total_s": 0.0,
+      "mean_s": null,
+      "p50_s": null,
+      "p90_s": null,
+      "p99_s": null,
+      "min_s": null,
+      "max_s": null
+    },
+    "remote_feature_total_s": 0.0,
+    "cache_hits": 0,
+    "cache_misses": 0,
+    "cache_hit_rate": null,
+    "validation_time_s": {
+      "count": 100,
+      "total_s": 33.58279121416854,
+      "mean_s": 0.3358279121416854,
+      "p50_s": 0.3356034794996958,
+      "p90_s": 0.34737685029685966,
+      "p99_s": 0.3951756861462491,
+      "min_s": 0.31530487502459437,
+      "max_s": 0.3993232079956215
+    },
+    "saving_weights_time_s": {
+      "count": 77,
+      "total_s": 0.00019850191893056035,
+      "mean_s": 2.577946999098186e-06,
+      "p50_s": 2.1249870769679546e-06,
+      "p90_s": 2.5584071408957246e-06,
+      "p99_s": 1.1431066086515644e-05,
+      "min_s": 1.7499842215329409e-06,
+      "max_s": 3.245798870921135e-05
+    },
+    "batch_train_loss_mean": 0.5600459171365947,
+    "avg_batch_nodes": 364.7,
+    "avg_batch_edges": 574.01,
+    "avg_seed_node_ratio": 0.084103327693965
+  },
+  "notes": [
+    "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",
+    "throughput_samples_per_s assumes nbr_training_datapoints is per-epoch; if it's total across training, remove the * epochs_completed multiplier.",
+    "remote_feature_total_s is a proxy for time spent waiting on remote feature reads (DB reads)."
+  ]
+}

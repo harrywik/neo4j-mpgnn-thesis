@@ -50,12 +50,14 @@ class BaseLineGS(GraphStore):
     def sample_from_nodes(self, kwargs, query:str):
         with self.driver.session(database=self.database_name) as session:
             result = session.run(query, **kwargs)
-            
-            # Extract edges and format for PyG
             edges = [[r["src"], r["dst"]] for r in result]
-            edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
-        
-        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)    
+
+        if len(edges) == 0:
+            empty = torch.zeros((2, 0), dtype=torch.long)
+            return torch.tensor([], dtype=torch.long), empty
+
+        edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
+        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)
         edge_index_local = local_indices.view(2, -1)
         return unique_nodes, edge_index_local
             
