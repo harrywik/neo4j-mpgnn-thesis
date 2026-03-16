@@ -1,0 +1,39 @@
+{
+    "lr": 0.001,
+    "batch_size": 30,
+    "max_epochs": 100,
+    "patience": 200,
+    "min_delta": 0.01,
+    "shuffle": false,
+    "initialise_weights": true,
+    "drop_last": true,
+    "model": {
+        "name": "GCN",
+        "args": {
+            "in_dim": 1433,
+            "hidden_dim1": 12,
+            "hidden_dim2": 12,
+            "nbr_classes": 7,
+            "init_weights": null
+        }
+    },
+    "sampler": {
+        "name": "NeighborSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "NoCacheFeatureStore",
+    "graph_store": "Neo4SingleGS",
+    "dataset": "cora",
+    "nodeloader_args": {
+        "pickle_safe": false,
+        "num_workers": 0,
+        "prefetch_factor": 2,
+        "filter_per_worker": false,
+        "persistent_workers": false,
+        "pin_memory": false,
+        "shuffle": false
+    }
+}
