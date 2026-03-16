@@ -146,6 +146,7 @@ def main() -> None:
         user = os.environ["USERNAME"]
         password = os.environ["PASSWORD"]
         driver = Neo4jConnection(uri, user, password).get_driver()
+
         neo4j_feature_store = NoCacheFeatureStore(
             driver,
             database_name="neo4j",
@@ -198,6 +199,17 @@ def main() -> None:
             measurer.write_to_configresult("run_idx", run_idx)
             measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
             measurer.write_to_configresult("num_neighbors", num_neighbors)
+            # Attach the per-run measurer to the shared graph/feature stores so
+            # that BaseLineGS.sample_from_nodes and NoCacheFeatureStore._get_tensor
+            # can log sub-phase timings without holding a direct reference.
+            if neo4j_graph_store is not None:
+                neo4j_graph_store.measurer = measurer
+            if neo4j_feature_store is not None:
+                neo4j_feature_store.measurer = measurer
+                # Re-log the RTT baseline measured at feature store construction.
+                rtt = getattr(neo4j_feature_store, "_network_baseline_ms", None)
+                if rtt is not None:
+                    measurer.log_event("network_baseline_ms", rtt)
 
             model = _make_model(model_args)
 
@@ -232,6 +244,12 @@ def main() -> None:
             trainer.train(max_epochs=max_epochs)
             # Trainer.train() calls measurer.close() + summarize() internally,
             # writing per-run plots and measurements.json to run_dir.
+
+            # Clear the per-run measurer from shared stores to avoid stale refs.
+            if neo4j_graph_store is not None:
+                neo4j_graph_store.measurer = None
+            if neo4j_feature_store is not None:
+                neo4j_feature_store.measurer = None
 
     # ------------------------------------------------------------------
     # Comparison plots

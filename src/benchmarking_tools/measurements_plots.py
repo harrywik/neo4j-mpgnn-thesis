@@ -108,6 +108,62 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame) -> None:
     plt.close(fig)
 
 
+def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
+    """Bar chart of per-batch sub-phase latencies from a single run.
+
+    Reads the scalar fields written by the micro-timers in
+    ``BaseLineGS`` / ``NoCacheFeatureStore`` and produces a horizontal bar
+    chart saved as ``subphase_latency.png`` next to the CSV.
+    """
+    metrics = summary.get("metrics", {})
+
+    segments = [
+        ("network_baseline_ms",    "Network RTT baseline",          "#888888"),
+        ("topo_first_record_ms",   "Topology: server exec + RTT",   "#4C78A8"),
+        ("topo_transfer_ms",       "Topology: data transfer",       "#7BAFD4"),
+        ("topo_etl_ms",            "Topology: Python ETL",          "#AED4F0"),
+        ("feat_x_first_record_ms", "Feature-x: server exec + RTT", "#F58518"),
+        ("feat_x_transfer_ms",     "Feature-x: data transfer",      "#F7A850"),
+        ("feat_x_etl_ms",          "Feature-x: Python ETL",         "#FAC980"),
+        ("feat_y_first_record_ms", "Feature-y: server exec + RTT", "#54A24B"),
+        ("feat_y_transfer_ms",     "Feature-y: data transfer",      "#7EC47A"),
+        ("feat_y_etl_ms",          "Feature-y: Python ETL",         "#AADFAA"),
+    ]
+
+    labels, values, colors = [], [], []
+    for key, label, color in segments:
+        v = metrics.get(key)
+        if v is not None:
+            labels.append(label)
+            values.append(float(v))
+            colors.append(color)
+
+    if not labels:
+        return
+
+    fig, ax = plt.subplots(figsize=(7, max(3, len(labels) * 0.55)))
+    y_pos = np.arange(len(labels))
+    bars = ax.barh(y_pos, values, color=colors)
+
+    for bar, val in zip(bars, values):
+        ax.text(
+            bar.get_width() + max(values) * 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.2f} ms",
+            va="center", ha="left", fontsize=8,
+        )
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean ms per batch")
+    ax.set_title("Sub-phase latency breakdown")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(csv_path.with_name("subphase_latency.png"), dpi=150)
+    plt.close(fig)
+
+
 def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame) -> None:
     cpu = df[df["Event"] == "cpu_utilization_percentage"][["Time", "Value"]].copy()
     ram = df[df["Event"] == "ram_usage_mb"][["Time", "Value"]].copy()

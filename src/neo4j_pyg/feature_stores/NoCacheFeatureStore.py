@@ -1,3 +1,4 @@
+import time
 from pathlib import Path
 import sys
 
@@ -30,6 +31,24 @@ class NoCacheFeatureStore(FeatureStore):
         self.nodeid_property = nodeid_property
         self.feature_property_type = feature_property_type
         self.database_name = database_name if database_name else dataset_name
+        self._measure_rtt()
+
+    def _measure_rtt(self, n_probes: int = 10) -> None:
+        """Run ``RETURN 1`` n_probes times and log the mean as ``network_baseline_ms``.
+
+        Called once at construction time so the RTT baseline is always available
+        in measurements regardless of whether the experiment orchestrator sets it.
+        If a measurer is attached, the value is logged immediately.
+        """
+        samples: list[float] = []
+        with self.driver.session(database=self.database_name) as session:
+            for _ in range(n_probes):
+                t0 = time.monotonic()
+                session.run("RETURN 1 AS x").consume()
+                samples.append((time.monotonic() - t0) * 1000)
+        self._network_baseline_ms = float(sum(samples) / len(samples))
+        if self.measurer is not None:
+            self.measurer.log_event("network_baseline_ms", self._network_baseline_ms)
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         prop = self.target_property if attr.attr_name == "y" else self.feature_property
@@ -50,20 +69,41 @@ class NoCacheFeatureStore(FeatureStore):
         ORDER BY n.{self.nodeid_property} ASC
         """
 
+        # Prefix used for per-phase timing events ("feat_x_" or "feat_y_").
+        phase = "feat_y_" if attr.attr_name == "y" else "feat_x_"
+
         if self.measurer:
             self.measurer.log_event("cache_hit", 0)
             self.measurer.log_event("cache_miss", len(sorted_ids))
             self.measurer.log_event("remote_feature_fetch", 1)
 
         with self.driver.session(database=self.database_name) as session:
+            t_send = time.monotonic()
             result = session.run(query, node_ids=sorted_ids)
-            records = list(result)
+            t_query_sent = time.monotonic()
+
+            # peek() blocks until the first row arrives.
+            # t_first - t_query_sent ≈ network RTT + server execution time.
+            first = result.peek()
+            t_first_record = time.monotonic()
+
+            # Drain remaining rows.
+            # t_all - t_first ≈ data transfer for the rest of the result set.
+            records = list(result) if first is not None else []
+            t_all_records = time.monotonic()
+
+        t_etl_start = time.monotonic()
 
         if self.measurer:
             self.measurer.log_event("remote_feature_recieved", 1)
+            self.measurer.log_event(f"{phase}query_sent_ms", (t_query_sent - t_send) * 1000)
+            self.measurer.log_event(f"{phase}first_record_ms", (t_first_record - t_query_sent) * 1000)
+            self.measurer.log_event(f"{phase}transfer_ms", (t_all_records - t_first_record) * 1000)
 
         n = len(records)
         if n == 0:
+            if self.measurer:
+                self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
             if prop == self.feature_property:
                 return torch.zeros((0, 0), dtype=torch.float32)
             return torch.zeros(0, dtype=torch.int64)
@@ -85,6 +125,8 @@ class NoCacheFeatureStore(FeatureStore):
             else:
                 raise ValueError(f"Unsupported feature_property_type: {self.feature_property_type!r}")
 
+            if self.measurer:
+                self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
             return torch.from_numpy(final_array[inv_perm])
 
         # Labels: collect in sorted order, encode strings, restore order.
@@ -96,6 +138,8 @@ class NoCacheFeatureStore(FeatureStore):
                     self._labels[v] = len(self._labels)
                 v = self._labels[v]
             label_ints[i] = v
+        if self.measurer:
+            self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
         return torch.from_numpy(label_ints[inv_perm])
 
     @staticmethod
