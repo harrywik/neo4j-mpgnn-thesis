@@ -143,6 +143,29 @@ def aggregate_runs(
         if rft is not None and tt is not None and tt > 0:
             _collect("feature_fetch_overhead_fraction", rft / tt)
 
+        # Sub-phase micro-timer scalars (mean ms per batch/call)
+        for key in (
+            "topo_query_sent_ms", "topo_first_record_ms",
+            "topo_transfer_ms", "topo_etl_ms",
+            "feat_x_query_sent_ms", "feat_x_first_record_ms",
+            "feat_x_transfer_ms", "feat_x_etl_ms",
+            "feat_y_query_sent_ms", "feat_y_first_record_ms",
+            "feat_y_transfer_ms", "feat_y_etl_ms",
+            "network_baseline_ms",
+        ):
+            _collect(key, metrics.get(key))
+
+        # Derived: estimated server exec times (first_record - RTT baseline)
+        rtt = metrics.get("network_baseline_ms")
+        if rtt is not None:
+            topo_fr = metrics.get("topo_first_record_ms")
+            if topo_fr is not None:
+                _collect("topo_server_exec_ms", max(0.0, topo_fr - rtt))
+            fx_fr = metrics.get("feat_x_first_record_ms")
+            fy_fr = metrics.get("feat_y_first_record_ms")
+            if fx_fr is not None and fy_fr is not None:
+                _collect("feat_server_exec_ms", max(0.0, fx_fr + fy_fr - 2 * rtt))
+
     # Epoch-based aggregation (trim to shortest run)
     if epoch_arrays:
         min_len = min(len(a) for a in epoch_arrays)
@@ -411,6 +434,148 @@ def plot_throughput(agg: dict[str, dict], out_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Latency breakdown plots
+# ---------------------------------------------------------------------------
+
+# Ordered segment definitions for the stacked bar chart.
+# Each entry: (scalar_key, display_label, colour)
+_LATENCY_SEGMENTS = [
+    ("topo_first_record_ms",  "Topo: server+RTT",   "#4C78A8"),
+    ("topo_transfer_ms",      "Topo: transfer",      "#7BAFD4"),
+    ("topo_etl_ms",           "Topo: ETL",           "#AED4F0"),
+    ("feat_x_first_record_ms","Feat-x: server+RTT",  "#F58518"),
+    ("feat_x_transfer_ms",    "Feat-x: transfer",    "#F7A850"),
+    ("feat_x_etl_ms",         "Feat-x: ETL",         "#FAC980"),
+    ("feat_y_first_record_ms","Feat-y: server+RTT",  "#54A24B"),
+    ("feat_y_transfer_ms",    "Feat-y: transfer",    "#7EC47A"),
+    ("feat_y_etl_ms",         "Feat-y: ETL",         "#AADFAA"),
+    ("training_mean_ms",      "GNN training",        "#E45756"),
+]
+
+
+def _get_training_mean_ms(sm: dict) -> float | None:
+    """Return mean training-phase time in ms from scalar_means."""
+    v = sm.get("training_mean_s")
+    return v * 1000 if v is not None else None
+
+
+def plot_latency_breakdown(agg: dict[str, dict], out_dir: Path) -> None:
+    """Stacked bar chart: mean batch latency split into sub-phases per sampler."""
+    names = list(agg.keys())
+    if not names:
+        return
+
+    # Build a matrix: rows = segments, cols = samplers
+    seg_keys = [s[0] for s in _LATENCY_SEGMENTS]
+    seg_labels = [s[1] for s in _LATENCY_SEGMENTS]
+    seg_colors = [s[2] for s in _LATENCY_SEGMENTS]
+
+    values: list[list[float]] = []  # [n_segments][n_samplers]
+    for key, _, _ in _LATENCY_SEGMENTS:
+        row = []
+        for name in names:
+            sm = agg[name]["scalar_means"]
+            if key == "training_mean_ms":
+                v = _get_training_mean_ms(sm)
+            else:
+                v = sm.get(key)
+            row.append(v if v is not None else 0.0)
+        values.append(row)
+
+    x = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(max(7, len(names) * 2), 5))
+
+    bottoms = np.zeros(len(names))
+    for seg_vals, label, color in zip(values, seg_labels, seg_colors):
+        seg_arr = np.array(seg_vals)
+        bars = ax.bar(x, seg_arr, bottom=bottoms, label=label, color=color, width=0.5)
+        # Label each segment if tall enough to be readable
+        for xi, (bot, val) in enumerate(zip(bottoms, seg_arr)):
+            if val > 1.0:
+                ax.text(xi, bot + val / 2, f"{val:.1f}", ha="center", va="center",
+                        fontsize=6.5, color="white" if val > 4 else "black")
+        bottoms += seg_arr
+
+    # Horizontal dashed line for the network RTT baseline
+    rtt_values = [agg[n]["scalar_means"].get("network_baseline_ms") for n in names]
+    rtt_values = [v for v in rtt_values if v is not None]
+    if rtt_values:
+        rtt_mean = float(np.mean(rtt_values))
+        ax.axhline(rtt_mean, color="black", linestyle="--", linewidth=1.2,
+                   label=f"RTT baseline ({rtt_mean:.1f} ms)")
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=15, ha="right", fontsize=9)
+    ax.set_title("Mean batch latency breakdown")
+    ax.set_ylabel("milliseconds")
+    ax.legend(fontsize=7, loc="upper right")
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(out_dir / "comparison_latency_breakdown.png", dpi=150)
+    plt.close(fig)
+
+
+def plot_rtt_baseline(agg: dict[str, dict], out_dir: Path) -> None:
+    """Bar chart: network RTT baseline (RETURN 1 round-trip) per sampler."""
+    names, means, stds = [], [], []
+    for name, data in agg.items():
+        sm = data["scalar_means"]
+        ss = data["scalar_stds"]
+        if "network_baseline_ms" in sm:
+            names.append(name)
+            means.append(sm["network_baseline_ms"])
+            stds.append(ss.get("network_baseline_ms", 0.0))
+    if not names:
+        return
+    _bar_chart(
+        names, means, stds,
+        "Network RTT baseline (RETURN 1)",
+        "milliseconds",
+        out_dir / "comparison_rtt_baseline.png",
+    )
+
+
+def plot_topology_server_exec(agg: dict[str, dict], out_dir: Path) -> None:
+    """Bar chart: estimated server execution time for the topology Cypher query."""
+    names, means, stds = [], [], []
+    for name, data in agg.items():
+        sm = data["scalar_means"]
+        ss = data["scalar_stds"]
+        if "topo_server_exec_ms" in sm:
+            names.append(name)
+            means.append(sm["topo_server_exec_ms"])
+            stds.append(ss.get("topo_server_exec_ms", 0.0))
+    if not names:
+        return
+    _bar_chart(
+        names, means, stds,
+        "Est. topology query server execution",
+        "milliseconds",
+        out_dir / "comparison_topology_server_exec.png",
+    )
+
+
+def plot_feature_server_exec(agg: dict[str, dict], out_dir: Path) -> None:
+    """Bar chart: estimated server execution time for feature fetch queries (x+y)."""
+    names, means, stds = [], [], []
+    for name, data in agg.items():
+        sm = data["scalar_means"]
+        ss = data["scalar_stds"]
+        if "feat_server_exec_ms" in sm:
+            names.append(name)
+            means.append(sm["feat_server_exec_ms"])
+            stds.append(ss.get("feat_server_exec_ms", 0.0))
+    if not names:
+        return
+    _bar_chart(
+        names, means, stds,
+        "Est. feature fetch server execution (x + y)",
+        "milliseconds",
+        out_dir / "comparison_feature_server_exec.png",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Summary JSON
 # ---------------------------------------------------------------------------
 
@@ -471,6 +636,10 @@ def plot_comparison(
     plot_batch_size(agg, experiment_dir)
     plot_epoch_to_best_acc(agg, experiment_dir)
     plot_best_val_acc(agg, experiment_dir)
+    plot_latency_breakdown(agg, experiment_dir)
+    plot_rtt_baseline(agg, experiment_dir)
+    plot_topology_server_exec(agg, experiment_dir)
+    plot_feature_server_exec(agg, experiment_dir)
     write_summary(agg, experiment_dir, num_runs)
 
     print(f"  Plots written to {experiment_dir}")

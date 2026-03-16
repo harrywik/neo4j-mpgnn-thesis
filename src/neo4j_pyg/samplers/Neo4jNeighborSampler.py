@@ -1,3 +1,4 @@
+import time
 from typing import List
 
 import torch
@@ -143,19 +144,18 @@ class Neo4jNeighborSampler(BaseSampler):
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
         seeds = ns_input.node.to(torch.int64)
         seed_time = getattr(ns_input, "time", None)
+        measurer = getattr(self.graph_store, "measurer", None)
 
-        db = getattr(self.graph_store, "database_name", None) or getattr(
-            self.graph_store, "dataset_name", None
+        # Delegate the DB call to the graph store — timing lives there.
+        record = self.graph_store.fetch_ordered_subgraph(
+            self.query, {"seed_ids": seeds.tolist()}
         )
-        driver = self.graph_store._get_driver() if hasattr(
-            self.graph_store, "_get_driver"
-        ) else self.graph_store.driver
 
-        with driver.session(database=db) as session:
-            result = session.run(self.query, seed_ids=seeds.tolist())
-            record = result.single()
+        t_etl_start = time.monotonic()
 
         if record is None or not record["ordered_nodes"]:
+            if measurer is not None:
+                measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
             return SamplerOutput(
                 node=seeds,
                 row=torch.zeros(0, dtype=torch.long),
@@ -181,6 +181,9 @@ class Neo4jNeighborSampler(BaseSampler):
             )
         else:
             row = col = torch.zeros(0, dtype=torch.long)
+
+        if measurer is not None:
+            measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
 
         return SamplerOutput(
             node=ordered_global_ids,

@@ -87,6 +87,12 @@ def _last_value(df: pd.DataFrame, event: str) -> Optional[float]:
     return float(m.iloc[-1]) if len(m) else None
 
 
+def _mean_event_ms(df: pd.DataFrame, event: str) -> Optional[float]:
+    """Return the mean of all logged values for *event* (values assumed in ms)."""
+    vals = pd.to_numeric(df.loc[df["Event"] == event, "Value"], errors="coerce").dropna()
+    return float(vals.mean()) if len(vals) else None
+
+
 def _best_value(df: pd.DataFrame, event: str, mode: str = "max") -> Optional[float]:
     m = df.loc[df["Event"] == event, "Value"]
     if len(m) == 0:
@@ -225,6 +231,20 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "avg_batch_nodes": avg_batch_nodes,
             "avg_batch_edges": avg_batch_edges,
             "avg_seed_node_ratio": avg_seed_node_ratio,
+            # Sub-phase micro-timers (mean ms per batch/call)
+            "topo_query_sent_ms": _mean_event_ms(df, "topo_query_sent_ms"),
+            "topo_first_record_ms": _mean_event_ms(df, "topo_first_record_ms"),
+            "topo_transfer_ms": _mean_event_ms(df, "topo_transfer_ms"),
+            "topo_etl_ms": _mean_event_ms(df, "topo_etl_ms"),
+            "feat_x_query_sent_ms": _mean_event_ms(df, "feat_x_query_sent_ms"),
+            "feat_x_first_record_ms": _mean_event_ms(df, "feat_x_first_record_ms"),
+            "feat_x_transfer_ms": _mean_event_ms(df, "feat_x_transfer_ms"),
+            "feat_x_etl_ms": _mean_event_ms(df, "feat_x_etl_ms"),
+            "feat_y_query_sent_ms": _mean_event_ms(df, "feat_y_query_sent_ms"),
+            "feat_y_first_record_ms": _mean_event_ms(df, "feat_y_first_record_ms"),
+            "feat_y_transfer_ms": _mean_event_ms(df, "feat_y_transfer_ms"),
+            "feat_y_etl_ms": _mean_event_ms(df, "feat_y_etl_ms"),
+            "network_baseline_ms": _mean_event_ms(df, "network_baseline_ms"),
         },
         "notes": [
             "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",

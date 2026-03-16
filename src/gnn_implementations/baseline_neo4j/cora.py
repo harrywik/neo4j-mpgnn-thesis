@@ -32,7 +32,7 @@ def main(config: dict):
 
     driver = Neo4jConnection(uri, user, password).get_driver()
     feature_store = NoCacheFeatureStore(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
-    graph_store = BaseLineGS(driver, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
+    graph_store = BaseLineGS(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
     num_neighbors = [10, 5]
     sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors)
 

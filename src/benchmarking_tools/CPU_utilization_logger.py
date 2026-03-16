@@ -7,25 +7,21 @@ def start_cpu_monitor(measurer, interval=1):
     than 100% utilization"""
     if interval is None or interval <= 0:
         return None
+
+    # Warm up the system-wide CPU counter so the first real sample is valid.
+    psutil.cpu_percent(interval=None)
     process = psutil.Process()
-    process.cpu_percent(1)  # warmup
 
     stop_event = threading.Event()
 
     def monitor():
         while not stop_event.is_set():
-            procs = [process] + process.children(recursive=True)
-            cpu = 0.0
-            for p in procs:
-                try:
-                    cpu += p.cpu_percent(None)
-                except (psutil.NoSuchProcess, psutil.AccessDenied):
-                    pass
+            # System-wide CPU percent (sum across all cores, non-blocking).
+            cpu = psutil.cpu_percent(interval=None)
 
-            # RSS memory in MB
+            # RSS of the current process only — no child scan needed.
             try:
-                mem_bytes = sum(p.memory_info().rss for p in procs)
-                mem_mb = mem_bytes / (1024 * 1024)
+                mem_mb = process.memory_info().rss / (1024 * 1024)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 mem_mb = 0.0
 
