@@ -5,7 +5,7 @@ from torch_geometric.data.feature_store import FeatureStore, TensorAttr, NodeTyp
 from neo4j import GraphDatabase
 from neo4j import Driver
 from typing import Optional, List, Tuple, Dict
-from collections import OrderedDict
+from collections import OrderedDict, defaultdict
 import numpy as np
 import atexit
 
@@ -86,13 +86,21 @@ class CachedPickleSafeFS(FeatureStore):
         )
         YIELD graphName
         """
+        # Only fetch features from the PageRank query — never trust GDS for labels,
+        # because gds.util.asNode property access can return mismatched label values.
+        # Labels are fetched separately via a direct MATCH query after the feature
+        # hot-cache is filled, guaranteeing correct property-to-node association.
         pagerank_query = f"""
         CALL gds.pageRank.stream('{graph_name}')
         YIELD nodeId, score
         WITH gds.util.asNode(nodeId) AS n, score
         ORDER BY score DESC LIMIT $limit
-        RETURN n.{self.nodeid_property} AS id, n.{self.feature_property} AS embedding, n.{self.target_property} AS label
+        RETURN n.{self.nodeid_property} AS id, n.{self.feature_property} AS embedding
         """
+        label_query = (
+            f"MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids "
+            f"RETURN n.{self.nodeid_property} AS id, n.{self.target_property} AS label"
+        )
         drop_query = "CALL gds.graph.drop($name)"
 
         projected_here = False
@@ -110,7 +118,6 @@ class CachedPickleSafeFS(FeatureStore):
                 result = session.run(pagerank_query, limit=k)
                 for record in result:
                     nid = record["id"]
-                    # Process Embedding
                     if self.feature_property_type == "byte[]":
                         feat = np.frombuffer(record["embedding"], dtype=np.float32).copy()
                     elif self.feature_property_type == "f64[]":
@@ -118,18 +125,22 @@ class CachedPickleSafeFS(FeatureStore):
                     else:
                         raise ValueError("feat wasn't assigned a value")
                     self.hot_cache[nid] = feat
-                    
-                    # Process Label
-                    label_str = record["label"]
-                    if label_str not in self._labels:
-                        self._labels[label_str] = len(self._labels)
-                    self.hot_label_cache[nid] = self._labels[label_str]
 
                     if len(self.hot_cache) >= k:
                         break
 
                 if drop_graph and projected_here:
                     session.run(drop_query, name=graph_name)
+
+                # Fetch labels directly — one query, correct property association.
+                hot_nids = list(self.hot_cache.keys())
+                for record in session.run(label_query, node_ids=hot_nids):
+                    nid = record["id"]
+                    label_val = record["label"]
+                    if label_val not in self._labels:
+                        self._labels[label_val] = len(self._labels)
+                    self.hot_label_cache[nid] = self._labels[label_val]
+
         except ClientError as exc:
             raise RuntimeError("GDS is unavailable or graph projection failed.") from exc
         
@@ -154,7 +165,7 @@ class CachedPickleSafeFS(FeatureStore):
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
-        data_map = {}
+        data_map = defaultdict(list)
         missing_indices = []
 
         is_label = (attr.attr_name == "y")

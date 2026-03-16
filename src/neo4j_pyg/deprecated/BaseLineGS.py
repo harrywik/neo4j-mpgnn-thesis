@@ -6,8 +6,9 @@ from neo4j import Driver
 import json
 from pathlib import Path
 from benchmarking_tools import Measurer
+from neo4j_pyg.graph_stores.Neo4jAbstractGS import Neo4jAbstractGS
 
-class BaseLineGS(GraphStore):
+class BaseLineGS(Neo4jAbstractGS):
     def __init__(self, driver: Driver, database_name:str = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", measurer:Measurer = None):
         super().__init__()
         self.driver = driver

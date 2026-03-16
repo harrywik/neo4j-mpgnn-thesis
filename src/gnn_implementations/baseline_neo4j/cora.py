@@ -14,9 +14,9 @@ if str(GNN_IMPL_DIR) not in sys.path:
 
 from neo4j_pyg.models import GCN
 from training.Training import Trainer, put_nodeLoader_args_map
-from neo4j_pyg.feature_stores import NoCacheFeatureStore
-from neo4j_pyg.graph_stores import BaseLineGS
-from neo4j_pyg.samplers import UniformSampler, OldNeighborSampler, Neo4jNeighborSampler
+from neo4j_pyg.feature_stores import Neo4jCachedFS, Neo4jNoCacheFS
+from neo4j_pyg.graph_stores import Neo4jMultiGS, Neo4SingleGS
+from neo4j_pyg.samplers import Neo4jNeighborSampler
 from Neo4jConnection import Neo4jConnection
 from benchmarking_tools import Measurer
 
@@ -31,8 +31,8 @@ def main(config: dict):
     database_name = "neo4j"
 
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = NoCacheFeatureStore(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
-    graph_store = BaseLineGS(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
+    feature_store = Neo4jNoCacheFS(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]")
+    graph_store = Neo4SingleGS(driver=driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject") 
     num_neighbors = [10, 5]
     sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors)
 
@@ -42,7 +42,7 @@ def main(config: dict):
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
     measurer.write_to_configresult("sampler", {"name": "NeighborSampler", "num_neighbors": num_neighbors})
     measurer.write_to_configresult("feature_store", "NoCacheFeatureStore")
-    measurer.write_to_configresult("graph_store", "BaseLineGS")
+    measurer.write_to_configresult("graph_store", "Neo4SingleGS")
     measurer.write_to_configresult("dataset", dataset_name)
 
     nodeloader_args = put_nodeLoader_args_map(

@@ -6,7 +6,7 @@ from torch import nn
 from torch_geometric.data import GraphStore, FeatureStore, HeteroData, Data
 from torch_geometric.sampler import BaseSampler
 
-def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None) -> float:
+def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None, iteration: int = None) -> float:
     """Evaluate a GNN model on a dataset split using neighbor sampling.
 
     The function iterates over the requested split in fixed-size chunks of seed
@@ -68,7 +68,10 @@ def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore,
         cnts = np.array(counts, dtype=np.float32)
         cnts /= cnts.sum()
         acc = float(cnts @ np.array(partial_accuracies))
-        print(f"{split.capitalize()} accuracy: {acc:.2f}")
+        if iteration:
+            print(f"Epoch {iteration} | {split.capitalize()} accuracy: {acc:.2f}")
+        else:
+            print(f"{split.capitalize()} accuracy: {acc:.2f}")
         
         average_loss = float(cnts @ np.array(losses))
         
