@@ -1,5 +1,2 @@
-from .NoCacheFeatureStore import NoCacheFeatureStore
-from .PageRankCacheFeatureStore import PageRankCacheFeatureStore
-from .PickleSafeFeatureStore import PickleSafeFeatureStore
-from .SimpleCacheFeatureStore import SimpleCacheFeatureStore
-from .CachedPickleSafeFS import CachedPickleSafeFS
+from .Neo4jCachedFS import Neo4jCachedFS
+from .Neo4jNoCacheFS import Neo4jNoCacheFS

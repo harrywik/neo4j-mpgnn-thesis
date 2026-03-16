@@ -242,6 +242,7 @@ class Trainer:
                     data=self.data,
                     num_neighbors=self.num_neighbors,
                     split="val",
+                    iteration=epoch,
                 )
             else:
                 validation_acc, validation_loss = evaluate(
@@ -249,6 +250,7 @@ class Trainer:
                     data=(self.feature_store, self.graph_store),
                     sampler=self.sampler,
                     split="val",
+                    iteration=epoch,
                 )
             self.measurer.log_event("validation_accuracy", validation_acc)
             self.measurer.log_event("validation_loss", validation_loss)

@@ -96,6 +96,25 @@ class PickleSafeGS(GraphStore):
         unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)
         edge_index_local = local_indices.view(2, -1)
         return unique_nodes, edge_index_local
+
+    def fetch_ordered_subgraph(self, query: str, kwargs: dict) -> dict | None:
+        """Execute a subgraph-sampling query and return its single result record.
+
+        Used by :class:`Neo4jNeighborSampler`, whose Cypher query returns one
+        record containing ``ordered_nodes`` (global IDs in encounter order) and
+        ``edge_pairs`` (list of ``[src_id, dst_id]``), rather than one row per
+        edge as in :meth:`sample_from_nodes`.
+
+        Sub-phase timings (query dispatch, first-record latency, transfer,
+        ETL) are logged to ``self.measurer`` when it is set.
+
+        Returns the record dict, or ``None`` if the query produced no rows.
+        """
+        with self._get_driver().session(database=self.dataset_name) as session:
+            result = session.run(query, **kwargs)
+            record = result.single()
+
+        return record
             
     
     def _put_edge_index(self):

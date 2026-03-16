@@ -15,9 +15,9 @@ if str(GNN_IMPL_DIR) not in sys.path:
 from training.evaluate import evaluate
 from training.Training import Trainer, put_nodeLoader_args_map
 from neo4j_pyg.models.GCN import GCN
-from neo4j_pyg.feature_stores import CachedPickleSafeFS
-from neo4j_pyg.graph_stores import PickleSafeGS
-from neo4j_pyg.samplers import UniformSampler
+from neo4j_pyg.feature_stores import Neo4jNoCacheFS, Neo4jCachedFS
+from neo4j_pyg.graph_stores import Neo4jMultiGS
+from neo4j_pyg.samplers import Neo4jNeighborSampler
 from benchmarking_tools import Measurer
 
 def main(config: dict):
@@ -25,18 +25,20 @@ def main(config: dict):
     uri = os.environ["URI"]
     user = os.environ["USERNAME"]
     password = os.environ["PASSWORD"]
-    feature_store = CachedPickleSafeFS(
-        uri,
-        user,
-        password,
+    feature_store = Neo4jCachedFS(
+        uri=uri,
+        user=user,
+        pwd=password,
         dataset_name="neo4j",
         feature_property="embedding",
         target_property="subject",
         nodeid_property="id",
+        # split_property_name="split",
+        # split_property_type="str",
         feature_property_type="byte[]",
     )
         
-    graph_store = PickleSafeGS(
+    graph_store = Neo4jMultiGS(
         uri,
         user,
         password,
@@ -46,21 +48,14 @@ def main(config: dict):
         nodeid_property="id",
     )
     num_neighbors = [10, 5]
-    sampler = UniformSampler(graph_store, num_neighbors=num_neighbors)
-    split_ratios = [0.6, 0.2, 0.2]
-    model_args = {"in_dim": 1433, "hidden_dim1": 32, "hidden_dim2": 16, "nbr_classes": 7}
+    sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors)
+    model_args = {"in_dim": 1433, "hidden_dim1": 12, "hidden_dim2": 12, "nbr_classes": 7, "init_weights": config.get("init_weights")}
     model = GCN(**model_args)
-    lr = config.get("lr")
-    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
-    criterion = torch.nn.CrossEntropyLoss()
-    
     measurer = Measurer(config)
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
-    measurer.write_to_configresult("sampler", {"name": "UniformSampler", "num_neighbors": num_neighbors})
-    measurer.write_to_configresult("feature_store", "PickleSafeFeatureStore")
-    measurer.write_to_configresult("graph_store", "PickleSafeGS")
-    measurer.write_to_configresult("train_val_test_split", split_ratios)
-    measurer.write_to_configresult("lr", lr)
+    measurer.write_to_configresult("sampler", {"name": "NeighborSampler", "num_neighbors": num_neighbors})
+    measurer.write_to_configresult("feature_store", "Neo4jCachedFS")
+    measurer.write_to_configresult("graph_store", "Neo4jMultiGS")
 
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=True,
@@ -77,16 +72,15 @@ def main(config: dict):
         model=model,
         data=(feature_store, graph_store),
         sampler=sampler,
-        optimizer=optimizer,
-        criterion=criterion,
+        lr=config.get("lr"),
         patience=config.get('patience'),
         min_delta=config.get('min_delta'),
-        batch_size=config.get("batch_size", 100),
+        batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         measurer=measurer
     )
 
-    trainer.train(max_epochs=config.get("max_epochs", 20))
+    trainer.train(max_epochs=config.get("max_epochs"))
 
 
 if __name__ == "__main__":
