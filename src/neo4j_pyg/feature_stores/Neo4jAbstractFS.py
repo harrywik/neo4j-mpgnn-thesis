@@ -9,9 +9,9 @@ import numpy as np
 import time
 import atexit
 from neo4j import GraphDatabase
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
-class Neo4jAbstractFS(FeatureStore):
+class Neo4jAbstractFS(FeatureStore, ABC):
     def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer:Measurer = None, database_name:str = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", feature_property_type:str = "f64[]"):
         super().__init__()
         self.driver = driver
