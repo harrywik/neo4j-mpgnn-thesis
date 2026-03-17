@@ -3,6 +3,7 @@ from torch_geometric.data.feature_store import TensorAttr
 from torch_geometric.typing import FeatureTensorType
 from neo4j import Driver
 from benchmarking_tools import Measurer
+from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 from typing import Optional, Dict, List, Tuple
 import torch
 import numpy as np
@@ -12,7 +13,7 @@ from neo4j import GraphDatabase
 from abc import abstractmethod, ABC
 
 class Neo4jAbstractFS(FeatureStore, ABC):
-    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer:Measurer = None, database_name:str = None, dataset_name:str = "neo4j", feature_property:str = "features", target_property:str = "category", split_property_name:str = "split", split_property_type:str = "int", nodeid_property:str = "nodeId", feature_property_type:str = "f64[]"):
+    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None):
         super().__init__()
         self.driver = driver
         self.uri = uri
@@ -28,8 +29,9 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self.split_property_type = split_property_type
         self.nodeid_property = nodeid_property
         self.feature_property_type = feature_property_type
+        self.profile = profile
+        self.profile_accumulator = profile_accumulator
         self._labels: Dict[str, int] = {}
-        self._measure_rtt()
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
@@ -43,6 +45,11 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 data_map[nid] = cached
             else:
                 missing_indices.append(nid)
+
+        if self.measurer is not None:
+            self.measurer.log_event("cache_hit", len(data_map))
+            self.measurer.log_event("cache_miss", len(missing_indices))
+            self.measurer.log_event("remote_feature_fetch", 1)
 
         if missing_indices:
             fetched = self._get_value_from_db(missing_indices, attr)
@@ -68,43 +75,44 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         Each record is matched to its node via ``record["id"]`` — no positional
         assumptions are made about query result ordering. Measurer micro-timers
         (``feat_x_*`` / ``feat_y_*``) are logged when a measurer is attached.
+        When ``self.profile`` is ``True`` the query is prefixed with
+        ``PROFILE`` and the plan is forwarded to ``self.profile_accumulator``.
 
         Subclasses may override this to customise the query or processing logic.
         """
         is_label = attr.attr_name == "y"
         prop = self.target_property if is_label else self.feature_property
         phase = "feat_y_" if is_label else "feat_x_"
-
-        if self.measurer:
-            self.measurer.log_event("cache_hit", 0)
-            self.measurer.log_event("cache_miss", len(nids))
-            self.measurer.log_event("remote_feature_fetch", 1)
+        profile_prefix = "PROFILE " if self.profile else ""
 
         query = (
-            f"MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids "
+            f"{profile_prefix}MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids "
             f"RETURN n.{self.nodeid_property} AS id, n.{prop} AS value"
         )
 
         with self._get_driver().session(database=self.database_name) as session:
             t_send = time.monotonic()
             result = session.run(query, node_ids=nids)
-            t_query_sent = time.monotonic()
 
-            first = result.peek()
-            t_first_record = time.monotonic()
-
-            records = list(result) if first is not None else []
+            # Consume all records first — the driver only populates
+            # summary.profile after every record has been received.
+            records = list(result)
             t_all_records = time.monotonic()
+            summary = result.consume()
 
-        t_etl_start = time.monotonic()
+        # Client-side wall time: send → all records received (includes network + DB exec).
+        total_feat_fetch_ms = (t_all_records - t_send) * 1000
 
-        if self.measurer:
+        if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
-            self.measurer.log_event(f"{phase}query_sent_ms", (t_query_sent - t_send) * 1000)
-            self.measurer.log_event(f"{phase}first_record_ms", (t_first_record - t_query_sent) * 1000)
-            self.measurer.log_event(f"{phase}transfer_ms", (t_all_records - t_first_record) * 1000)
+            self.measurer.log_event("feat_fetch_ms", total_feat_fetch_ms)
+
+        if self.profile_accumulator is not None:
+            source = "feat_y" if is_label else "feat_x"
+            self.profile_accumulator.add(summary, source, t_send, t_all_records)
 
         result_map: Dict[int, object] = {}
+        t_etl_start = time.monotonic()
 
         if not records:
             if self.measurer:
@@ -128,7 +136,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 else:
                     raise ValueError(f"Unsupported feature_property_type: {self.feature_property_type!r}")
 
-        if self.measurer:
+        if self.measurer is not None:
             self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
         return result_map
     
@@ -170,23 +178,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             finally:
                 self._driver = None
         self._driver = None
-
-    def _measure_rtt(self, n_probes: int = 10) -> None:
-        """Run ``RETURN 1`` n_probes times and log the mean as ``network_baseline_ms``.
-
-        Called once at construction time so the RTT baseline is always available
-        in measurements regardless of whether the experiment orchestrator sets it.
-        If a measurer is attached, the value is logged immediately.
-        """
-        samples: list[float] = []
-        with self._get_driver().session(database=self.database_name) as session:
-            for _ in range(n_probes):
-                t0 = time.monotonic()
-                session.run("RETURN 1 AS x").consume()
-                samples.append((time.monotonic() - t0) * 1000)
-        self._network_baseline_ms = float(sum(samples) / len(samples))
-        if self.measurer is not None:
-            self.measurer.log_event("network_baseline_ms", self._network_baseline_ms)
 
     @staticmethod
     def _key(attr: TensorAttr) -> Tuple[Optional[str], str]:

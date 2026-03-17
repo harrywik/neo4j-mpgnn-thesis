@@ -14,6 +14,7 @@ if str(_GS_DIR) not in sys.path:
     sys.path.insert(0, str(_GS_DIR))
 
 from benchmarking_tools import Measurer
+from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 
 
 class Neo4jAbstractGS(GraphStore, ABC):
@@ -33,6 +34,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
         split_property_name: str = "split",
         split_property_type: str = "int",
         nodeid_property: str = "nodeId",
+        profile_accumulator: Optional[QueryProfileAccumulator] = None,
     ):
         super().__init__()
         self._driver: Optional[Driver] = None
@@ -45,6 +47,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
         self.split_property_type = split_property_type
         self.nodeid_property = nodeid_property
         self.measurer = measurer
+        self.profile_accumulator = profile_accumulator
     
     @abstractmethod
     def _get_driver(self):
@@ -120,28 +123,34 @@ class Neo4jAbstractGS(GraphStore, ABC):
         ``edge_pairs`` (list of ``[src_id, dst_id]``), rather than one row per
         edge as in :meth:`sample_from_nodes`.
 
-        Sub-phase timings (query dispatch, first-record latency, transfer,
-        ETL) are logged to ``self.measurer`` when it is set.
+        Sub-phase timings (query dispatch, first-record latency, transfer)
+        are logged to ``self.measurer`` when it is set.  When the query was
+        issued with the ``PROFILE`` keyword and a
+        :class:`~benchmarking_tools.QueryProfileAccumulator` is attached, the
+        plan profile is accumulated for later averaging.
 
         Returns the record dict, or ``None`` if the query produced no rows.
         """
         with self._get_driver().session(database=self.database_name) as session:
             t_send = time.monotonic()
             result = session.run(query, **kwargs)
-            t_query_sent = time.monotonic()
 
-            first = result.peek()
-            t_first_record = time.monotonic()
-
-            record = result.single() if first is not None else None
+            # Consume all records first — the driver only populates
+            # summary.profile after every record has been received.
+            records = list(result)
             t_all_records = time.monotonic()
+            summary = result.consume()
+
+        # Client-side wall time: send → all records received (includes network + DB exec).
+        total_topo_fetch_ms = (t_all_records - t_send) * 1000
 
         if self.measurer is not None:
-            self.measurer.log_event("topo_query_sent_ms", (t_query_sent - t_send) * 1000)
-            self.measurer.log_event("topo_first_record_ms", (t_first_record - t_query_sent) * 1000)
-            self.measurer.log_event("topo_transfer_ms", (t_all_records - t_first_record) * 1000)
+            self.measurer.log_event("topo_fetch_ms", total_topo_fetch_ms)
 
-        return record
+        if self.profile_accumulator is not None:
+            self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
+
+        return records[0] if records else None
             
     
     def _put_edge_index(self):

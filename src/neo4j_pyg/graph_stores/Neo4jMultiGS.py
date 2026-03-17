@@ -2,6 +2,7 @@ from pathlib import Path
 import sys
 from typing import Optional
 from benchmarking_tools import Measurer
+from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 from neo4j import GraphDatabase
 import atexit
 
@@ -20,8 +21,8 @@ class Neo4jMultiGS(Neo4jAbstractGS):
     Use :class:`Neo4SingleGS` instead when no worker parallelism is needed.
     """
 
-    def __init__(self, uri: str, user: str, pwd: str, measurer: Optional[Measurer] = None, database_name: str = None, dataset_name: str = "neo4j", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId"):
-        super().__init__(uri=uri, user=user, pwd=pwd, measurer=measurer, database_name=database_name, dataset_name=dataset_name, split_property_name=split_property_name, split_property_type=split_property_type, nodeid_property=nodeid_property)
+    def __init__(self, uri: str, user: str, pwd: str, measurer: Optional[Measurer] = None, database_name: str = None, dataset_name: str = "neo4j", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", profile_accumulator: Optional[QueryProfileAccumulator] = None):
+        super().__init__(uri=uri, user=user, pwd=pwd, measurer=measurer, database_name=database_name, dataset_name=dataset_name, split_property_name=split_property_name, split_property_type=split_property_type, nodeid_property=nodeid_property, profile_accumulator=profile_accumulator)
         self._driver = None
 
     def __getstate__(self):

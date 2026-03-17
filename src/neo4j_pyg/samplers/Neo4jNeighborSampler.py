@@ -18,6 +18,7 @@ class Neo4jNeighborSampler(BaseSampler):
         expand_revisited: bool = False,
         rel_type: str = None,
         node_label: str = None,
+        profile: bool = False,
     ):
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors
@@ -25,6 +26,7 @@ class Neo4jNeighborSampler(BaseSampler):
         self.nodeid_property = graph_store.nodeid_property
         self.rel_type = rel_type
         self.node_label = node_label
+        self.profile = profile
 
         self.query = self._build_fanout_query()
 
@@ -65,9 +67,10 @@ class Neo4jNeighborSampler(BaseSampler):
         q = []
 
         # Initialise with seeds in supplied order.
+        profile_prefix = "PROFILE\n        " if self.profile else ""
         q.append(f"""
         // 1. initialise the frontier, visited and edges
-        UNWIND range(0, size($seed_ids)-1) AS i
+        {profile_prefix}UNWIND range(0, size($seed_ids)-1) AS i
         WITH i, $seed_ids[i] AS seed_id
         MATCH (s{seed_label})
         WHERE s.{self.nodeid_property} = seed_id
@@ -118,7 +121,7 @@ class Neo4jNeighborSampler(BaseSampler):
             // 8. order-preserving unique — mirrors pyg-lib Mapper insertion order.
             WITH visited, edges, new_edges,
                 reduce(acc = [], n IN next_frontier_raw |
-                    CASE WHEN n IN acc THEN acc ELSE acc + [n] END
+                   CASE WHEN n IN acc THEN acc ELSE acc + [n] END
                 ) AS next_frontier
 
             // 9. return the next frontier, visited and edges

@@ -1,6 +1,7 @@
 from typing import Optional
 from neo4j import Driver
 from benchmarking_tools import Measurer
+from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 from neo4j_pyg.graph_stores.Neo4jAbstractGS import Neo4jAbstractGS
 
 
@@ -23,6 +24,7 @@ class Neo4SingleGS(Neo4jAbstractGS):
         split_property_name: str = "split",
         split_property_type: str = "int",
         nodeid_property: str = "nodeId",
+        profile_accumulator: Optional[QueryProfileAccumulator] = None,
     ):
         super().__init__(
             measurer=measurer,
@@ -31,6 +33,7 @@ class Neo4SingleGS(Neo4jAbstractGS):
             split_property_name=split_property_name,
             split_property_type=split_property_type,
             nodeid_property=nodeid_property,
+            profile_accumulator=profile_accumulator,
         )
         self.driver = driver
         self.feature_property = feature_property
