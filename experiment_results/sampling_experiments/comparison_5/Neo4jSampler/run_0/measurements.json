@@ -1,0 +1,112 @@
+{
+  "run": {
+    "csv": "/Users/victorpekkari/Desktop/neo4j-mpgnn-thesis/experiment_results/sampler_comparison/comparison_5/Neo4jSampler/run_0/measurements.csv",
+    "runtime_s": 43.44048741698498,
+    "training_time_s": 43.09352650001529,
+    "epochs_completed": 100,
+    "batches_seen": 400,
+    "nbr_training_datapoints": 140.0
+  },
+  "metrics": {
+    "throughput_samples_per_s": 324.87478136640857,
+    "epoch_time_s": {
+      "count": 100,
+      "total_s": 13.041295871167677,
+      "mean_s": 0.13041295871167677,
+      "p50_s": 0.13068958300573286,
+      "p90_s": 0.13325875770533457,
+      "p99_s": 0.1350560892658541,
+      "min_s": 0.12469912500819191,
+      "max_s": 0.13805145901278593
+    },
+    "sampling_phase_time_s": {
+      "count": 400,
+      "total_s": 12.438918165047653,
+      "mean_s": 0.031097295412619134,
+      "p50_s": 0.0310154169856105,
+      "p90_s": 0.035366416719625704,
+      "p99_s": 0.03676471466838848,
+      "min_s": 0.025551875005476177,
+      "max_s": 0.03942637500585988
+    },
+    "training_phase_time_s": {
+      "count": 400,
+      "total_s": 0.5907648399006575,
+      "mean_s": 0.001476912099751644,
+      "p50_s": 0.0014568335027433932,
+      "p90_s": 0.0016685374866938218,
+      "p99_s": 0.0018086070846766232,
+      "min_s": 0.0011462919937912375,
+      "max_s": 0.010052958008600399
+    },
+    "convergence_time_s": null,
+    "converged_epoch": null,
+    "avg_cpu_utilization": 14.536363636363633,
+    "final_validation_accuracy": 0.7580000231668476,
+    "best_validation_accuracy": 0.7620000232843164,
+    "time_to_first_validation_accuracy_s": 0.4383986670000013,
+    "time_to_best_accuracy_s": 37.33693670897628,
+    "final_validation_loss": 0.9223948121070862,
+    "best_validation_loss": 0.9215577840805054,
+    "time_to_best_loss_s": 39.51494341698708,
+    "final_test_accuracy": 0.7800000234715769,
+    "best_test_accuracy": 0.7800000234715769,
+    "time_to_best_test_accuracy_s": 44.57606829199358,
+    "remote_feature_latency_s": {
+      "count": 1208,
+      "total_s": 22.334882930648746,
+      "mean_s": 0.018489141498881412,
+      "p50_s": 0.009421500013559125,
+      "p90_s": 0.040319032911793326,
+      "p99_s": 0.0416899854503572,
+      "min_s": 0.006781417003367096,
+      "max_s": 0.09962029199232347
+    },
+    "remote_feature_total_s": 22.334882930648746,
+    "cache_hits": 1208,
+    "cache_misses": 1208,
+    "cache_hit_rate": 0.5,
+    "validation_time_s": {
+      "count": 100,
+      "total_s": 30.392296043079114,
+      "mean_s": 0.30392296043079114,
+      "p50_s": 0.3026110205100849,
+      "p90_s": 0.30571330901875626,
+      "p99_s": 0.34898633677657936,
+      "min_s": 0.2944227919797413,
+      "max_s": 0.3702469579875469
+    },
+    "saving_weights_time_s": {
+      "count": 69,
+      "total_s": 0.00017729704268276691,
+      "mean_s": 2.56952235772126e-06,
+      "p50_s": 2.3329921532422304e-06,
+      "p90_s": 3.0913972295820715e-06,
+      "p99_s": 6.225563120096916e-06,
+      "min_s": 1.6659905668348074e-06,
+      "max_s": 6.791990017518401e-06
+    },
+    "batch_train_loss_mean": 0.5715925288014114,
+    "avg_batch_nodes": 418.2975,
+    "avg_batch_edges": 604.55,
+    "avg_seed_node_ratio": 0.07290749063525905,
+    "topo_query_sent_ms": null,
+    "topo_first_record_ms": null,
+    "topo_transfer_ms": null,
+    "topo_etl_ms": 0.38937934771078386,
+    "feat_x_query_sent_ms": null,
+    "feat_x_first_record_ms": null,
+    "feat_x_transfer_ms": null,
+    "feat_x_etl_ms": 2.5971748929070646,
+    "feat_y_query_sent_ms": null,
+    "feat_y_first_record_ms": null,
+    "feat_y_transfer_ms": null,
+    "feat_y_etl_ms": 1.6420698276661576,
+    "network_baseline_ms": null
+  },
+  "notes": [
+    "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",
+    "throughput_samples_per_s assumes nbr_training_datapoints is per-epoch; if it's total across training, remove the * epochs_completed multiplier.",
+    "remote_feature_total_s is a proxy for time spent waiting on remote feature reads (DB reads)."
+  ]
+}

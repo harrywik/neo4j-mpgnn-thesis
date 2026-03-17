@@ -1,10 +1,11 @@
 {
   "lr": 1e-3,
-  "batch_size": 30,
+  "batch_size": 140,
   "max_epochs": 100,
   "patience": 200,
   "min_delta": 0.01,
   "shuffle":false,
   "initialise_weights":true,
-  "drop_last": true
+  "drop_last": true,
+  "profile": true
 }

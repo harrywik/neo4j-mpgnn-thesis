@@ -118,16 +118,18 @@ def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
     metrics = summary.get("metrics", {})
 
     segments = [
-        ("network_baseline_ms",    "Network RTT baseline",          "#888888"),
-        ("topo_first_record_ms",   "Topology: server exec + RTT",   "#4C78A8"),
-        ("topo_transfer_ms",       "Topology: data transfer",       "#7BAFD4"),
-        ("topo_etl_ms",            "Topology: Python ETL",          "#AED4F0"),
-        ("feat_x_first_record_ms", "Feature-x: server exec + RTT", "#F58518"),
-        ("feat_x_transfer_ms",     "Feature-x: data transfer",      "#F7A850"),
-        ("feat_x_etl_ms",          "Feature-x: Python ETL",         "#FAC980"),
-        ("feat_y_first_record_ms", "Feature-y: server exec + RTT", "#54A24B"),
-        ("feat_y_transfer_ms",     "Feature-y: data transfer",      "#7EC47A"),
-        ("feat_y_etl_ms",          "Feature-y: Python ETL",         "#AADFAA"),
+        ("topo_fetch_ms",                   "Topology: total fetch (wall)",          "#2171B5"),
+        ("sampler_avg_db_exec_time_ms",     "Topology: DB execution",                "#4C78A8"),
+        ("network_baseline_ms",             "Topology: driver + protocol overhead",  "#7BAFD4"),
+        ("topo_etl_ms",                     "Topology: Python ETL",                  "#AED4F0"),
+        ("feat_x_avg_client_wall_time_ms",  "Feature-x: total fetch (wall)",         "#D94F00"),
+        ("feat_x_avg_db_exec_time_ms",      "Feature-x: DB execution",               "#F58518"),
+        ("feat_x_avg_driver_overhead_ms",   "Feature-x: driver + protocol overhead", "#F7A850"),
+        ("feat_x_etl_ms",                   "Feature-x: Python ETL",                 "#FAC980"),
+        ("feat_y_avg_client_wall_time_ms",  "Feature-y: total fetch (wall)",         "#1A7340"),
+        ("feat_y_avg_db_exec_time_ms",      "Feature-y: DB execution",               "#54A24B"),
+        ("feat_y_avg_driver_overhead_ms",   "Feature-y: driver + protocol overhead", "#7EC47A"),
+        ("feat_y_etl_ms",                   "Feature-y: Python ETL",                 "#AADFAA"),
     ]
 
     labels, values, colors = [], [], []

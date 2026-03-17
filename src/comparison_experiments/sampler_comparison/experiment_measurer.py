@@ -27,6 +27,7 @@ class ExperimentMeasurer(Measurer):
         self.config_writer = ConfigWriter(run_dir, config)
         self.measurements_path = run_dir / "measurements.csv"
         self.run_results_path = run_dir
+        self.profile_accumulator = None
 
         self._csvfile = open(self.measurements_path, "w", newline="\n")
         self._writer = csv.writer(self._csvfile)

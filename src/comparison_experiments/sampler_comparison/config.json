@@ -1,18 +1,20 @@
 {
-  "num_runs": 15,
-  "max_epochs": 100,
+  "profile": false,
+  "num_runs": 5,
+  "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
   "lr": 1e-3,
   "patience": 200,
   "min_delta": 0.01,
-  "shuffle": false,
+  "shuffle": true,
   "drop_last": true,
   "initialise_weights": true,
   "hidden_dim1": 12,
   "hidden_dim2": 12,
   "samplers": [
     "Neo4jNeighborSampler",
-    "PyGNeighborLoader"
+    "PyGNeighborLoader",
+    "Neo4jSampler"
   ]
 }

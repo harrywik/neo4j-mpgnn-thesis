@@ -29,10 +29,11 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from neo4j_pyg.models import GCN
-from neo4j_pyg.feature_stores import NoCacheFeatureStore
-from neo4j_pyg.graph_stores import BaseLineGS
+from neo4j_pyg.feature_stores import Neo4jNoCacheFS
+from neo4j_pyg.graph_stores import Neo4SingleGS
 from neo4j_pyg.samplers import (
     Neo4jNeighborSampler,
+    Neo4jSampler,
     OldNeighborSampler,
 )
 from Neo4jConnection import Neo4jConnection
@@ -53,21 +54,22 @@ class RunSpec:
     make_sampler: Optional[Callable]       # None for the PyG path
 
 
-SAMPLER_REGISTRY: dict[str, RunSpec] = {
-    "Neo4jNeighborSampler": RunSpec(
-        "neo4j",
-        lambda gs, nn: Neo4jNeighborSampler(gs, num_neighbors=nn),
-    ),
-    "OldNeighborSampler": RunSpec(
-        "neo4j",
-        lambda gs, nn: OldNeighborSampler(gs, num_neighbors=nn),
-    ),
-    "PyGEquivalentSampler": RunSpec(
-        "neo4j",
-        lambda gs, nn: PyGEquivalentSampler(gs, num_neighbors=nn),
-    ),
-    "PyGNeighborLoader": RunSpec("pyg", None),
-}
+def _build_registry(profile: bool = False) -> dict:
+    return {
+        "Neo4jSampler": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile: Neo4jSampler(gs, num_neighbors=nn, profile=p),
+        ),
+        "Neo4jNeighborSampler": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile: Neo4jNeighborSampler(gs, num_neighbors=nn, profile=p),
+        ),
+        "OldNeighborSampler": RunSpec(
+            "neo4j",
+            lambda gs, nn: OldNeighborSampler(gs, num_neighbors=nn),
+        ),
+        "PyGNeighborLoader": RunSpec("pyg", None),
+    }
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -108,6 +110,9 @@ def main() -> None:
     num_neighbors: list[int] = config["num_neighbors"]
     sampler_names: list[str] = config["samplers"]
     drop_last: bool = config.get("drop_last")
+    profile: bool = config.get("profile", False)
+
+    SAMPLER_REGISTRY = _build_registry(profile=profile)
 
     model_args = {
         "in_dim": 1433,
@@ -147,7 +152,7 @@ def main() -> None:
         password = os.environ["PASSWORD"]
         driver = Neo4jConnection(uri, user, password).get_driver()
 
-        neo4j_feature_store = NoCacheFeatureStore(
+        neo4j_feature_store = Neo4jNoCacheFS(
             driver,
             database_name="neo4j",
             dataset_name="cora",
@@ -158,7 +163,7 @@ def main() -> None:
             target_property="subject",
             feature_property_type="byte[]",
         )
-        neo4j_graph_store = BaseLineGS(
+        neo4j_graph_store = Neo4SingleGS(
             driver,
             database_name="neo4j",
             dataset_name="cora",
@@ -200,7 +205,7 @@ def main() -> None:
             measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
             measurer.write_to_configresult("num_neighbors", num_neighbors)
             # Attach the per-run measurer to the shared graph/feature stores so
-            # that BaseLineGS.sample_from_nodes and NoCacheFeatureStore._get_tensor
+            # that Neo4SingleGS.sample_from_nodes and Neo4jNoCacheFS._get_tensor
             # can log sub-phase timings without holding a direct reference.
             if neo4j_graph_store is not None:
                 neo4j_graph_store.measurer = measurer
