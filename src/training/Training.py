@@ -29,7 +29,7 @@ class Trainer:
         batch_size: int = 100,
         drop_last: bool = True,
         optimizer: optim.Optimizer = None,
-        max_train_seconds: int = 3600,
+        max_train_seconds: int = 300,
         device: str = "cpu",
         nodeloader_args: dict | None = None,
         criterion = None,

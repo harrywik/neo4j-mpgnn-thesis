@@ -17,6 +17,7 @@ class OldNeighborSampler(BaseSampler):
         direction: str = "incoming",  # 'outgoing', 'incoming', 'both'
         rel_type: str = None,
         node_label: str = None,
+        profile: bool = False,
     ):
         if direction not in ("incoming", "outgoing", "both"):
             raise ValueError(
@@ -31,6 +32,7 @@ class OldNeighborSampler(BaseSampler):
         self.rel_type = rel_type
         self.directed = (self.direction != "both")
         self.node_label = node_label
+        self.profile = profile
 
         self.query = self._build_fanout_query()
 
@@ -75,9 +77,10 @@ class OldNeighborSampler(BaseSampler):
 
         q = []
 
+        profile_prefix = "PROFILE\n        " if self.profile else ""
         q.append(f"""
         // 1. initialise the frontier, visited and edges
-        MATCH (s{seed_label})
+        {profile_prefix}MATCH (s{seed_label})
         WHERE s.{self.nodeid_property} IN $seed_ids
         WITH collect(s) AS frontier, collect(s) AS visited, [] AS edges
         """)
