@@ -13,7 +13,7 @@ from neo4j import GraphDatabase
 from abc import abstractmethod, ABC
 
 class Neo4jAbstractFS(FeatureStore, ABC):
-    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None):
+    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None, node_label: str = None):
         super().__init__()
         self.driver = driver
         self.uri = uri
@@ -31,6 +31,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self.feature_property_type = feature_property_type
         self.profile = profile
         self.profile_accumulator = profile_accumulator
+        self.node_label = node_label
         self._labels: Dict[str, int] = {}
 
     # ------------------------------------------------------------------
@@ -104,8 +105,9 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         are the processed feature array and integer label respectively.
         """
         profile_prefix = "PROFILE " if self.profile else ""
+        label_filter = f":{self.node_label}" if self.node_label else ""
         query = (
-            f"{profile_prefix}MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids "
+            f"{profile_prefix}MATCH (n{label_filter}) WHERE n.{self.nodeid_property} IN $node_ids "
             f"RETURN n.{self.nodeid_property} AS id, "
             f"n.{self.feature_property} AS feature, "
             f"n.{self.target_property} AS label"
@@ -214,9 +216,10 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         phase = "feat_y_" if is_label else "feat_x_"
         profile_prefix = "PROFILE " if self.profile else ""
         prop = self.target_property if is_label else self.feature_property
+        label_filter = f":{self.node_label}" if self.node_label else ""
 
         query = (
-            f"{profile_prefix}MATCH (n) WHERE n.{self.nodeid_property} IN $node_ids "
+            f"{profile_prefix}MATCH (n{label_filter}) WHERE n.{self.nodeid_property} IN $node_ids "
             f"RETURN n.{self.nodeid_property} AS id, n.{prop} AS value"
         )
 

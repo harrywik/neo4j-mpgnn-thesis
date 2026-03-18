@@ -36,6 +36,7 @@ def main(config: dict):
         # split_property_name="split",
         # split_property_type="str",
         feature_property_type="byte[]",
+        node_label="Paper",
     )
         
     graph_store = Neo4jMultiGS(
@@ -48,7 +49,7 @@ def main(config: dict):
         nodeid_property="id",
     )
     num_neighbors = [10, 5]
-    sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors)
+    sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors, node_label="Paper")
     model_args = {"in_dim": 1433, "hidden_dim1": 12, "hidden_dim2": 12, "nbr_classes": 7, "init_weights": config.get("init_weights")}
     model = GCN(**model_args)
     measurer = Measurer(config)

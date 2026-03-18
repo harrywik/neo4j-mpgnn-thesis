@@ -37,10 +37,10 @@ def main(config: dict):
     split_property_name = "split"
     split_property_type = "int"
     feature_property_type = "f64[]"
-    feature_store = Neo4jNoCacheFS(driver, measurer=measurer, database_name=database_name, dataset_name=dataset_name, feature_property=feature_property, nodeid_property=nodeid_property, split_property_name=split_property_name, split_property_type=split_property_type, target_property=target_property, feature_property_type=feature_property_type, profile=profile, profile_accumulator=profile_accumulator)
+    feature_store = Neo4jNoCacheFS(driver, measurer=measurer, database_name=database_name, dataset_name=dataset_name, feature_property=feature_property, nodeid_property=nodeid_property, split_property_name=split_property_name, split_property_type=split_property_type, target_property=target_property, feature_property_type=feature_property_type, profile=profile, profile_accumulator=profile_accumulator, node_label="Paper")
     graph_store = Neo4SingleGS(driver=driver, measurer=measurer, database_name=database_name, dataset_name=dataset_name, feature_property=feature_property, nodeid_property=nodeid_property, split_property_name=split_property_name, split_property_type=split_property_type, target_property=target_property, profile_accumulator=profile_accumulator)
     num_neighbors = [10, 5]
-    sampler = Neo4jSampler(graph_store, num_neighbors=num_neighbors, profile=profile)
+    sampler = Neo4jSampler(graph_store, num_neighbors=num_neighbors, profile=profile, node_label="Paper")
 
     model_args = {"in_dim": 128, "hidden_dim1": 32, "hidden_dim2": 32, "nbr_classes": 40, "init_weights": config.get("init_weights")}
     model = GCN(**model_args)
