@@ -47,19 +47,26 @@ def plot_validation_convergence(csv_path: Path, df: pd.DataFrame) -> None:
         epochs = epochs[mask.to_numpy()]
         acc_values = acc_values[mask].to_numpy(dtype=float)
 
-        fig, ax = plt.subplots(figsize=(6, 4))
+        color = "#E45756"
+        fig, ax = plt.subplots(figsize=(8, 5))
 
-        if len(epochs) >= 2:
-            interp_epochs = np.linspace(float(epochs.min()), float(epochs.max()), num=max(200, len(epochs) * 10))
-            interp_acc = np.interp(interp_epochs, epochs, acc_values)
-            ax.plot(interp_epochs, interp_acc, linestyle="-", color="#4C78A8", linewidth=1.8)
+        ax.plot(epochs, acc_values, color=color, linewidth=1.8)
+        ax.scatter(epochs, acc_values, color=color, s=18, zorder=3)
 
-        ax.scatter(epochs, acc_values, color="#4C78A8", s=18, zorder=3)
-        ax.set_title("Validation accuracy convergence")
-        ax.set_xlabel("epoch")
-        ax.set_ylabel("validation accuracy")
+        # Mark best epoch with a dashed vertical line
+        best_idx = int(np.argmax(acc_values))
+        best_epoch = float(epochs[best_idx])
+        ax.axvline(x=best_epoch, color=color, linestyle="--", linewidth=1.2, alpha=0.8)
+        ax.text(
+            best_epoch, 0.02, f"{int(round(best_epoch))}",
+            color=color, fontsize=7, ha="center", va="bottom",
+            transform=ax.get_xaxis_transform(),
+        )
+
+        ax.set_title("Validation accuracy vs epochs")
+        ax.set_xlabel("Epoch")
+        ax.set_ylabel("Validation accuracy")
         ax.set_ylim(0.0, 1.0)
-        ax.set_xlim(float(epochs.min()), float(epochs.max()))
         ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True))
         ax.grid(axis="y", linestyle="--", alpha=0.3)
         fig.tight_layout()
@@ -89,19 +96,35 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame) -> None:
     else:
         t0 = float(times.min())
 
-    times = times - t0
-    times = times[times >= 0]
-    acc_values = acc_values.loc[times.index]
-    if times.empty:
+    times = (times - t0).to_numpy(dtype=float)
+    acc_values = acc_values.to_numpy(dtype=float)
+    valid = np.isfinite(times) & np.isfinite(acc_values) & (times >= 0)
+    times = times[valid]
+    acc_values = acc_values[valid]
+    if len(times) == 0:
         return
 
-    fig, ax = plt.subplots(figsize=(6, 4))
-    ax.plot(times, acc_values, marker="o", linestyle="-")
-    ax.set_title("Validation accuracy over time")
-    ax.set_xlabel("seconds")
-    ax.set_ylabel("validation accuracy")
+    color = "#E45756"
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    ax.plot(times, acc_values, color=color, linewidth=1.8)
+    ax.scatter(times, acc_values, color=color, s=18, zorder=3)
+
+    # Mark best epoch with a dashed vertical line
+    best_idx = int(np.argmax(acc_values))
+    ax.axvline(x=times[best_idx], color=color, linestyle="--", linewidth=1.2, alpha=0.8)
+    ax.text(
+        times[best_idx], 0.02, f"{times[best_idx]:.1f}s",
+        color=color, fontsize=7, ha="center", va="bottom",
+        transform=ax.get_xaxis_transform(),
+    )
+
+    ax.set_title("Validation accuracy vs wall time")
+    ax.set_xlabel("Elapsed seconds")
+    ax.set_ylabel("Validation accuracy")
     ax.set_ylim(0.0, 1.0)
-    ax.set_xticks([float(t) for t in times.to_list()])
+    ax.xaxis.set_major_locator(MaxNLocator(nbins=8))
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     conv_path = csv_path.with_name("validation_convergence_time.png")
     fig.savefig(conv_path, dpi=150)

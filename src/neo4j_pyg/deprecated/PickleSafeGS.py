@@ -27,11 +27,7 @@ class PickleSafeGS(GraphStore):
         self.split_property_name = split_property_name
         self.split_property_type = split_property_type
         self.nodeid_property = nodeid_property
-        
-    # def _get_driver(self) -> Driver:
-    #     if self._driver is None:
-    #         self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self.pwd))
-    #     return self._driver
+
     def __getstate__(self):
         state = self.__dict__.copy()
         state["_driver"] = None

@@ -1,7 +1,7 @@
 {
   "lr": 1e-3,
   "batch_size": 140,
-  "max_epochs": 10,
+  "max_epochs": 90,
   "patience": 200,
   "min_delta": 0.01,
   "shuffle":false,

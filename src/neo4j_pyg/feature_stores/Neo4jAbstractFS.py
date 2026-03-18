@@ -34,10 +34,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self.node_label = node_label
         self._labels: Dict[str, int] = {}
 
-    # ------------------------------------------------------------------
-    # Multi-get: combined x+y fetch in one DB round-trip
-    # ------------------------------------------------------------------
-
     def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
         """Override the base-class default to fetch features and labels together.
 
@@ -164,9 +160,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         return x_map, y_map
 
-    # ------------------------------------------------------------------
-    # Single-attr get (fallback / non x+y cases)
-    # ------------------------------------------------------------------
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         node_ids: list = attr.index.tolist()
