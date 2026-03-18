@@ -117,31 +117,40 @@ def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
     """
     metrics = summary.get("metrics", {})
 
-    segments = [
-        ("topo_fetch_ms",                   "Topology: total fetch (wall)",          "#2171B5"),
-        ("sampler_avg_db_exec_time_ms",     "Topology: DB execution",                "#4C78A8"),
-        ("network_baseline_ms",             "Topology: driver + protocol overhead",  "#7BAFD4"),
-        ("topo_etl_ms",                     "Topology: Python ETL",                  "#AED4F0"),
-        ("feat_x_avg_client_wall_time_ms",  "Feature-x: total fetch (wall)",         "#D94F00"),
-        ("feat_x_avg_db_exec_time_ms",      "Feature-x: DB execution",               "#F58518"),
-        ("feat_x_avg_driver_overhead_ms",   "Feature-x: driver + protocol overhead", "#F7A850"),
-        ("feat_x_etl_ms",                   "Feature-x: Python ETL",                 "#FAC980"),
-        ("feat_y_avg_client_wall_time_ms",  "Feature-y: total fetch (wall)",         "#1A7340"),
-        ("feat_y_avg_db_exec_time_ms",      "Feature-y: DB execution",               "#54A24B"),
-        ("feat_y_avg_driver_overhead_ms",   "Feature-y: driver + protocol overhead", "#7EC47A"),
-        ("feat_y_etl_ms",                   "Feature-y: Python ETL",                 "#AADFAA"),
+    topo_segments = [
+        ("topo_fetch_ms",               "Topology: total fetch (wall)",              "#2171B5"),
+        ("sampler_avg_db_exec_time_ms", "Topology: DB execution",                    "#4C78A8"),
+        ("network_baseline_ms",         "Topology: driver + protocol overhead",      "#7BAFD4"),
+        ("topo_etl_ms",                 "Topology: Python ETL",                      "#AED4F0"),
+    ]
+    # x and y share one query, so all timings cover both in a single round-trip.
+    # The profiler attributes the combined query to "feat_x" internally.
+    feat_segments = [
+        ("feat_x_avg_client_wall_time_ms", "Features ([float], int): total fetch",         "#D94F00"),
+        ("feat_x_avg_db_exec_time_ms",     "Features ([float], int): DB execution",               "#F58518"),
+        ("feat_y_avg_db_exec_time_ms",     "Features ([float], int): DB execution (y)",           "#54A24B"),
+        ("feat_x_avg_driver_overhead_ms",  "Features ([float], int): non-exec time", "#F7A850"),
+        ("feat_x_etl_ms",                  "Features ([float], int): Python ETL",                 "#FAC980"),
     ]
 
-    labels, values, colors = [], [], []
-    for key, label, color in segments:
-        v = metrics.get(key)
-        if v is not None:
-            labels.append(label)
-            values.append(float(v))
-            colors.append(color)
+    def _resolve(segs):
+        rows = []
+        for key, label, color in segs:
+            v = metrics.get(key)
+            if v is not None:
+                rows.append((label, float(v), color))
+        return sorted(rows, key=lambda r: r[1], reverse=True)
 
-    if not labels:
+    topo_rows = _resolve(topo_segments)
+    feat_rows = _resolve(feat_segments)
+    all_rows = topo_rows + feat_rows
+
+    if not all_rows:
         return
+
+    labels = [r[0] for r in all_rows]
+    values = [r[1] for r in all_rows]
+    colors = [r[2] for r in all_rows]
 
     fig, ax = plt.subplots(figsize=(7, max(3, len(labels) * 0.55)))
     y_pos = np.arange(len(labels))
