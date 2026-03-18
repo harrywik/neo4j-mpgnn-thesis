@@ -24,7 +24,7 @@ def ingest_arxiv(uri, user, password):
     # Build split array using same string labels as cora
     split = np.full(num_nodes, "unknown", dtype=object)
     split[split_idx["train"]] = "train"
-    split[split_idx["val"]] = "val"
+    split[split_idx["valid"]] = "val"
     split[split_idx["test"]] = "test"
 
     # Ingest nodes in chunks
