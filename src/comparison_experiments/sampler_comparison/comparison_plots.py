@@ -656,6 +656,106 @@ def plot_node_visit_distribution(
     plt.close(fig)
 
 
+def plot_node_visit_overlay(
+    agg: dict[str, dict],
+    name_a: str,
+    name_b: str,
+    out_dir: Path,
+    top_n: int = 40,
+    alpha: float = 0.05,
+) -> None:
+    """Grouped bar chart overlaying two samplers' node visit distributions.
+
+    Bars for nodes where the two empirical probabilities are statistically
+    significantly different (two-proportion z-test, Bonferroni-corrected) are
+    drawn in red; otherwise in the sampler's own colour.
+    """
+    from math import erfc, sqrt as _sqrt
+
+    counts_a: Counter = agg[name_a].get("node_visit_counts", Counter())
+    counts_b: Counter = agg[name_b].get("node_visit_counts", Counter())
+    if not counts_a or not counts_b:
+        return
+
+    # Pick top_n nodes by combined visit count
+    combined: Counter = Counter()
+    combined.update(counts_a)
+    combined.update(counts_b)
+    top_nodes = [nid for nid, _ in combined.most_common(top_n)]
+
+    total_a = sum(counts_a.values()) or 1
+    total_b = sum(counts_b.values()) or 1
+
+    p_a = np.array([counts_a.get(n, 0) / total_a for n in top_nodes])
+    p_b = np.array([counts_b.get(n, 0) / total_b for n in top_nodes])
+
+    # Two-proportion z-test per node
+    bonferroni_alpha = alpha / len(top_nodes)
+    significant = np.zeros(len(top_nodes), dtype=bool)
+    for i, n in enumerate(top_nodes):
+        c_a = counts_a.get(n, 0)
+        c_b = counts_b.get(n, 0)
+        p_pool = (c_a + c_b) / (total_a + total_b)
+        if p_pool in (0.0, 1.0):
+            continue
+        se = np.sqrt(p_pool * (1 - p_pool) * (1 / total_a + 1 / total_b))
+        if se == 0:
+            continue
+        z = abs(p_a[i] - p_b[i]) / se
+        # two-tailed p-value via complementary error function (no scipy needed)
+        p_val = erfc(z / _sqrt(2))
+        significant[i] = p_val < bonferroni_alpha
+
+    color_a = _color(list(agg.keys()).index(name_a))
+    color_b = _color(list(agg.keys()).index(name_b))
+    sig_color = "#E45756"
+
+    x = np.arange(len(top_nodes))
+    width = 0.38
+    max_p = max(p_a.max(), p_b.max()) * 1.2 or 0.01
+
+    fig, ax = plt.subplots(figsize=(max(10, top_n * 0.42), 4))
+
+    bars_a = ax.bar(
+        x - width / 2, p_a, width,
+        color=[sig_color if s else color_a for s in significant],
+        alpha=0.85, label=name_a,
+    )
+    bars_b = ax.bar(
+        x + width / 2, p_b, width,
+        color=[sig_color if s else color_b for s in significant],
+        alpha=0.85, label=name_b,
+    )
+
+    # Hatch the second sampler's bars to distinguish from first when both red
+    for bar in bars_b:
+        bar.set_hatch("//")
+        bar.set_edgecolor("white")
+        bar.set_linewidth(0.4)
+
+    ax.set_ylim(0, max_p)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(n) for n in top_nodes], rotation=90, fontsize=5)
+    ax.set_xlabel(f"Node ID (top {top_n} by aggregate visit count)", fontsize=8)
+    ax.set_ylabel("p(node)", fontsize=8)
+    ax.set_title(
+        f"Node visit distribution: {name_a} vs {name_b}\n"
+        f"(red = statistically significant difference, Bonferroni α={alpha})",
+        fontsize=9,
+    )
+    ax.legend(fontsize=8)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+
+    safe_a = name_a.replace(" ", "_")
+    safe_b = name_b.replace(" ", "_")
+    fig.savefig(
+        out_dir / f"comparison_node_visit_overlay_{safe_a}_vs_{safe_b}.png",
+        dpi=150, bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
 def plot_node_visit_kl_divergence(
     agg: dict[str, dict], out_dir: Path
 ) -> None:
@@ -725,8 +825,98 @@ def plot_node_visit_kl_divergence(
 # Summary JSON
 # ---------------------------------------------------------------------------
 
+def compute_pairwise_distribution_stats(
+    agg: dict[str, dict],
+    alpha: float = 0.05,
+) -> dict[str, dict]:
+    """Compute pairwise distribution divergence and significance stats.
+
+    For every ordered pair (A, B) of samplers that have node visit counts,
+    returns a dict keyed by ``"A vs B"`` containing:
+
+    * ``js_divergence``            — Jensen-Shannon divergence (symmetric, 0–ln2)
+    * ``kl_a_to_b``                — KL(A ‖ B)
+    * ``kl_b_to_a``                — KL(B ‖ A)
+    * ``pct_nodes_significant``    — % of nodes (over the union vocabulary)
+                                     where the two visit probabilities are
+                                     statistically significantly different
+                                     (two-proportion z-test, Bonferroni-corrected)
+    * ``n_nodes_tested``           — total nodes in the union vocabulary
+    * ``n_nodes_significant``      — count of significant nodes
+    """
+    from math import erfc, sqrt as _sqrt
+
+    eps = 1e-9
+    samplers = [n for n, d in agg.items() if d.get("node_visit_counts")]
+    result: dict[str, dict] = {}
+
+    # Build full union vocabulary
+    all_nodes: set = set()
+    for name in samplers:
+        all_nodes.update(agg[name]["node_visit_counts"].keys())
+    vocab = sorted(all_nodes)
+    n_vocab = len(vocab)
+    if n_vocab == 0:
+        return result
+
+    def _prob_vec(counter: Counter) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        v = np.array([counter.get(n, 0) / total for n in vocab], dtype=float)
+        v += eps
+        v /= v.sum()
+        return v
+
+    for i in range(len(samplers)):
+        for j in range(i + 1, len(samplers)):
+            name_a, name_b = samplers[i], samplers[j]
+            counts_a = agg[name_a]["node_visit_counts"]
+            counts_b = agg[name_b]["node_visit_counts"]
+            total_a = sum(counts_a.values()) or 1
+            total_b = sum(counts_b.values()) or 1
+
+            p = _prob_vec(counts_a)
+            q = _prob_vec(counts_b)
+
+            kl_ab = float(np.sum(p * np.log(p / q)))
+            kl_ba = float(np.sum(q * np.log(q / p)))
+            m = 0.5 * (p + q)
+            js = float(0.5 * np.sum(p * np.log(p / m)) + 0.5 * np.sum(q * np.log(q / m)))
+
+            # Two-proportion z-test per node with Bonferroni correction
+            bonferroni_alpha = alpha / n_vocab
+            n_sig = 0
+            for node in vocab:
+                c_a = counts_a.get(node, 0)
+                c_b = counts_b.get(node, 0)
+                p_a_node = c_a / total_a
+                p_b_node = c_b / total_b
+                p_pool = (c_a + c_b) / (total_a + total_b)
+                if p_pool in (0.0, 1.0):
+                    continue
+                se = _sqrt(p_pool * (1 - p_pool) * (1 / total_a + 1 / total_b))
+                if se == 0:
+                    continue
+                z = abs(p_a_node - p_b_node) / se
+                p_val = erfc(z / _sqrt(2))
+                if p_val < bonferroni_alpha:
+                    n_sig += 1
+
+            key = f"{name_a} vs {name_b}"
+            result[key] = {
+                "js_divergence": round(js, 6),
+                "kl_a_to_b": round(kl_ab, 6),
+                "kl_b_to_a": round(kl_ba, 6),
+                "n_nodes_tested": n_vocab,
+                "n_nodes_significant": n_sig,
+                "pct_nodes_significant": round(100.0 * n_sig / n_vocab, 2),
+            }
+
+    return result
+
+
 def write_summary(
-    agg: dict[str, dict], out_dir: Path, num_runs: int
+    agg: dict[str, dict], out_dir: Path, num_runs: int,
+    pairwise_stats: dict[str, dict] | None = None,
 ) -> None:
     summary: dict[str, Any] = {}
     for name, data in agg.items():
@@ -736,6 +926,8 @@ def write_summary(
             "scalar_means": data["scalar_means"],
             "scalar_stds": data["scalar_stds"],
         }
+    if pairwise_stats:
+        summary["pairwise_distribution_stats"] = pairwise_stats
     out_path = out_dir / "comparison_summary.json"
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
@@ -776,18 +968,41 @@ def plot_comparison(
         print("No data to plot.")
         return
 
-    plot_accuracy_vs_epochs(agg, experiment_dir)
-    plot_accuracy_vs_time(agg, experiment_dir)
-    plot_sampling_time(agg, experiment_dir)
-    plot_batch_size(agg, experiment_dir)
-    plot_epoch_to_best_acc(agg, experiment_dir)
-    plot_best_val_acc(agg, experiment_dir)
-    plot_latency_breakdown(agg, experiment_dir)
-    plot_rtt_baseline(agg, experiment_dir)
-    plot_topology_server_exec(agg, experiment_dir)
-    plot_feature_server_exec(agg, experiment_dir)
-    plot_node_visit_distribution(agg, experiment_dir)
-    plot_node_visit_kl_divergence(agg, experiment_dir)
-    write_summary(agg, experiment_dir, num_runs)
+    # Create output subdirectories
+    dir_accuracy    = experiment_dir / "accuracy";    dir_accuracy.mkdir(exist_ok=True)
+    dir_latency     = experiment_dir / "latency";     dir_latency.mkdir(exist_ok=True)
+    dir_node_visits = experiment_dir / "node_visits"; dir_node_visits.mkdir(exist_ok=True)
+    dir_batch       = experiment_dir / "batch";       dir_batch.mkdir(exist_ok=True)
+
+    plot_accuracy_vs_epochs(agg, dir_accuracy)
+    plot_accuracy_vs_time(agg, dir_accuracy)
+    plot_epoch_to_best_acc(agg, dir_accuracy)
+    plot_best_val_acc(agg, dir_accuracy)
+    plot_throughput(agg, dir_accuracy)
+
+    plot_sampling_time(agg, dir_latency)
+    plot_latency_breakdown(agg, dir_latency)
+    plot_rtt_baseline(agg, dir_latency)
+    plot_topology_server_exec(agg, dir_latency)
+    plot_feature_server_exec(agg, dir_latency)
+
+    plot_batch_size(agg, dir_batch)
+
+    plot_node_visit_distribution(agg, dir_node_visits)
+    plot_node_visit_kl_divergence(agg, dir_node_visits)
+
+    # Pairwise overlay plots with significance highlighting
+    sampler_names_present = list(agg.keys())
+    for i in range(len(sampler_names_present)):
+        for j in range(i + 1, len(sampler_names_present)):
+            plot_node_visit_overlay(
+                agg,
+                sampler_names_present[i],
+                sampler_names_present[j],
+                dir_node_visits,
+            )
+
+    pairwise_stats = compute_pairwise_distribution_stats(agg)
+    write_summary(agg, experiment_dir, num_runs, pairwise_stats=pairwise_stats)
 
     print(f"  Plots written to {experiment_dir}")
