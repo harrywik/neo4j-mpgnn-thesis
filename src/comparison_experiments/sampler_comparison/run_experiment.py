@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -261,6 +262,14 @@ def main() -> None:
     # ------------------------------------------------------------------
     print("\nGenerating comparison plots ...")
     plot_comparison(experiment_dir, sampler_names, num_runs)
+
+    # Remove per-run data directories — the aggregated plots are all we need.
+    for sampler_name in sampler_names:
+        sampler_dir = experiment_dir / sampler_name
+        if sampler_dir.exists():
+            shutil.rmtree(sampler_dir)
+            print(f"  Removed run data: {sampler_dir.name}/")
+
     print(f"Done. Results in: {experiment_dir}")
 
 
