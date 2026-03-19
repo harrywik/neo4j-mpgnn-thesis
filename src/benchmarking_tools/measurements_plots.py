@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import json
+import re
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.patches import Patch
 from matplotlib.ticker import MaxNLocator
 import pandas as pd
 import numpy as np
@@ -12,7 +15,230 @@ import numpy as np
 from .measurements_summary import pair_durations, get_validation_accuracies
 
 
-def plot_phase_summary(csv_path: Path, df: pd.DataFrame) -> None:
+# ---------------------------------------------------------------------------
+# Operator-profile helpers
+# ---------------------------------------------------------------------------
+
+def _strip_db(op_type: str) -> str:
+    """Remove '@database' suffix from an operator type string."""
+    return op_type.split("@")[0]
+
+
+def _pipeline_num(pipeline: str) -> int:
+    m = re.search(r"(\d+)", pipeline)
+    return int(m.group(1)) if m else -1
+
+
+def _op_label(op: dict) -> str:
+    return f"{_strip_db(op['operator_type'])} [{op['id']}]"
+
+
+def _plot_operator_rows_comparison(output_dir: Path, source: str, operators: list) -> None:
+    """Grouped horizontal bars: actual rows vs planner-estimated rows per operator."""
+    rows = [
+        (op, op["avg_rows"], op["avg_estimated_rows"])
+        for op in operators
+        if op["avg_rows"] > 0 or op["avg_estimated_rows"] > 0
+    ]
+    if not rows:
+        return
+    rows.sort(key=lambda x: x[1], reverse=True)
+
+    labels = [_op_label(op) for op, _, _ in rows]
+    actual = [r[1] for r in rows]
+    estimated = [r[2] for r in rows]
+    height = 0.35
+    y_pos = np.arange(len(labels))
+
+    fig, ax = plt.subplots(figsize=(10, max(4, len(labels) * 0.5)))
+    ax.barh(y_pos - height / 2, actual,    height, label="Actual rows",       color="#4C78A8")
+    ax.barh(y_pos + height / 2, estimated, height, label="Planner estimate", color="#F58518", alpha=0.75)
+
+    max_val = max(actual + estimated, default=1)
+    if max_val > 0:
+        ax.set_xscale("log")
+    ax.set_xlabel("Rows (log scale)")
+    ax.set_title(f"Actual vs estimated rows — {source}")
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=7)
+    ax.invert_yaxis()
+    ax.legend(fontsize=8)
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_dir / f"op_rows_{source}.png", dpi=150)
+    plt.close(fig)
+
+
+def _plot_operator_time_waterfall(output_dir: Path, source: str, operators: list) -> None:
+    """Horizontal bars of per-operator time, coloured by pipeline stage."""
+    rows = [(op, op["avg_time_ms"]) for op in operators if op["avg_time_ms"] > 0.001]
+    if not rows:
+        return
+    rows.sort(key=lambda x: x[1], reverse=True)
+
+    pipeline_ids = sorted({_pipeline_num(op["pipeline"]) for op, _ in rows})
+    cmap = plt.cm.tab20
+    pipeline_color = {
+        p: cmap(i / max(len(pipeline_ids) - 1, 1))
+        for i, p in enumerate(pipeline_ids)
+    }
+
+    labels = [_op_label(op) for op, _ in rows]
+    times  = [t for _, t in rows]
+    colors = [pipeline_color[_pipeline_num(op["pipeline"])] for op, _ in rows]
+
+    y_pos = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(10, max(4, len(labels) * 0.5)))
+    bars = ax.barh(y_pos, times, color=colors)
+
+    max_t = max(times)
+    for bar, val in zip(bars, times):
+        ax.text(
+            bar.get_width() + max_t * 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            f"{val:.2f} ms",
+            va="center", ha="left", fontsize=7,
+        )
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=7)
+    ax.invert_yaxis()
+    ax.set_xlabel("Mean time per batch (ms)")
+    ax.set_title(f"Operator time breakdown — {source}")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+
+    legend_handles = [
+        Patch(color=pipeline_color[p], label=f"Pipeline {p}")
+        for p in pipeline_ids
+    ]
+    ax.legend(handles=legend_handles, fontsize=7, loc="lower right")
+
+    fig.tight_layout()
+    fig.savefig(output_dir / f"op_time_waterfall_{source}.png", dpi=150)
+    plt.close(fig)
+
+
+def _plot_operator_db_hits_scatter(output_dir: Path, source: str, operators: list) -> None:
+    """Scatter: DB hits (y) vs rows produced (x), one point per operator."""
+    rows = [
+        (op, op["avg_rows"], op["avg_db_hits"])
+        for op in operators
+        if op["avg_rows"] > 0 or op["avg_db_hits"] > 0
+    ]
+    if not rows:
+        return
+
+    # Group operators by their base type (text before first '(' or ' ')
+    def _family(op: dict) -> str:
+        base = _strip_db(op["operator_type"])
+        return re.split(r"[\( ]", base)[0]
+
+    families = sorted({_family(op) for op, _, _ in rows})
+    cmap = plt.cm.tab10
+    fam_color = {f: cmap(i / max(len(families) - 1, 1)) for i, f in enumerate(families)}
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    for fam in families:
+        pts = [(op, r, d) for op, r, d in rows if _family(op) == fam]
+        xs = [r for _, r, _ in pts]
+        ys = [d for _, _, d in pts]
+        ax.scatter(xs, ys, color=fam_color[fam], label=fam, s=60, alpha=0.85, zorder=3)
+        for op, r, d in pts:
+            ax.annotate(
+                f"[{op['id']}]", (r, d),
+                textcoords="offset points", xytext=(4, 3),
+                fontsize=6, color=fam_color[fam],
+            )
+
+    all_vals = [v for _, r, d in rows for v in (r, d) if v > 0]
+    if all_vals and max(all_vals) / max(min(all_vals), 1) > 100:
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+
+    ax.set_xlabel("Avg rows produced")
+    ax.set_ylabel("Avg DB hits")
+    ax.set_title(f"DB hits vs rows produced — {source}")
+    ax.legend(fontsize=7, ncol=2)
+    ax.grid(linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_dir / f"op_db_hits_{source}.png", dpi=150)
+    plt.close(fig)
+
+
+def _plot_operator_memory_profile(output_dir: Path, source: str, operators: list) -> None:
+    """Horizontal bars of per-operator memory usage."""
+    rows = [(op, op["avg_memory_bytes"]) for op in operators if op["avg_memory_bytes"] > 0]
+    if not rows:
+        return
+    rows.sort(key=lambda x: x[1], reverse=True)
+
+    labels = [_op_label(op) for op, _ in rows]
+    values_kb = [v / 1024 for _, v in rows]
+
+    y_pos = np.arange(len(labels))
+    fig, ax = plt.subplots(figsize=(10, max(4, len(labels) * 0.5)))
+    bars = ax.barh(y_pos, values_kb, color="#72B7B2")
+
+    max_v = max(values_kb)
+    for bar, val in zip(bars, values_kb):
+        label_str = f"{val:.1f} KB" if val < 1024 else f"{val / 1024:.2f} MB"
+        ax.text(
+            bar.get_width() + max_v * 0.01,
+            bar.get_y() + bar.get_height() / 2,
+            label_str,
+            va="center", ha="left", fontsize=7,
+        )
+
+    ax.set_yticks(y_pos)
+    ax.set_yticklabels(labels, fontsize=7)
+    ax.invert_yaxis()
+    ax.set_xlabel("Mean memory per batch (KB)")
+    ax.set_title(f"Memory profile per operator — {source}")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_dir / f"op_memory_{source}.png", dpi=150)
+    plt.close(fig)
+
+
+def plot_all_operator_profiles(profile_path: Path, output_dir: Path | None = None) -> None:
+    """Generate all 4 operator-level plots for every query source in *profile_path*.
+
+    Saves plots to *output_dir* when provided, otherwise to the same directory
+    as *profile_path*.  Skips a source if all 4 of its plots already exist.
+    Safe to call when *profile_path* does not exist (no-op).
+    """
+    if not profile_path.exists():
+        return
+
+    with open(profile_path) as f:
+        profile = json.load(f)
+
+    out = output_dir or profile_path.parent
+
+    for source, data in profile.items():
+        if source == "subphase_metrics":
+            continue
+        operators = data.get("operators", [])
+        if not operators:
+            continue
+
+        plot_names = [
+            out / f"op_rows_{source}.png",
+            out / f"op_time_waterfall_{source}.png",
+            out / f"op_db_hits_{source}.png",
+            out / f"op_memory_{source}.png",
+        ]
+        if all(p.exists() for p in plot_names):
+            continue
+
+        _plot_operator_rows_comparison(out, source, operators)
+        _plot_operator_time_waterfall(out, source, operators)
+        _plot_operator_db_hits_scatter(out, source, operators)
+        _plot_operator_memory_profile(out, source, operators)
+        print(f"  Operator plots generated for source '{source}'.")
+
+
+def plot_phase_summary(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
     sampling_durations = pair_durations(df, "start_batch_fetch", "end_batch_fetch")
     training_durations = pair_durations(df, "start_batch_processing", "end_batch_processing")
 
@@ -29,12 +255,12 @@ def plot_phase_summary(csv_path: Path, df: pd.DataFrame) -> None:
         ax.set_ylabel("seconds")
 
         fig.tight_layout()
-        plot_path = csv_path.with_name("phase_summary.png")
-        fig.savefig(plot_path, dpi=150)
+        out = (output_dir or csv_path.parent) / "phase_summary.png"
+        fig.savefig(out, dpi=150)
         plt.close(fig)
 
 
-def plot_validation_convergence(csv_path: Path, df: pd.DataFrame) -> None:
+def plot_validation_convergence(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
     val_accs = get_validation_accuracies(df).copy()
     if len(val_accs):
         val_accs = val_accs.reset_index(drop=True)
@@ -70,12 +296,12 @@ def plot_validation_convergence(csv_path: Path, df: pd.DataFrame) -> None:
         ax.xaxis.set_major_locator(MaxNLocator(nbins=8, integer=True))
         ax.grid(axis="y", linestyle="--", alpha=0.3)
         fig.tight_layout()
-        conv_path = csv_path.with_name("validation_convergence.png")
-        fig.savefig(conv_path, dpi=150)
+        out = (output_dir or csv_path.parent) / "validation_convergence.png"
+        fig.savefig(out, dpi=150)
         plt.close(fig)
 
 
-def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame) -> None:
+def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
     val_accs = get_validation_accuracies(df).copy()
     if val_accs.empty:
         return
@@ -126,12 +352,12 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame) -> None:
     ax.xaxis.set_major_locator(MaxNLocator(nbins=8))
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    conv_path = csv_path.with_name("validation_convergence_time.png")
-    fig.savefig(conv_path, dpi=150)
+    out = (output_dir or csv_path.parent) / "validation_convergence_time.png"
+    fig.savefig(out, dpi=150)
     plt.close(fig)
 
 
-def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
+def plot_subphase_latency(csv_path: Path, summary: dict, output_dir: Path | None = None) -> None:
     """Bar chart of per-batch sub-phase latencies from a single run.
 
     Reads the scalar fields written by the micro-timers in
@@ -142,18 +368,18 @@ def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
 
     topo_segments = [
         ("topo_fetch_ms",               "Topology: total fetch (wall)",              "#2171B5"),
-        ("sampler_avg_db_exec_time_ms", "Topology: DB execution",                    "#4C78A8"),
+        ("sampler_avg_db_exec_time_ms", "Topology: query + transfer time",           "#4C78A8"),
         ("network_baseline_ms",         "Topology: driver + protocol overhead",      "#7BAFD4"),
         ("topo_etl_ms",                 "Topology: Python ETL",                      "#AED4F0"),
     ]
     # x and y share one query, so all timings cover both in a single round-trip.
     # The profiler attributes the combined query to "feat_x" internally.
     feat_segments = [
-        ("feat_x_avg_client_wall_time_ms", "Features ([float], int): total fetch",         "#D94F00"),
-        ("feat_x_avg_db_exec_time_ms",     "Features ([float], int): DB execution",               "#F58518"),
-        ("feat_y_avg_db_exec_time_ms",     "Features ([float], int): DB execution (y)",           "#54A24B"),
-        ("feat_x_avg_driver_overhead_ms",  "Features ([float], int): non-exec time", "#F7A850"),
-        ("feat_x_etl_ms",                  "Features ([float], int): Python ETL",                 "#FAC980"),
+        ("feat_x_avg_client_wall_time_ms", "Features ([float], int): total fetch",                    "#D94F00"),
+        ("feat_x_avg_db_exec_time_ms",     "Features ([float], int): query + transfer time",          "#F58518"),
+        ("feat_y_avg_db_exec_time_ms",     "Features ([float], int): query + transfer time (y)",      "#54A24B"),
+        ("feat_x_avg_driver_overhead_ms",  "Features ([float], int): Python deserialisation",         "#F7A850"),
+        ("feat_x_etl_ms",                  "Features ([float], int): Python ETL",                     "#FAC980"),
     ]
 
     def _resolve(segs):
@@ -194,11 +420,12 @@ def plot_subphase_latency(csv_path: Path, summary: dict) -> None:
     ax.set_title("Sub-phase latency breakdown")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(csv_path.with_name("subphase_latency.png"), dpi=150)
+    out = (output_dir or csv_path.parent) / "subphase_latency.png"
+    fig.savefig(out, dpi=150)
     plt.close(fig)
 
 
-def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame) -> None:
+def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
     cpu = df[df["Event"] == "cpu_utilization_percentage"][["Time", "Value"]].copy()
     ram = df[df["Event"] == "ram_usage_mb"][["Time", "Value"]].copy()
     if cpu.empty:
@@ -282,6 +509,6 @@ def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame) -> None:
     )
 
     fig.tight_layout()
-    plot_path = csv_path.with_name("cpu_utilization.png")
-    fig.savefig(plot_path, dpi=150)
+    out = (output_dir or csv_path.parent) / "cpu_utilization.png"
+    fig.savefig(out, dpi=150)
     plt.close(fig)

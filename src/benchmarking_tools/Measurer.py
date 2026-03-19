@@ -1,6 +1,7 @@
 import csv
 import time
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any, Optional
 
@@ -30,6 +31,7 @@ class Measurer:
         # Save config
         self.config_writer = ConfigWriter(run_results_path, config)
         self.profile_accumulator = profile_accumulator
+        self.node_visit_counter: Counter = Counter()
 
         self.measurements_path = run_results_path / "measurements.csv"
         self.run_results_path = run_results_path
@@ -93,6 +95,14 @@ class Measurer:
         except Exception as e:
             print(f"Warning: Failed to write JSON summary to {json_path}: {e}")
 
+        if self.node_visit_counter:
+            visit_path = csv_path.with_name("node_visit_counts.json")
+            try:
+                with open(visit_path, "w") as f:
+                    json.dump(dict(self.node_visit_counter), f)
+            except Exception as e:
+                print(f"Warning: Failed to write node visit counts to {visit_path}: {e}")
+
         if self.profile_accumulator is not None and self.profile_accumulator.has_data():
             profile_path = csv_path.with_name("query_profile.json")
             try:
@@ -102,6 +112,9 @@ class Measurer:
 
         return summary
     
+    def log_node_visits(self, node_ids: list[int]) -> None:
+        self.node_visit_counter.update(node_ids)
+
     def log_event(self, event_name: str, value: int | float = 1):
         self._writer.writerow([event_name, time.monotonic(), value])
 

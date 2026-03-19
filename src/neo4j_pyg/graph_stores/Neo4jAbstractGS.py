@@ -56,7 +56,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
     def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
         pass
 
-    def get_split(self, n: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
+    def get_split(self, limit: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
         shuffle_clause = "ORDER BY rand()" if shuffle else f"ORDER BY n.{self.nodeid_property} ASC"
 
         assert not shuffle or (shuffle and offset is None), "Offset together with shuffle does not make sense"
@@ -70,13 +70,13 @@ class Neo4jAbstractGS(GraphStore, ABC):
         query = f"""
         MATCH (n {{ {self.split_property_name}: $split }})
         """ + shuffle_clause + f"""
-        LIMIT toInteger(coalesce($n, 9223372036854775807))
+        LIMIT toInteger(coalesce($limit, 9223372036854775807))
         SKIP toInteger(coalesce($offset, 0))
         RETURN n.{self.nodeid_property} AS id
         """
 
         with self._get_driver().session(database=self.database_name) as session:
-            result = session.run(query, n=n, split=split, offset=offset)
+            result = session.run(query, limit=limit, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)

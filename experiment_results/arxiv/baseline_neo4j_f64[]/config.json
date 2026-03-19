@@ -1,0 +1,40 @@
+{
+    "lr": 0.001,
+    "batch_size": 140,
+    "max_epochs": 10,
+    "patience": 200,
+    "min_delta": 0.01,
+    "shuffle": false,
+    "initialise_weights": true,
+    "drop_last": true,
+    "profile": true,
+    "model": {
+        "name": "GCN",
+        "args": {
+            "in_dim": 128,
+            "hidden_dim1": 32,
+            "hidden_dim2": 32,
+            "nbr_classes": 40,
+            "init_weights": null
+        }
+    },
+    "sampler": {
+        "name": "Neo4jSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "NoCacheFeatureStore",
+    "graph_store": "Neo4SingleGS",
+    "dataset": "arxiv",
+    "nodeloader_args": {
+        "pickle_safe": false,
+        "num_workers": 0,
+        "prefetch_factor": 2,
+        "filter_per_worker": false,
+        "persistent_workers": false,
+        "pin_memory": false,
+        "shuffle": false
+    }
+}
