@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import time
+from collections import Counter
 from pathlib import Path
 
 from benchmarking_tools.Measurer import Measurer
@@ -28,6 +29,7 @@ class ExperimentMeasurer(Measurer):
         self.measurements_path = run_dir / "measurements.csv"
         self.run_results_path = run_dir
         self.profile_accumulator = None
+        self.node_visit_counter: Counter = Counter()
 
         self._csvfile = open(self.measurements_path, "w", newline="\n")
         self._writer = csv.writer(self._csvfile)

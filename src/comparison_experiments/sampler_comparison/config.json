@@ -13,8 +13,7 @@
   "hidden_dim1": 12,
   "hidden_dim2": 12,
   "samplers": [
-    "Neo4jNeighborSampler",
-    "PyGNeighborLoader",
-    "Neo4jSampler"
+    "Neo4jSampler",
+    "PyGNeighborLoader"
   ]
 }

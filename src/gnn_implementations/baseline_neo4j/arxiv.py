@@ -29,9 +29,9 @@ def main(config: dict):
     measurer = Measurer(config, profile_accumulator=profile_accumulator)
 
     dataset_name = "arxiv"
-    database_name = "arxiv"
+    database_name = "arxiv2"
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_property = "embedding"
+    feature_property = "feature_vector"
     target_property = "subject"
     nodeid_property = "id"
     split_property_name = "split"
@@ -69,6 +69,10 @@ def main(config: dict):
         nodeloader_args=nodeloader_args,
         measurer=measurer,
         lr=config.get('lr'),
+        cpu_monitor_interval=1 if config.get("logg_cpu_utilization", True) else None,
+        max_training_size=config.get("max_training_size"),
+        max_validation_size=config.get("max_validation_size"),
+        max_test_size=config.get("max_test_size"),
     )
 
     trainer.train(max_epochs=config.get("max_epochs"))

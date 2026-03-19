@@ -1,11 +1,15 @@
 {
   "lr": 1e-3,
   "batch_size": 140,
-  "max_epochs": 90,
+  "max_epochs": 3,
   "patience": 200,
   "min_delta": 0.01,
   "shuffle":false,
   "initialise_weights":true,
   "drop_last": true,
-  "profile": true
+  "profile": true,
+  "logg_cpu_utilization": false,
+  "max_training_size": 10000,
+  "max_validation_size": 1000,
+  "max_test_size": 1000
 }

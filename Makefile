@@ -9,7 +9,7 @@ EXPERIMENTS := sampler_comparison
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise
 
 help:
 	@echo "Usage: make <implementation_folder> [DATASET=cora]"
@@ -53,3 +53,12 @@ ingest_cora:
 
 ingest_arxiv:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/arxiv/ingest.py
+
+ingest_products:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-products/ingest.py
+
+ingest_papers100M:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-papers100M/ingest.py
+
+summarise:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) src/benchmarking_tools/summarise.py

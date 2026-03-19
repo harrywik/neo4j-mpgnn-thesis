@@ -65,6 +65,10 @@ def main(config: dict):
         batch_size=config.get("batch_size"),
         nodeloader_args=nodeloader_args,
         measurer=measurer,
+        cpu_monitor_interval=1 if config.get("logg_cpu_utilization", True) else None,
+        max_training_size=config.get("max_training_size"),
+        max_validation_size=config.get("max_validation_size"),
+        max_test_size=config.get("max_test_size"),
     )
 
     trainer.train(max_epochs=config.get("max_epochs"))

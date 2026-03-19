@@ -6,7 +6,7 @@ from torch import nn
 from torch_geometric.data import GraphStore, FeatureStore, HeteroData, Data
 from torch_geometric.sampler import BaseSampler
 
-def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None, iteration: int = None) -> float:
+def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None, iteration: int = None, limit: int | None = None) -> float:
     """Evaluate a GNN model on a dataset split using neighbor sampling.
 
     The function iterates over the requested split in fixed-size chunks of seed
@@ -29,7 +29,7 @@ def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore,
 
     if isinstance(data, tuple):
         feature_store, graph_store = data
-        node_ids = graph_store.get_split(split=split)
+        node_ids = graph_store.get_split(limit=limit, split=split)
         val_loader = NodeLoader(
                 data=(feature_store, graph_store),
                 node_sampler=sampler,

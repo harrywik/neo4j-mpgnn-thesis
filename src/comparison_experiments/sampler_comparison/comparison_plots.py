@@ -8,6 +8,7 @@ comparison plots and a summary JSON to the experiment directory.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -85,12 +86,18 @@ def aggregate_runs(
     epoch_arrays: list[np.ndarray] = []
     time_curves: list[tuple[np.ndarray, np.ndarray]] = []
     scalars: dict[str, list[float]] = {}
+    visit_counts: Counter = Counter()
 
     for run_idx in range(num_runs):
         run_dir = sampler_dir / f"run_{run_idx}"
         data = load_run_data(run_dir)
         if data is None:
             continue
+
+        visit_path = run_dir / "node_visit_counts.json"
+        if visit_path.exists():
+            with open(visit_path) as f:
+                visit_counts.update({int(k): v for k, v in json.load(f).items()})
 
         va = data["val_accs"]
         df = data["df"]
@@ -201,6 +208,7 @@ def aggregate_runs(
         "scalar_means": scalar_means,
         "scalar_stds": scalar_stds,
         "n_runs": len(epoch_arrays),
+        "node_visit_counts": visit_counts,
     }
 
 
@@ -576,6 +584,144 @@ def plot_feature_server_exec(agg: dict[str, dict], out_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Node visit distribution plots
+# ---------------------------------------------------------------------------
+
+def plot_node_visit_distribution(
+    agg: dict[str, dict], out_dir: Path, top_n: int = 40
+) -> None:
+    """Small-multiples bar chart of node visit probability distributions.
+
+    For each sampler one subplot shows the empirical probability of visiting
+    each of the ``top_n`` most-visited nodes (summed across all samplers).
+    All subplots share the same x-axis order and y-axis scale so shapes are
+    directly comparable.
+    """
+    # Collect counts per sampler and build union vocabulary
+    samplers = [name for name, data in agg.items() if data.get("node_visit_counts")]
+    if not samplers:
+        return
+
+    all_counts: dict[str, Counter] = {
+        name: agg[name]["node_visit_counts"] for name in samplers
+    }
+
+    # Aggregate total counts across all samplers to pick top_n nodes
+    combined: Counter = Counter()
+    for c in all_counts.values():
+        combined.update(c)
+
+    if not combined:
+        return
+
+    top_nodes = [node_id for node_id, _ in combined.most_common(top_n)]
+
+    # Build probability vectors (normalised over all visited nodes, not just top_n)
+    def _prob(counter: Counter, nodes: list[int]) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        return np.array([counter.get(n, 0) / total for n in nodes])
+
+    probs = {name: _prob(all_counts[name], top_nodes) for name in samplers}
+
+    n_samplers = len(samplers)
+    max_p = max(p.max() for p in probs.values() if len(p)) * 1.15 or 0.01
+
+    fig, axes = plt.subplots(
+        n_samplers, 1,
+        figsize=(max(10, top_n * 0.35), n_samplers * 2.8),
+        sharex=True,
+    )
+    if n_samplers == 1:
+        axes = [axes]
+
+    x = np.arange(len(top_nodes))
+    x_labels = [str(n) for n in top_nodes]
+
+    for ax, name, color in zip(axes, samplers, _COLORS):
+        p = probs[name]
+        ax.bar(x, p, color=color, width=0.8, alpha=0.85)
+        ax.set_ylim(0, max_p)
+        ax.set_ylabel("p(node)", fontsize=8)
+        ax.set_title(name, fontsize=9, loc="left", pad=3)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
+        ax.tick_params(axis="y", labelsize=7)
+
+    axes[-1].set_xticks(x)
+    axes[-1].set_xticklabels(x_labels, rotation=90, fontsize=5)
+    axes[-1].set_xlabel(f"Node ID (top {top_n} by aggregate visit count)", fontsize=8)
+
+    fig.suptitle("Node visit probability distribution", fontsize=11, y=1.01)
+    fig.tight_layout()
+    fig.savefig(out_dir / "comparison_node_visit_distribution.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_node_visit_kl_divergence(
+    agg: dict[str, dict], out_dir: Path
+) -> None:
+    """Heatmap of pairwise KL divergence between sampler node visit distributions.
+
+    KL(P ‖ Q) is shown for every ordered pair (row = P, column = Q).
+    Probabilities are built over the full union vocabulary so that every node
+    seen by any sampler is included; ε = 1e-9 is added to avoid log(0).
+    """
+    samplers = [name for name, data in agg.items() if data.get("node_visit_counts")]
+    if len(samplers) < 2:
+        return
+
+    # Union vocabulary
+    all_nodes: set[int] = set()
+    for name in samplers:
+        all_nodes.update(agg[name]["node_visit_counts"].keys())
+    vocab = sorted(all_nodes)
+
+    eps = 1e-9
+
+    def _prob_vec(counter: Counter) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        v = np.array([counter.get(n, 0) / total for n in vocab], dtype=float)
+        v += eps
+        v /= v.sum()
+        return v
+
+    prob_vecs = {name: _prob_vec(agg[name]["node_visit_counts"]) for name in samplers}
+
+    n = len(samplers)
+    kl_matrix = np.zeros((n, n))
+    for i, p_name in enumerate(samplers):
+        for j, q_name in enumerate(samplers):
+            if i == j:
+                kl_matrix[i, j] = 0.0
+            else:
+                p = prob_vecs[p_name]
+                q = prob_vecs[q_name]
+                kl_matrix[i, j] = float(np.sum(p * np.log(p / q)))
+
+    fig, ax = plt.subplots(figsize=(max(4, n * 1.5), max(3.5, n * 1.5)))
+    im = ax.imshow(kl_matrix, cmap="YlOrRd", aspect="auto")
+    fig.colorbar(im, ax=ax, label="KL divergence (nats)")
+
+    ax.set_xticks(np.arange(n))
+    ax.set_yticks(np.arange(n))
+    ax.set_xticklabels(samplers, rotation=30, ha="right", fontsize=9)
+    ax.set_yticklabels(samplers, fontsize=9)
+    ax.set_xlabel("Q  (reference distribution)", fontsize=9)
+    ax.set_ylabel("P  (approximation)", fontsize=9)
+    ax.set_title("Pairwise KL divergence  KL(P ‖ Q)", fontsize=10)
+
+    for i in range(n):
+        for j in range(n):
+            val = kl_matrix[i, j]
+            text_color = "white" if val > kl_matrix.max() * 0.6 else "black"
+            ax.text(j, i, f"{val:.3f}", ha="center", va="center",
+                    fontsize=9, color=text_color)
+
+    fig.tight_layout()
+    fig.savefig(out_dir / "comparison_node_visit_kl.png", dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
 # Summary JSON
 # ---------------------------------------------------------------------------
 
@@ -640,6 +786,8 @@ def plot_comparison(
     plot_rtt_baseline(agg, experiment_dir)
     plot_topology_server_exec(agg, experiment_dir)
     plot_feature_server_exec(agg, experiment_dir)
+    plot_node_visit_distribution(agg, experiment_dir)
+    plot_node_visit_kl_divergence(agg, experiment_dir)
     write_summary(agg, experiment_dir, num_runs)
 
     print(f"  Plots written to {experiment_dir}")

@@ -29,11 +29,14 @@ class Trainer:
         batch_size: int = 100,
         drop_last: bool = True,
         optimizer: optim.Optimizer = None,
-        max_train_seconds: int = 300,
+        max_train_seconds: int = 3600,
         device: str = "cpu",
         nodeloader_args: dict | None = None,
         criterion = None,
         cpu_monitor_interval: float | None = 1,
+        max_training_size: int | None = None,
+        max_validation_size: int | None = None,
+        max_test_size: int | None = None,
     ) -> None:
         self.batch_size = batch_size
         self.measurer = measurer
@@ -43,7 +46,7 @@ class Trainer:
             if sampler is None:
                 raise ValueError("Sampler cannot be None when data is a tuple of (FeatureStore, GraphStore)")
             self.feature_store, self.graph_store = data
-            self.train_indices = train_indices if train_indices is not None else self._get_train_indices()
+            self.train_indices = train_indices if train_indices is not None else self._get_train_indices(max_training_size)
             self.sampler = sampler
             self.data = None
             self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
@@ -131,6 +134,8 @@ class Trainer:
         self.validation_loss_minimum = None
         self.criterion = nn.CrossEntropyLoss() if criterion is None else criterion
         self.cpu_monitor_interval = cpu_monitor_interval
+        self.max_validation_size = max_validation_size
+        self.max_test_size = max_test_size
         
 
     def _save_snapshot(self, epoch: int) -> None:
@@ -144,8 +149,9 @@ class Trainer:
         torch.save(snapshot, self.snapshot_path)
         print(f"Epoch {epoch} | Training snapshot saved at {self.snapshot_path}")
 
-    def _get_train_indices(self) -> torch.Tensor:
+    def _get_train_indices(self, limit: int | None = None) -> torch.Tensor:
         indices = self.graph_store.get_split(
+            limit=limit,
             split="train",
             shuffle=True,
         ).to(torch.long)
@@ -172,6 +178,9 @@ class Trainer:
             self.measurer.log_event("start_batch_fetch", 1)
             batch = next(it) 
             self.measurer.log_event("end_batch_fetch", 1)
+
+            if hasattr(batch, "n_id"):
+                self.measurer.log_node_visits(batch.n_id.tolist())
 
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))
@@ -213,6 +222,7 @@ class Trainer:
                 data=self.data,
                 num_neighbors=self.num_neighbors,
                 split="test",
+                limit=self.max_test_size,
             )
         else:
             test_accuracy, _ = evaluate(
@@ -220,6 +230,7 @@ class Trainer:
                 data=(self.feature_store, self.graph_store),
                 sampler=self.sampler,
                 split="test",
+                limit=self.max_test_size,
             )
         self.measurer.log_event("test_accuracy", test_accuracy)
         self.measurer.close()
@@ -243,6 +254,7 @@ class Trainer:
                     num_neighbors=self.num_neighbors,
                     split="val",
                     iteration=epoch,
+                    limit=self.max_validation_size,
                 )
             else:
                 validation_acc, validation_loss = evaluate(
@@ -251,6 +263,7 @@ class Trainer:
                     sampler=self.sampler,
                     split="val",
                     iteration=epoch,
+                    limit=self.max_validation_size,
                 )
             self.measurer.log_event("validation_accuracy", validation_acc)
             self.measurer.log_event("validation_loss", validation_loss)
