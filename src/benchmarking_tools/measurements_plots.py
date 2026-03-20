@@ -660,3 +660,251 @@ def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame, output_dir: Path | No
     out = (output_dir or csv_path.parent) / "cpu_utilization.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# End-to-end latency: combined query_profile.json + train_profile.txt
+# ---------------------------------------------------------------------------
+
+_CPROFILE_LINE_RE = re.compile(
+    r"^\s*(\d+(?:/\d+)?)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+([\d.]+)\s+(.+)$"
+)
+
+# Framework files whose "forward" functions we do NOT want to pick as the
+# user's GNN model forward pass.
+_FRAMEWORK_FORWARD_RE = re.compile(
+    r"gcn_conv|message_passing|linear\.py|propagate|conv\.py|"
+    r"basic\.py|base\.py|module\.py|experimental\.py|loop\.py",
+    re.IGNORECASE,
+)
+
+
+def _parse_train_profile(txt_path: Path) -> dict:
+    """Parse cProfile text output into a structured dict.
+
+    Returns ``{"total_s": float, "functions": [{"ncalls", "tottime",
+    "cumtime", "location"}]}`` or an empty dict if the file is absent.
+    """
+    if not txt_path.exists():
+        return {}
+
+    with open(txt_path) as f:
+        content = f.read()
+
+    total_match = re.search(r"in\s+([\d.]+)\s+seconds", content)
+    total_s = float(total_match.group(1)) if total_match else None
+
+    functions: list[dict] = []
+    for line in content.splitlines():
+        m = _CPROFILE_LINE_RE.match(line)
+        if m:
+            ncalls_str, tottime, _, cumtime, _, location = m.groups()
+            functions.append({
+                "ncalls":   int(ncalls_str.split("/")[0]),
+                "tottime":  float(tottime),
+                "cumtime":  float(cumtime),
+                "location": location.strip(),
+            })
+
+    return {"total_s": total_s, "functions": functions}
+
+
+def _find_profile_fn(functions: list[dict], *patterns: str) -> dict | None:
+    """Return the first function whose location matches any regex pattern."""
+    for fn in functions:
+        loc = fn["location"]
+        for p in patterns:
+            if re.search(p, loc):
+                return fn
+    return None
+
+
+def plot_end_to_end_latency(
+    profile_json_path: Path,
+    train_profile_path: Path,
+    summary: dict,
+    output_dir: Path | None = None,
+) -> None:
+    """Combined end-to-end per-batch latency waterfall.
+
+    Three rows (rows are omitted when data is unavailable):
+
+    * **Topology** – DB Cypher exec | result transfer | driver recv | Python ETL
+    * **Features** – DB property I/O | result transfer | driver recv | Python ETL
+    * **GNN compute** – model forward | backward | optimizer step
+
+    Topology and Features come from ``query_profile.json``; GNN timings
+    come from ``train_profile.txt`` (cProfile), normalised per training batch.
+
+    Saved as ``end_to_end_latency.png``.
+    """
+    # ── Load query_profile.json ───────────────────────────────────────────
+    qp: dict = {}
+    if profile_json_path.exists():
+        with open(profile_json_path) as f:
+            qp = json.load(f)
+
+    def _qp_global(source: str) -> dict:
+        return qp.get(source, {}).get("global", {})
+
+    metrics = summary.get("metrics", {})
+
+    # Shared neutral colours for network/driver segments (same as waterfall).
+    _C_TRANSFER = "#BDBDBD"
+    _C_DRIVER   = "#D9D9D9"
+    _C_ETL      = "#F0F0F0"
+
+    # ── Topology slices ───────────────────────────────────────────────────
+    sg = _qp_global("sampler")
+    topo_db       = sg.get("avg_db_exec_time_ms")
+    topo_transfer = sg.get("avg_network_transfer_ms")
+    topo_driver   = sg.get("avg_driver_overhead_ms")
+    topo_etl      = metrics.get("topo_etl_ms")
+
+    topo_slices: list[tuple[str, float, str]] = []
+    if topo_db is not None:
+        topo_slices.append(("DB: Cypher execution", topo_db, "#4C78A8"))
+    if topo_transfer is not None and topo_transfer > 0:
+        topo_slices.append(("Result transfer", topo_transfer, _C_TRANSFER))
+    if topo_driver is not None and topo_transfer is not None:
+        pure_driver = max(0.0, topo_driver - topo_transfer)
+        if pure_driver > 0:
+            topo_slices.append(("Driver / Python recv", pure_driver, _C_DRIVER))
+    if topo_etl is not None:
+        topo_slices.append(("Python ETL", float(topo_etl), _C_ETL))
+
+    # ── Feature slices ────────────────────────────────────────────────────
+    fg = _qp_global("feat_x")
+    feat_db       = fg.get("avg_db_exec_time_ms")
+    feat_transfer = fg.get("avg_network_transfer_ms")
+    feat_driver   = fg.get("avg_driver_overhead_ms")
+    feat_etl      = metrics.get("feat_x_etl_ms")
+
+    feat_slices: list[tuple[str, float, str]] = []
+    if feat_db is not None:
+        feat_slices.append(("DB: property I/O", feat_db, "#F58518"))
+    if feat_transfer is not None and feat_transfer > 0:
+        feat_slices.append(("Result transfer", feat_transfer, _C_TRANSFER))
+    if feat_driver is not None and feat_transfer is not None:
+        pure_driver = max(0.0, feat_driver - feat_transfer)
+        if pure_driver > 0:
+            feat_slices.append(("Driver / Python recv", pure_driver, _C_DRIVER))
+    if feat_etl is not None:
+        feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
+
+    # ── GNN slices (from train_profile.txt) ──────────────────────────────
+    gnn_slices: list[tuple[str, float, str]] = []
+    profile_data = _parse_train_profile(train_profile_path)
+    if profile_data:
+        fns = profile_data["functions"]
+
+        # Number of training batches = ncalls of _run_batch.
+        run_batch_fn = _find_profile_fn(fns, r"Training\.py.*_run_batch")
+        n_train = run_batch_fn["ncalls"] if run_batch_fn else None
+
+        if n_train and n_train > 0:
+            # GNN forward: highest-cumtime forward() not from a framework file.
+            forward_candidates = [
+                fn for fn in fns
+                if re.search(r"\(forward\)$", fn["location"])
+                and not _FRAMEWORK_FORWARD_RE.search(fn["location"])
+            ]
+            if forward_candidates:
+                fwd_fn = max(forward_candidates, key=lambda f: f["cumtime"])
+                ms_per_batch = fwd_fn["cumtime"] * 1000 / fwd_fn["ncalls"]
+                if ms_per_batch > 0:
+                    gnn_slices.append(("GNN forward", ms_per_batch, "#54A24B"))
+
+            # Backward pass.
+            bwd_fn = _find_profile_fn(
+                fns,
+                r"_tensor\.py.*\(backward\)",
+                r"graph\.py.*_engine_run_backward",
+                r"__init__.*\(backward\)",
+            )
+            if bwd_fn:
+                ms_per_batch = bwd_fn["cumtime"] * 1000 / max(bwd_fn["ncalls"], 1)
+                if ms_per_batch > 0:
+                    gnn_slices.append(("GNN backward", ms_per_batch, "#88D27A"))
+
+            # Optimizer step.
+            opt_fn = _find_profile_fn(
+                fns,
+                r"optimizer\.py.*\(wrapper\)",
+                r"adam\.py.*\(step\)",
+                r"adam\.py.*\(adam\)",
+            )
+            if opt_fn:
+                ms_per_batch = opt_fn["cumtime"] * 1000 / max(opt_fn["ncalls"], 1)
+                if ms_per_batch > 0:
+                    gnn_slices.append(("Optimizer step", ms_per_batch, "#B8EFB0"))
+
+    # ── Assemble rows ─────────────────────────────────────────────────────
+    rows: list[tuple[str, list]] = []
+    if topo_slices:
+        rows.append(("Topology", topo_slices))
+    if feat_slices:
+        rows.append(("Features", feat_slices))
+    if gnn_slices:
+        rows.append(("GNN compute", gnn_slices))
+
+    if not rows:
+        return
+
+    n_rows = len(rows)
+    fig, ax = plt.subplots(figsize=(11, max(2.5, n_rows * 1.5)))
+
+    bar_height = 0.5
+    yticks, ylabels = [], []
+    legend_handles: dict[str, tuple[str, str]] = {}
+
+    for row_i, (row_label, slices) in enumerate(rows):
+        y = row_i
+        left = 0.0
+        total = sum(s[1] for s in slices)
+        for seg_label, width, color in slices:
+            if width <= 0:
+                continue
+            ax.barh(y, width, left=left, height=bar_height, color=color,
+                    edgecolor="white", linewidth=0.5)
+            if total > 0 and width / total > 0.03:
+                ax.text(
+                    left + width / 2, y,
+                    f"{width:.1f}",
+                    ha="center", va="center", fontsize=7,
+                    color="white" if color not in (_C_TRANSFER, _C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
+                    fontweight="bold",
+                )
+            left += width
+            legend_handles.setdefault(seg_label, (seg_label, color))
+
+        ax.text(
+            left + (ax.get_xlim()[1] * 0.005 if ax.get_xlim()[1] > 0 else 0.5),
+            y, f"{left:.1f} ms",
+            ha="left", va="center", fontsize=8,
+        )
+        yticks.append(y)
+        ylabels.append(row_label)
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean ms per batch (cumulative timeline)")
+    ax.set_title("End-to-end per-batch latency breakdown")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+
+    # Legend – upper right (topology bar is short, leaving whitespace there).
+    legend_patches = [
+        Patch(facecolor=color, label=label, edgecolor="white")
+        for label, color in legend_handles.values()
+    ]
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+              framealpha=0.85, ncol=1)
+
+    max_total = max(sum(s[1] for s in slices) for _, slices in rows)
+    ax.set_xlim(0, max_total * 1.18)
+
+    fig.tight_layout()
+    out = (output_dir or profile_json_path.parent) / "end_to_end_latency.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
