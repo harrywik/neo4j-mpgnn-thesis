@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import io
 import json
+import pstats
 import re
 from pathlib import Path
 
@@ -353,6 +355,119 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame, output_di
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     out = (output_dir or csv_path.parent) / "validation_convergence_time.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
+def plot_driver_time_breakdown(
+    prof_path: Path,
+    n_batches: int,
+    output_dir: Path | None = None,
+) -> None:
+    """Horizontal bar chart: where the Neo4j Python driver spends time per batch.
+
+    Reads the binary cProfile ``.prof`` file saved by ``Training.train()``,
+    extracts ``tottime`` for key leaf functions (socket I/O, Bolt decode,
+    packstream, NumPy reconstruction, Python record objects), divides by
+    ``n_batches`` to get mean ms per batch, and renders a single-row waterfall
+    styled bar chart comparable to :func:`plot_subphase_latency_waterfall`.
+
+    All entries are **leaf** ``tottime`` values so there is no double-counting.
+    The total shown is the sum of these leaves; remaining driver overhead (Bolt
+    frame routing, call-chain glue) is not attributed to any leaf and is noted
+    in the subtitle.
+
+    Saved as ``driver_time_breakdown.png``.
+    """
+    if not prof_path.exists():
+        return
+
+    # Load pstats from the binary profile
+    try:
+        st = pstats.Stats(str(prof_path), stream=io.StringIO())
+        st.strip_dirs()
+    except Exception:
+        return
+
+    # stats.stats is a dict:
+    #   (file, line, func) → (pcalls, ncalls, tottime, cumtime, callers)
+    raw = st.stats  # type: ignore[attr-defined]
+
+    # Lookup helpers: match by (filename_fragment, function_name)
+    def _find_tottime(file_frag: str, func_name: str) -> float:
+        for (fname, _line, fn), entry in raw.items():
+            if file_frag in fname and fn == func_name:
+                return entry[2]  # tottime
+        return 0.0
+
+    entries = [
+        ("Socket receive\n(recv_into)",       "_socket",      "recv_into",             "#4C78A8"),
+        ("Socket overhead\n(settimeout)",      "_socket",      "settimeout",            "#7BAFD4"),
+        ("Packstream decode\n(unpack)",        "packstream",   "unpack",                "#AED4F0"),
+        ("byte[] → ndarray\n(frombuffer)",     "fromnumeric",  "frombuffer",            "#9ECAE1"),
+        ("Record obj. creation\n(__new__)",    "_data",        "__new__",               "#6BAED6"),
+    ]
+
+    # frombuffer is a built-in — try alternate key patterns
+    _frombuffer_total = _find_tottime("fromnumeric", "frombuffer")
+    if _frombuffer_total == 0.0:
+        # built-in method entry stored differently
+        for (fname, _line, fn), entry in raw.items():
+            if "frombuffer" in fn:
+                _frombuffer_total = max(_frombuffer_total, entry[2])
+
+    totals_s: list[tuple[str, float, str]] = []
+    for label, file_frag, func_name, color in entries:
+        if func_name == "frombuffer":
+            t = _frombuffer_total
+        else:
+            t = _find_tottime(file_frag, func_name)
+        if t > 0:
+            totals_s.append((label, t, color))
+
+    if not totals_s:
+        return
+
+    # Convert to ms per batch
+    ms_per_batch = [(lbl, t * 1000.0 / n_batches, col) for lbl, t, col in totals_s]
+    total_ms = sum(v for _, v, _ in ms_per_batch)
+
+    fig, ax = plt.subplots(figsize=(max(6, len(ms_per_batch) * 1.6), 2.8))
+    left = 0.0
+    legend_patches = []
+    for label, width, color in ms_per_batch:
+        if width <= 0:
+            continue
+        ax.barh(0, width, left=left, height=0.5, color=color,
+                edgecolor="white", linewidth=0.5)
+        frac = width / total_ms
+        if frac > 0.05:
+            short_label = label.split("\n")[0]
+            ax.text(
+                left + width / 2, 0,
+                f"{width:.2f}",
+                ha="center", va="center", fontsize=7,
+                color="white", fontweight="bold",
+            )
+        left += width
+        legend_patches.append(Patch(facecolor=color, label=label.replace("\n", " "), edgecolor="white"))
+
+    # Total label at right edge
+    ax.text(left * 1.01, 0, f"{total_ms:.2f} ms", ha="left", va="center", fontsize=8)
+
+    ax.set_yticks([0])
+    ax.set_yticklabels(["Driver\nleaf cost"], fontsize=8)
+    ax.set_xlabel("mean ms per batch (leaf tottime / n_batches)")
+    ax.set_title(
+        "Neo4j driver time breakdown (cProfile leaf functions)",
+        fontsize=9,
+    )
+    ax.set_xlim(0, left * 1.2)
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+              framealpha=0.85, ncol=1)
+    fig.tight_layout()
+    out = (output_dir or prof_path.parent) / "driver_time_breakdown.png"
     fig.savefig(out, dpi=150)
     plt.close(fig)
 

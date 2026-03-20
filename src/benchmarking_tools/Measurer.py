@@ -16,6 +16,7 @@ from .measurements_plots import (
     plot_subphase_latency_waterfall,
     plot_all_operator_profiles,
     plot_end_to_end_latency,
+    plot_driver_time_breakdown,
 )
 from .QueryProfileAccumulator import QueryProfileAccumulator
 
@@ -98,6 +99,11 @@ class Measurer:
 
         plot_subphase_latency(csv_path, summary)
         plot_subphase_latency_waterfall(csv_path, summary)
+
+        prof_path = csv_path.with_name("train_profile.prof")
+        if prof_path.exists():
+            n_batches = summary.get("run", {}).get("batches_seen") or 1
+            plot_driver_time_breakdown(prof_path, n_batches)
 
         json_path = csv_path.with_suffix(".json")
         try:
