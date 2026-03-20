@@ -87,6 +87,7 @@ def aggregate_runs(
     time_curves: list[tuple[np.ndarray, np.ndarray]] = []
     scalars: dict[str, list[float]] = {}
     visit_counts: Counter = Counter()
+    edge_visit_counts: Counter = Counter()
 
     for run_idx in range(num_runs):
         run_dir = sampler_dir / f"run_{run_idx}"
@@ -98,6 +99,13 @@ def aggregate_runs(
         if visit_path.exists():
             with open(visit_path) as f:
                 visit_counts.update({int(k): v for k, v in json.load(f).items()})
+
+        edge_visit_path = run_dir / "edge_visit_counts.json"
+        if edge_visit_path.exists():
+            with open(edge_visit_path) as f:
+                edge_visit_counts.update(
+                    {str(k): int(v) for k, v in json.load(f).items()}
+                )
 
         va = data["val_accs"]
         df = data["df"]
@@ -209,6 +217,7 @@ def aggregate_runs(
         "scalar_stds": scalar_stds,
         "n_runs": len(epoch_arrays),
         "node_visit_counts": visit_counts,
+        "edge_visit_counts": edge_visit_counts,
     }
 
 
@@ -822,6 +831,220 @@ def plot_node_visit_kl_divergence(
 
 
 # ---------------------------------------------------------------------------
+# Edge visit distribution plots (canonical undirected ``minId_maxId`` keys)
+# ---------------------------------------------------------------------------
+
+def plot_edge_visit_distribution(
+    agg: dict[str, dict], out_dir: Path, top_n: int = 40
+) -> None:
+    """Small-multiples bar chart of empirical probability per sampled edge."""
+    samplers = [name for name, data in agg.items() if data.get("edge_visit_counts")]
+    if not samplers:
+        return
+
+    all_counts: dict[str, Counter] = {
+        name: agg[name]["edge_visit_counts"] for name in samplers
+    }
+
+    combined: Counter = Counter()
+    for c in all_counts.values():
+        combined.update(c)
+
+    if not combined:
+        return
+
+    top_edges = [eid for eid, _ in combined.most_common(top_n)]
+
+    def _prob(counter: Counter, edges: list[str]) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        return np.array([counter.get(e, 0) / total for e in edges])
+
+    probs = {name: _prob(all_counts[name], top_edges) for name in samplers}
+
+    n_samplers = len(samplers)
+    max_p = max(p.max() for p in probs.values() if len(p)) * 1.15 or 0.01
+
+    fig, axes = plt.subplots(
+        n_samplers, 1,
+        figsize=(max(10, top_n * 0.35), n_samplers * 2.8),
+        sharex=True,
+    )
+    if n_samplers == 1:
+        axes = [axes]
+
+    x = np.arange(len(top_edges))
+    x_labels = [str(e) for e in top_edges]
+
+    for ax, name, color in zip(axes, samplers, _COLORS):
+        p = probs[name]
+        ax.bar(x, p, color=color, width=0.8, alpha=0.85)
+        ax.set_ylim(0, max_p)
+        ax.set_ylabel("p(edge)", fontsize=8)
+        ax.set_title(name, fontsize=9, loc="left", pad=3)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
+        ax.tick_params(axis="y", labelsize=7)
+
+    axes[-1].set_xticks(x)
+    axes[-1].set_xticklabels(x_labels, rotation=90, fontsize=5)
+    axes[-1].set_xlabel(f"Edge (min_max global id, top {top_n} aggregate)", fontsize=8)
+
+    fig.suptitle("Edge visit probability distribution (undirected canonical)", fontsize=11, y=1.01)
+    fig.tight_layout()
+    fig.savefig(out_dir / "comparison_edge_visit_distribution.png", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
+def plot_edge_visit_overlay(
+    agg: dict[str, dict],
+    name_a: str,
+    name_b: str,
+    out_dir: Path,
+    top_n: int = 40,
+    alpha: float = 0.05,
+) -> None:
+    """Grouped bar chart overlaying two samplers' edge visit distributions."""
+    from math import erfc, sqrt as _sqrt
+
+    counts_a: Counter = agg[name_a].get("edge_visit_counts", Counter())
+    counts_b: Counter = agg[name_b].get("edge_visit_counts", Counter())
+    if not counts_a or not counts_b:
+        return
+
+    combined: Counter = Counter()
+    combined.update(counts_a)
+    combined.update(counts_b)
+    top_edges = [eid for eid, _ in combined.most_common(top_n)]
+
+    total_a = sum(counts_a.values()) or 1
+    total_b = sum(counts_b.values()) or 1
+
+    p_a = np.array([counts_a.get(e, 0) / total_a for e in top_edges])
+    p_b = np.array([counts_b.get(e, 0) / total_b for e in top_edges])
+
+    bonferroni_alpha = alpha / len(top_edges)
+    significant = np.zeros(len(top_edges), dtype=bool)
+    for i, e in enumerate(top_edges):
+        c_a = counts_a.get(e, 0)
+        c_b = counts_b.get(e, 0)
+        p_pool = (c_a + c_b) / (total_a + total_b)
+        if p_pool in (0.0, 1.0):
+            continue
+        se = np.sqrt(p_pool * (1 - p_pool) * (1 / total_a + 1 / total_b))
+        if se == 0:
+            continue
+        z = abs(p_a[i] - p_b[i]) / se
+        p_val = erfc(z / _sqrt(2))
+        significant[i] = p_val < bonferroni_alpha
+
+    color_a = _color(list(agg.keys()).index(name_a))
+    color_b = _color(list(agg.keys()).index(name_b))
+    sig_color = "#E45756"
+
+    x = np.arange(len(top_edges))
+    width = 0.38
+    max_p = max(p_a.max(), p_b.max()) * 1.2 or 0.01
+
+    fig, ax = plt.subplots(figsize=(max(10, top_n * 0.42), 4))
+
+    bars_a = ax.bar(
+        x - width / 2, p_a, width,
+        color=[sig_color if s else color_a for s in significant],
+        alpha=0.85, label=name_a,
+    )
+    bars_b = ax.bar(
+        x + width / 2, p_b, width,
+        color=[sig_color if s else color_b for s in significant],
+        alpha=0.85, label=name_b,
+    )
+
+    for bar in bars_b:
+        bar.set_hatch("//")
+        bar.set_edgecolor("white")
+        bar.set_linewidth(0.4)
+
+    ax.set_ylim(0, max_p)
+    ax.set_xticks(x)
+    ax.set_xticklabels([str(e) for e in top_edges], rotation=90, fontsize=5)
+    ax.set_xlabel(f"Edge (min_max global id, top {top_n} aggregate)", fontsize=8)
+    ax.set_ylabel("p(edge)", fontsize=8)
+    ax.set_title(
+        f"Edge visit distribution: {name_a} vs {name_b}\n"
+        f"(red = statistically significant difference, Bonferroni α={alpha})",
+        fontsize=9,
+    )
+    ax.legend(fontsize=8)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+
+    safe_a = name_a.replace(" ", "_")
+    safe_b = name_b.replace(" ", "_")
+    fig.savefig(
+        out_dir / f"comparison_edge_visit_overlay_{safe_a}_vs_{safe_b}.png",
+        dpi=150, bbox_inches="tight",
+    )
+    plt.close(fig)
+
+
+def plot_edge_visit_kl_divergence(
+    agg: dict[str, dict], out_dir: Path
+) -> None:
+    """Heatmap of pairwise KL divergence between edge visit distributions."""
+    samplers = [name for name, data in agg.items() if data.get("edge_visit_counts")]
+    if len(samplers) < 2:
+        return
+
+    all_edges: set[str] = set()
+    for name in samplers:
+        all_edges.update(agg[name]["edge_visit_counts"].keys())
+    vocab = sorted(all_edges)
+
+    eps = 1e-9
+
+    def _prob_vec(counter: Counter) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        v = np.array([counter.get(e, 0) / total for e in vocab], dtype=float)
+        v += eps
+        v /= v.sum()
+        return v
+
+    prob_vecs = {name: _prob_vec(agg[name]["edge_visit_counts"]) for name in samplers}
+
+    n = len(samplers)
+    kl_matrix = np.zeros((n, n))
+    for i, p_name in enumerate(samplers):
+        for j, q_name in enumerate(samplers):
+            if i == j:
+                kl_matrix[i, j] = 0.0
+            else:
+                p = prob_vecs[p_name]
+                q = prob_vecs[q_name]
+                kl_matrix[i, j] = float(np.sum(p * np.log(p / q)))
+
+    fig, ax = plt.subplots(figsize=(max(4, n * 1.5), max(3.5, n * 1.5)))
+    im = ax.imshow(kl_matrix, cmap="YlOrRd", aspect="auto")
+    fig.colorbar(im, ax=ax, label="KL divergence (nats)")
+
+    ax.set_xticks(np.arange(n))
+    ax.set_yticks(np.arange(n))
+    ax.set_xticklabels(samplers, rotation=30, ha="right", fontsize=9)
+    ax.set_yticklabels(samplers, fontsize=9)
+    ax.set_xlabel("Q  (reference distribution)", fontsize=9)
+    ax.set_ylabel("P  (approximation)", fontsize=9)
+    ax.set_title("Pairwise KL divergence over edges  KL(P ‖ Q)", fontsize=10)
+
+    for i in range(n):
+        for j in range(n):
+            val = kl_matrix[i, j]
+            text_color = "white" if val > kl_matrix.max() * 0.6 else "black"
+            ax.text(j, i, f"{val:.3f}", ha="center", va="center",
+                    fontsize=9, color=text_color)
+
+    fig.tight_layout()
+    fig.savefig(out_dir / "comparison_edge_visit_kl.png", dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
 # Summary JSON
 # ---------------------------------------------------------------------------
 
@@ -914,9 +1137,83 @@ def compute_pairwise_distribution_stats(
     return result
 
 
+def compute_pairwise_edge_distribution_stats(
+    agg: dict[str, dict],
+    alpha: float = 0.05,
+) -> dict[str, dict]:
+    """Same as :func:`compute_pairwise_distribution_stats` but for edge visit counts."""
+    from math import erfc, sqrt as _sqrt
+
+    eps = 1e-9
+    samplers = [n for n, d in agg.items() if d.get("edge_visit_counts")]
+    result: dict[str, dict] = {}
+
+    all_edges: set[str] = set()
+    for name in samplers:
+        all_edges.update(agg[name]["edge_visit_counts"].keys())
+    vocab = sorted(all_edges)
+    n_vocab = len(vocab)
+    if n_vocab == 0:
+        return result
+
+    def _prob_vec(counter: Counter) -> np.ndarray:
+        total = sum(counter.values()) or 1
+        v = np.array([counter.get(e, 0) / total for e in vocab], dtype=float)
+        v += eps
+        v /= v.sum()
+        return v
+
+    for i in range(len(samplers)):
+        for j in range(i + 1, len(samplers)):
+            name_a, name_b = samplers[i], samplers[j]
+            counts_a = agg[name_a]["edge_visit_counts"]
+            counts_b = agg[name_b]["edge_visit_counts"]
+            total_a = sum(counts_a.values()) or 1
+            total_b = sum(counts_b.values()) or 1
+
+            p = _prob_vec(counts_a)
+            q = _prob_vec(counts_b)
+
+            kl_ab = float(np.sum(p * np.log(p / q)))
+            kl_ba = float(np.sum(q * np.log(q / p)))
+            m = 0.5 * (p + q)
+            js = float(0.5 * np.sum(p * np.log(p / m)) + 0.5 * np.sum(q * np.log(q / m)))
+
+            bonferroni_alpha = alpha / n_vocab
+            n_sig = 0
+            for edge in vocab:
+                c_a = counts_a.get(edge, 0)
+                c_b = counts_b.get(edge, 0)
+                p_a_edge = c_a / total_a
+                p_b_edge = c_b / total_b
+                p_pool = (c_a + c_b) / (total_a + total_b)
+                if p_pool in (0.0, 1.0):
+                    continue
+                se = _sqrt(p_pool * (1 - p_pool) * (1 / total_a + 1 / total_b))
+                if se == 0:
+                    continue
+                z = abs(p_a_edge - p_b_edge) / se
+                p_val = erfc(z / _sqrt(2))
+                if p_val < bonferroni_alpha:
+                    n_sig += 1
+
+            key = f"{name_a} vs {name_b}"
+            result[key] = {
+                "js_divergence": round(js, 6),
+                "kl_a_to_b": round(kl_ab, 6),
+                "kl_b_to_a": round(kl_ba, 6),
+                "n_edges_tested": n_vocab,
+                "n_edges_significant": n_sig,
+                "pct_edges_significant": round(100.0 * n_sig / n_vocab, 2),
+            }
+
+    return result
+
+
 def write_summary(
     agg: dict[str, dict], out_dir: Path, num_runs: int,
     pairwise_stats: dict[str, dict] | None = None,
+    pairwise_edge_stats: dict[str, dict] | None = None,
 ) -> None:
     summary: dict[str, Any] = {}
     for name, data in agg.items():
@@ -928,6 +1225,8 @@ def write_summary(
         }
     if pairwise_stats:
         summary["pairwise_distribution_stats"] = pairwise_stats
+    if pairwise_edge_stats:
+        summary["pairwise_edge_distribution_stats"] = pairwise_edge_stats
     out_path = out_dir / "comparison_summary.json"
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
@@ -972,6 +1271,7 @@ def plot_comparison(
     dir_accuracy    = experiment_dir / "accuracy";    dir_accuracy.mkdir(exist_ok=True)
     dir_latency     = experiment_dir / "latency";     dir_latency.mkdir(exist_ok=True)
     dir_node_visits = experiment_dir / "node_visits"; dir_node_visits.mkdir(exist_ok=True)
+    dir_edge_visits = experiment_dir / "edge_visits"; dir_edge_visits.mkdir(exist_ok=True)
     dir_batch       = experiment_dir / "batch";       dir_batch.mkdir(exist_ok=True)
 
     plot_accuracy_vs_epochs(agg, dir_accuracy)
@@ -991,6 +1291,9 @@ def plot_comparison(
     plot_node_visit_distribution(agg, dir_node_visits)
     plot_node_visit_kl_divergence(agg, dir_node_visits)
 
+    plot_edge_visit_distribution(agg, dir_edge_visits)
+    plot_edge_visit_kl_divergence(agg, dir_edge_visits)
+
     # Pairwise overlay plots with significance highlighting
     sampler_names_present = list(agg.keys())
     for i in range(len(sampler_names_present)):
@@ -1001,8 +1304,21 @@ def plot_comparison(
                 sampler_names_present[j],
                 dir_node_visits,
             )
+            plot_edge_visit_overlay(
+                agg,
+                sampler_names_present[i],
+                sampler_names_present[j],
+                dir_edge_visits,
+            )
 
     pairwise_stats = compute_pairwise_distribution_stats(agg)
-    write_summary(agg, experiment_dir, num_runs, pairwise_stats=pairwise_stats)
+    pairwise_edge_stats = compute_pairwise_edge_distribution_stats(agg)
+    write_summary(
+        agg,
+        experiment_dir,
+        num_runs,
+        pairwise_stats=pairwise_stats,
+        pairwise_edge_stats=pairwise_edge_stats,
+    )
 
     print(f"  Plots written to {experiment_dir}")

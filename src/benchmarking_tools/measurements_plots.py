@@ -357,6 +357,154 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame, output_di
     plt.close(fig)
 
 
+def plot_subphase_latency_waterfall(csv_path: Path, summary: dict, output_dir: Path | None = None) -> None:
+    """Waterfall / Gantt-style timeline bar for per-batch sub-phase latencies.
+
+    Each phase is rendered as a segment **starting where the previous one ended**,
+    so the visual length of each segment is the *exclusive* cost of that phase and
+    the right edge of the last segment is the true total latency.  This avoids the
+    overlapping-bars ambiguity of :func:`plot_subphase_latency`.
+
+    Topology row (left → right):
+      DB: Cypher execution  |  result transfer  |  driver / Python overhead  |  Python ETL
+
+    Features row (left → right):
+      DB: property I/O  |  result transfer  |  driver / Python overhead  |  Python ETL
+
+    Saved as ``subphase_latency_waterfall.png`` next to the CSV.
+    """
+    metrics = summary.get("metrics", {})
+
+    def _get(*keys: str) -> float | None:
+        for k in keys:
+            v = metrics.get(k)
+            if v is not None:
+                return float(v)
+        return None
+
+    # ── Topology slices ──────────────────────────────────────────────────────
+    topo_wall     = _get("topo_fetch_ms", "sampler_avg_client_wall_time_ms")
+    topo_db       = _get("sampler_avg_db_exec_time_ms")
+    topo_consumed = _get("sampler_avg_result_consumed_after_ms")
+    topo_etl      = _get("topo_etl_ms")
+
+    # Shared neutral colours so that "Result transfer", "Driver / Python recv"
+    # and "Python ETL" look identical across both rows and only need one legend
+    # entry each regardless of which row is rendered last.
+    _C_TRANSFER = "#BDBDBD"   # medium grey  – result transfer
+    _C_DRIVER   = "#D9D9D9"   # light grey   – driver / Python recv
+    _C_ETL      = "#F0F0F0"   # very light grey – Python ETL
+
+    topo_slices: list[tuple[str, float, str]] = []
+    if topo_db is not None:
+        topo_slices.append(("DB: Cypher execution", topo_db, "#4C78A8"))
+        if topo_consumed is not None:
+            transfer = max(0.0, topo_consumed - topo_db)
+            topo_slices.append(("Result transfer", transfer, _C_TRANSFER))
+            if topo_wall is not None:
+                driver = max(0.0, topo_wall - topo_consumed)
+                topo_slices.append(("Driver / Python recv", driver, _C_DRIVER))
+        elif topo_wall is not None:
+            driver = max(0.0, topo_wall - topo_db)
+            topo_slices.append(("Driver / Python recv", driver, _C_DRIVER))
+    elif topo_wall is not None:
+        topo_slices.append(("Total fetch (wall)", topo_wall, "#2171B5"))
+    if topo_etl is not None:
+        topo_slices.append(("Python ETL", topo_etl, _C_ETL))
+
+    # ── Feature slices ───────────────────────────────────────────────────────
+    feat_wall     = _get("feat_x_avg_client_wall_time_ms")
+    feat_db       = _get("feat_x_avg_db_exec_time_ms")
+    feat_consumed = _get("feat_x_avg_result_consumed_after_ms")
+    feat_driver   = _get("feat_x_avg_driver_overhead_ms")
+    feat_etl      = _get("feat_x_etl_ms")
+
+    feat_slices: list[tuple[str, float, str]] = []
+    if feat_db is not None:
+        feat_slices.append(("DB: property I/O", feat_db, "#F58518"))
+        if feat_consumed is not None:
+            transfer = max(0.0, feat_consumed - feat_db)
+            feat_slices.append(("Result transfer", transfer, _C_TRANSFER))
+            if feat_wall is not None:
+                driver = max(0.0, feat_wall - feat_consumed)
+                feat_slices.append(("Driver / Python recv", driver, _C_DRIVER))
+        elif feat_wall is not None:
+            driver = max(0.0, feat_wall - feat_db)
+            feat_slices.append(("Driver / Python recv", driver, _C_DRIVER))
+    elif feat_wall is not None:
+        feat_slices.append(("Total fetch (wall)", feat_wall, "#D94F00"))
+    if feat_etl is not None:
+        feat_slices.append(("Python ETL", feat_etl, _C_ETL))
+
+    rows = []
+    if topo_slices:
+        rows.append(("Topology", topo_slices))
+    if feat_slices:
+        rows.append(("Features", feat_slices))
+
+    if not rows:
+        return
+
+    n_rows = len(rows)
+    fig, ax = plt.subplots(figsize=(10, max(2.5, n_rows * 1.4)))
+
+    bar_height = 0.5
+    yticks, ylabels = [], []
+
+    # Collect all unique slice labels for the legend
+    legend_handles: dict[str, tuple[str, str]] = {}  # label → (label, color)
+
+    for row_i, (row_label, slices) in enumerate(rows):
+        y = row_i
+        left = 0.0
+        for seg_label, width, color in slices:
+            if width > 0:
+                ax.barh(y, width, left=left, height=bar_height, color=color,
+                        edgecolor="white", linewidth=0.5)
+                # Label segment if wide enough to be readable (> 3% of total)
+                total = sum(s[1] for s in slices)
+                if width / total > 0.03:
+                    ax.text(
+                        left + width / 2, y,
+                        f"{width:.1f}",
+                        ha="center", va="center", fontsize=7, color="white",
+                        fontweight="bold",
+                    )
+                left += width
+                legend_handles[seg_label] = (seg_label, color)
+
+        # Annotate total at the right edge
+        ax.text(left + (ax.get_xlim()[1] * 0.005 if ax.get_xlim()[1] > 0 else 5),
+                y, f"{left:.1f} ms",
+                ha="left", va="center", fontsize=8)
+
+        yticks.append(y)
+        ylabels.append(row_label)
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean ms per batch (cumulative timeline)")
+    ax.set_title("Sub-phase latency breakdown (waterfall)")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+
+    legend_patches = [
+        Patch(facecolor=color, label=label, edgecolor="white")
+        for label, color in legend_handles.values()
+    ]
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+              framealpha=0.85, ncol=1)
+
+    # Re-apply xlim with a small right margin for the total label
+    max_total = max(sum(s[1] for s in slices) for _, slices in rows)
+    ax.set_xlim(0, max_total * 1.18)
+
+    fig.tight_layout()
+    out = (output_dir or csv_path.parent) / "subphase_latency_waterfall.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
 def plot_subphase_latency(csv_path: Path, summary: dict, output_dir: Path | None = None) -> None:
     """Bar chart of per-batch sub-phase latencies from a single run.
 
@@ -368,17 +516,17 @@ def plot_subphase_latency(csv_path: Path, summary: dict, output_dir: Path | None
 
     topo_segments = [
         ("topo_fetch_ms",               "Topology: total fetch (wall)",              "#2171B5"),
-        ("sampler_avg_db_exec_time_ms", "Topology: query + transfer time",           "#4C78A8"),
-        ("network_baseline_ms",         "Topology: driver + protocol overhead",      "#7BAFD4"),
+        ("sampler_avg_db_exec_time_ms", "Topology: DB Cypher execution",             "#4C78A8"),
+        ("network_baseline_ms",         "Topology: transfer + driver overhead",      "#7BAFD4"),
         ("topo_etl_ms",                 "Topology: Python ETL",                      "#AED4F0"),
     ]
     # x and y share one query, so all timings cover both in a single round-trip.
     # The profiler attributes the combined query to "feat_x" internally.
     feat_segments = [
         ("feat_x_avg_client_wall_time_ms", "Features ([float], int): total fetch",                    "#D94F00"),
-        ("feat_x_avg_db_exec_time_ms",     "Features ([float], int): query + transfer time",          "#F58518"),
-        ("feat_y_avg_db_exec_time_ms",     "Features ([float], int): query + transfer time (y)",      "#54A24B"),
-        ("feat_x_avg_driver_overhead_ms",  "Features ([float], int): Python deserialisation",         "#F7A850"),
+        ("feat_x_avg_db_exec_time_ms",     "Features ([float], int): DB property I/O",               "#F58518"),
+        ("feat_y_avg_db_exec_time_ms",     "Features ([float], int): DB property I/O (y)",            "#54A24B"),
+        ("feat_x_avg_driver_overhead_ms",  "Features ([float], int): transfer + driver overhead",     "#F7A850"),
         ("feat_x_etl_ms",                  "Features ([float], int): Python ETL",                     "#FAC980"),
     ]
 
