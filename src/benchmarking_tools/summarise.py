@@ -18,6 +18,7 @@ from benchmarking_tools.measurements_plots import (
     plot_cpu_utilization,
     plot_subphase_latency,
     plot_all_operator_profiles,
+    plot_driver_time_breakdown,
 )
 
 
@@ -74,6 +75,11 @@ def summarise(run_dir: Path) -> None:
     plot_validation_convergence_time(csv_path, df, output_dir=other_dir)
     plot_cpu_utilization(csv_path, df, output_dir=other_dir)
     plot_subphase_latency(csv_path, summary, output_dir=other_dir)
+
+    prof_path = run_dir / "train_profile.prof"
+    if prof_path.exists():
+        n_batches = summary.get("run", {}).get("batches_seen") or 1
+        plot_driver_time_breakdown(prof_path, n_batches, output_dir=other_dir)
 
     with open(json_path, "w") as f:
         json.dump(summary, f, indent=2)

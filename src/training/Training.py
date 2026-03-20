@@ -224,6 +224,8 @@ class Trainer:
             with txt_path.open("w") as f:
                 stats.stream = f
                 stats.print_stats(150)
+            prof_path = run_dir / "train_profile.prof"
+            pr.dump_stats(str(prof_path))
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
         test_accuracy = None
