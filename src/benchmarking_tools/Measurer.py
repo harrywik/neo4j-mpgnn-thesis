@@ -84,7 +84,9 @@ class Measurer:
                 glb = src_data.get("global", {})
                 for key in ("avg_db_exec_time_ms", "avg_network_transfer_ms",
                             "avg_driver_overhead_ms", "avg_result_consumed_after_ms",
-                            "avg_client_wall_time_ms"):
+                            "avg_result_available_after_ms", "avg_client_wall_time_ms",
+                            "avg_query_startup_ms", "avg_exec_serialize_ms",
+                            "avg_client_recv_ms"):
                     value = glb.get(key)
                     if value is not None:
                         summary["metrics"][f"{source}_{key}"] = value
