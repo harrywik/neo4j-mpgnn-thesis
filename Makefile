@@ -9,7 +9,7 @@ EXPERIMENTS := sampler_comparison
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine
 
 help:
 	@echo "Usage: make <implementation_folder> [DATASET=cora]"
@@ -62,3 +62,10 @@ ingest_papers100M:
 
 summarise:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) src/benchmarking_tools/summarise.py
+
+combine:
+	@if [ -z "$(FILES)" ]; then \
+		echo "FILES is required, e.g. make combine FILES=\"results/run_6 results/run_7\""; \
+		exit 1; \
+	fi
+	@PYTHONPATH=$(PYTHONPATH) $(PY) src/benchmarking_tools/combine_plots.py $(FILES)
