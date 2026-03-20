@@ -15,6 +15,7 @@ from .measurements_plots import (
     plot_subphase_latency,
     plot_subphase_latency_waterfall,
     plot_all_operator_profiles,
+    plot_end_to_end_latency,
 )
 from .QueryProfileAccumulator import QueryProfileAccumulator
 
@@ -128,6 +129,8 @@ class Measurer:
                 profile_dir = csv_path.parent / "query_profile_plots"
                 profile_dir.mkdir(exist_ok=True)
                 plot_all_operator_profiles(profile_path, output_dir=profile_dir)
+                train_profile_path = csv_path.with_name("train_profile.txt")
+                plot_end_to_end_latency(profile_path, train_profile_path, summary)
             except Exception as e:
                 print(f"Warning: Failed to write query profile to {profile_path}: {e}")
 
