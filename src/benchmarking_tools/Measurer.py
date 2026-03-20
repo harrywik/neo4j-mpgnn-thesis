@@ -7,7 +7,15 @@ from typing import Any, Optional
 
 from .config_writer import ConfigWriter
 from .measurements_summary import read_measurements, build_summary, get_validation_accuracies
-from .measurements_plots import plot_phase_summary, plot_validation_convergence, plot_validation_convergence_time, plot_cpu_utilization, plot_subphase_latency
+from .measurements_plots import (
+    plot_phase_summary,
+    plot_validation_convergence,
+    plot_validation_convergence_time,
+    plot_cpu_utilization,
+    plot_subphase_latency,
+    plot_subphase_latency_waterfall,
+    plot_all_operator_profiles,
+)
 from .QueryProfileAccumulator import QueryProfileAccumulator
 
 class Measurer:
@@ -32,6 +40,7 @@ class Measurer:
         self.config_writer = ConfigWriter(run_results_path, config)
         self.profile_accumulator = profile_accumulator
         self.node_visit_counter: Counter = Counter()
+        self.edge_visit_counter: Counter = Counter()
 
         self.measurements_path = run_results_path / "measurements.csv"
         self.run_results_path = run_results_path
@@ -87,6 +96,7 @@ class Measurer:
                 summary["metrics"]["network_baseline_ms"] = sampler_glb["avg_driver_overhead_ms"]
 
         plot_subphase_latency(csv_path, summary)
+        plot_subphase_latency_waterfall(csv_path, summary)
 
         json_path = csv_path.with_suffix(".json")
         try:
@@ -103,10 +113,21 @@ class Measurer:
             except Exception as e:
                 print(f"Warning: Failed to write node visit counts to {visit_path}: {e}")
 
+        if self.edge_visit_counter:
+            edge_path = csv_path.with_name("edge_visit_counts.json")
+            try:
+                with open(edge_path, "w") as f:
+                    json.dump(dict(self.edge_visit_counter), f)
+            except Exception as e:
+                print(f"Warning: Failed to write edge visit counts to {edge_path}: {e}")
+
         if self.profile_accumulator is not None and self.profile_accumulator.has_data():
             profile_path = csv_path.with_name("query_profile.json")
             try:
                 self.profile_accumulator.save(profile_path, subphase_metrics=summary.get("metrics"))
+                profile_dir = csv_path.parent / "query_profile_plots"
+                profile_dir.mkdir(exist_ok=True)
+                plot_all_operator_profiles(profile_path, output_dir=profile_dir)
             except Exception as e:
                 print(f"Warning: Failed to write query profile to {profile_path}: {e}")
 
@@ -114,6 +135,10 @@ class Measurer:
     
     def log_node_visits(self, node_ids: list[int]) -> None:
         self.node_visit_counter.update(node_ids)
+
+    def log_edge_visits(self, edge_keys: list[str]) -> None:
+        """Count occurrences of undirected edges ``\"{min_id}_{max_id}\"`` in training batches."""
+        self.edge_visit_counter.update(edge_keys)
 
     def log_event(self, event_name: str, value: int | float = 1):
         self._writer.writerow([event_name, time.monotonic(), value])

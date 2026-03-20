@@ -33,8 +33,11 @@ from neo4j_pyg.models import GCN
 from neo4j_pyg.feature_stores import Neo4jNoCacheFS
 from neo4j_pyg.graph_stores import Neo4SingleGS
 from neo4j_pyg.samplers import (
+    Neo4jEdgeModeSampler,
     Neo4jNeighborSampler,
     Neo4jSampler,
+    Neo4jSamplerEquiv,
+    Neo4jSamplerFast,
     OldNeighborSampler,
 )
 from Neo4jConnection import Neo4jConnection
@@ -55,15 +58,43 @@ class RunSpec:
     make_sampler: Optional[Callable]       # None for the PyG path
 
 
-def _build_registry(profile: bool = False) -> dict:
+def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
+    """Build sampler registry. Optional ``config`` key for ``Neo4jEdgeModeSampler``:
+
+    * ``neo4j_edge_mode`` — ``incoming`` | ``outgoing`` | ``undirected`` | ``induced``
+    """
+    cfg = config or {}
+    edge_mode = cfg.get("neo4j_edge_mode", "incoming")
+
     return {
         "Neo4jSampler": RunSpec(
             "neo4j",
             lambda gs, nn, p=profile: Neo4jSampler(gs, num_neighbors=nn, profile=p),
         ),
+        "Neo4jEdgeModeSampler": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile, em=edge_mode: Neo4jEdgeModeSampler(
+                gs,
+                num_neighbors=nn,
+                edge_mode=em,
+                profile=p,
+            ),
+        ),
         "Neo4jNeighborSampler": RunSpec(
             "neo4j",
             lambda gs, nn, p=profile: Neo4jNeighborSampler(gs, num_neighbors=nn, profile=p),
+        ),
+        "Neo4jSamplerEquiv": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile: Neo4jSamplerEquiv(
+                gs, num_neighbors=nn, skip_neighbor_label=True, profile=p,
+            ),
+        ),
+        "Neo4jSamplerFast": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile: Neo4jSamplerFast(
+                gs, num_neighbors=nn, skip_neighbor_label=True, profile=p,
+            ),
         ),
         "OldNeighborSampler": RunSpec(
             "neo4j",
@@ -113,7 +144,7 @@ def main() -> None:
     drop_last: bool = config.get("drop_last")
     profile: bool = config.get("profile", False)
 
-    SAMPLER_REGISTRY = _build_registry(profile=profile)
+    SAMPLER_REGISTRY = _build_registry(profile=profile, config=config)
 
     model_args = {
         "in_dim": 1433,

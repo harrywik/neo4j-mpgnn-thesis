@@ -30,6 +30,7 @@ class ExperimentMeasurer(Measurer):
         self.run_results_path = run_dir
         self.profile_accumulator = None
         self.node_visit_counter: Counter = Counter()
+        self.edge_visit_counter: Counter = Counter()
 
         self._csvfile = open(self.measurements_path, "w", newline="\n")
         self._writer = csv.writer(self._csvfile)

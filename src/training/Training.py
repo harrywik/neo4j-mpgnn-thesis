@@ -153,7 +153,7 @@ class Trainer:
         indices = self.graph_store.get_split(
             limit=limit,
             split="train",
-            shuffle=True,
+            # shuffle=True,
         ).to(torch.long)
         return indices
 
@@ -181,6 +181,17 @@ class Trainer:
 
             if hasattr(batch, "n_id"):
                 self.measurer.log_node_visits(batch.n_id.tolist())
+
+            if hasattr(batch, "edge_index") and hasattr(batch, "n_id"):
+                ei = batch.edge_index.detach().cpu()
+                nid = batch.n_id.detach().cpu()
+                row = nid[ei[0]].tolist()
+                col = nid[ei[1]].tolist()
+                edge_keys = [
+                    f"{a}_{b}" if a <= b else f"{b}_{a}"
+                    for a, b in zip(row, col)
+                ]
+                self.measurer.log_edge_visits(edge_keys)
 
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))
