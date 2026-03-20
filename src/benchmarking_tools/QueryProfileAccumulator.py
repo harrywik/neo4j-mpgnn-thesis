@@ -242,20 +242,31 @@ class QueryProfileAccumulator:
                     "avg_page_cache_misses": op["page_cache_misses_sum"] / n,
                 })
 
-            # Sum of all individual operator avg times = pure DB-side compute.
+            # Sum of all individual operator avg times (kept for operator-level plots).
             avg_operators_time_sum_ms = sum(op["avg_time_ms"] for op in avg_operators)
-            # result_consumed_after − db_exec: pure wire transfer of results.
-            avg_network_transfer_ms = (
+            avg_global["avg_db_exec_time_ms"] = avg_operators_time_sum_ms
+
+            # Legacy derived metrics (kept for backward compatibility).
+            avg_global["avg_network_transfer_ms"] = (
                 avg_global["avg_result_consumed_after_ms"] - avg_operators_time_sum_ms
             )
-            # wall − db_exec: everything the client waits for that isn't DB compute
-            # (bolt handshake, query serialisation, driver deserialisation, OS jitter).
-            avg_driver_overhead_ms = (
+            avg_global["avg_driver_overhead_ms"] = (
                 avg_global["avg_client_wall_time_ms"] - avg_operators_time_sum_ms
             )
-            avg_global["avg_db_exec_time_ms"] = avg_operators_time_sum_ms
-            avg_global["avg_network_transfer_ms"] = avg_network_transfer_ms
-            avg_global["avg_driver_overhead_ms"] = avg_driver_overhead_ms
+
+            # Clean 4-segment breakdown based on Bolt protocol timestamps:
+            #   t_first (result_available_after): server hands off first byte to TCP.
+            #   t_last  (result_consumed_after):  server hands off last byte to TCP.
+            #   wall    (client_wall_time):        Python finishes receiving all records.
+            t_first = avg_global.get("avg_result_available_after_ms") or 0.0
+            t_last  = avg_global.get("avg_result_consumed_after_ms")  or 0.0
+            wall    = avg_global.get("avg_client_wall_time_ms")        or 0.0
+            # Time from query send to server starting to stream: parse + plan + pipeline init.
+            avg_global["avg_query_startup_ms"]   = max(0.0, t_first)
+            # Time from first byte to last byte leaving the server: operator execution + Bolt serialization.
+            avg_global["avg_exec_serialize_ms"]  = max(0.0, t_last - t_first)
+            # Time from server done to Python done: network transit + Python Bolt deserialization.
+            avg_global["avg_client_recv_ms"]     = max(0.0, wall - t_last)
 
             result[source] = {
                 "plan_meta": data["plan_meta"],

@@ -497,59 +497,57 @@ def plot_subphase_latency_waterfall(csv_path: Path, summary: dict, output_dir: P
                 return float(v)
         return None
 
-    # ── Topology slices ──────────────────────────────────────────────────────
-    topo_wall     = _get("topo_fetch_ms", "sampler_avg_client_wall_time_ms")
-    topo_db       = _get("sampler_avg_db_exec_time_ms")
-    topo_consumed = _get("sampler_avg_result_consumed_after_ms")
-    topo_etl      = _get("topo_etl_ms")
+    # Shared neutral colours – identical across rows so legend needs only one entry each.
+    _C_DRIVER   = "#D9D9D9"   # network + Python Bolt deserialization
+    _C_ETL      = "#F0F0F0"   # Python ETL
 
-    # Shared neutral colours so that "Result transfer", "Driver / Python recv"
-    # and "Python ETL" look identical across both rows and only need one legend
-    # entry each regardless of which row is rendered last.
-    _C_TRANSFER = "#BDBDBD"   # medium grey  – result transfer
-    _C_DRIVER   = "#D9D9D9"   # light grey   – driver / Python recv
-    _C_ETL      = "#F0F0F0"   # very light grey – Python ETL
+    # ── Topology slices ──────────────────────────────────────────────────────
+    topo_startup     = _get("sampler_avg_query_startup_ms")
+    topo_exec_ser    = _get("sampler_avg_exec_serialize_ms")
+    topo_client_recv = _get("sampler_avg_client_recv_ms")
+    topo_etl         = _get("topo_etl_ms")
 
     topo_slices: list[tuple[str, float, str]] = []
-    if topo_db is not None:
-        topo_slices.append(("DB: Cypher execution", topo_db, "#4C78A8"))
-        if topo_consumed is not None:
-            transfer = max(0.0, topo_consumed - topo_db)
-            topo_slices.append(("Result transfer", transfer, _C_TRANSFER))
-            if topo_wall is not None:
-                driver = max(0.0, topo_wall - topo_consumed)
-                topo_slices.append(("Driver / Python recv", driver, _C_DRIVER))
-        elif topo_wall is not None:
-            driver = max(0.0, topo_wall - topo_db)
-            topo_slices.append(("Driver / Python recv", driver, _C_DRIVER))
-    elif topo_wall is not None:
-        topo_slices.append(("Total fetch (wall)", topo_wall, "#2171B5"))
+    if topo_startup is not None and topo_startup > 0:
+        topo_slices.append(("DB: query startup", topo_startup, "#2171B5"))
+    if topo_exec_ser is not None and topo_exec_ser > 0:
+        topo_slices.append(("DB: Cypher execution + serialize", topo_exec_ser, "#4C78A8"))
+    if topo_client_recv is not None and topo_client_recv > 0:
+        topo_slices.append(("Network + driver recv", topo_client_recv, _C_DRIVER))
     if topo_etl is not None:
         topo_slices.append(("Python ETL", topo_etl, _C_ETL))
 
+    # Fall back to wall-time bar when running against old profile data.
+    if not topo_slices:
+        topo_wall = _get("topo_fetch_ms", "sampler_avg_client_wall_time_ms")
+        if topo_wall is not None:
+            topo_slices.append(("Total fetch (wall)", topo_wall, "#2171B5"))
+        if topo_etl is not None:
+            topo_slices.append(("Python ETL", topo_etl, _C_ETL))
+
     # ── Feature slices ───────────────────────────────────────────────────────
-    feat_wall     = _get("feat_x_avg_client_wall_time_ms")
-    feat_db       = _get("feat_x_avg_db_exec_time_ms")
-    feat_consumed = _get("feat_x_avg_result_consumed_after_ms")
-    feat_driver   = _get("feat_x_avg_driver_overhead_ms")
-    feat_etl      = _get("feat_x_etl_ms")
+    feat_startup     = _get("feat_x_avg_query_startup_ms")
+    feat_exec_ser    = _get("feat_x_avg_exec_serialize_ms")
+    feat_client_recv = _get("feat_x_avg_client_recv_ms")
+    feat_etl         = _get("feat_x_etl_ms")
 
     feat_slices: list[tuple[str, float, str]] = []
-    if feat_db is not None:
-        feat_slices.append(("DB: property I/O", feat_db, "#F58518"))
-        if feat_consumed is not None:
-            transfer = max(0.0, feat_consumed - feat_db)
-            feat_slices.append(("Result transfer", transfer, _C_TRANSFER))
-            if feat_wall is not None:
-                driver = max(0.0, feat_wall - feat_consumed)
-                feat_slices.append(("Driver / Python recv", driver, _C_DRIVER))
-        elif feat_wall is not None:
-            driver = max(0.0, feat_wall - feat_db)
-            feat_slices.append(("Driver / Python recv", driver, _C_DRIVER))
-    elif feat_wall is not None:
-        feat_slices.append(("Total fetch (wall)", feat_wall, "#D94F00"))
+    if feat_startup is not None and feat_startup > 0:
+        feat_slices.append(("DB: query startup", feat_startup, "#D94F00"))
+    if feat_exec_ser is not None and feat_exec_ser > 0:
+        feat_slices.append(("DB: property I/O + serialize", feat_exec_ser, "#F58518"))
+    if feat_client_recv is not None and feat_client_recv > 0:
+        feat_slices.append(("Network + driver recv", feat_client_recv, _C_DRIVER))
     if feat_etl is not None:
         feat_slices.append(("Python ETL", feat_etl, _C_ETL))
+
+    # Fall back to wall-time bar when running against old profile data.
+    if not feat_slices:
+        feat_wall = _get("feat_x_avg_client_wall_time_ms")
+        if feat_wall is not None:
+            feat_slices.append(("Total fetch (wall)", feat_wall, "#D94F00"))
+        if feat_etl is not None:
+            feat_slices.append(("Python ETL", feat_etl, _C_ETL))
 
     rows = []
     if topo_slices:
@@ -600,7 +598,8 @@ def plot_subphase_latency_waterfall(csv_path: Path, summary: dict, output_dir: P
     ax.set_yticklabels(ylabels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("mean ms per batch (cumulative timeline)")
-    ax.set_title("Sub-phase latency breakdown (waterfall)")
+    ax.set_title("Sub-phase latency breakdown\n"
+                 "DB startup | DB exec+serialize | Network+driver recv | Python ETL")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
     legend_patches = [
@@ -864,48 +863,63 @@ def plot_end_to_end_latency(
 
     metrics = summary.get("metrics", {})
 
-    # Shared neutral colours for network/driver segments (same as waterfall).
-    _C_TRANSFER = "#BDBDBD"
-    _C_DRIVER   = "#D9D9D9"
-    _C_ETL      = "#F0F0F0"
+    # Colour palette for the 4-segment breakdown.
+    # Segment 1: DB startup         – dark blue (topology) / dark orange (features)
+    # Segment 2: DB exec+serialize  – mid blue (topology)  / orange (features)
+    # Segment 3: Network+client recv – medium grey (shared)
+    # Segment 4: Python ETL          – very light grey (shared)
+    _C_DRIVER   = "#D9D9D9"   # network + Python Bolt deserialization
+    _C_ETL      = "#F0F0F0"   # Python ETL
 
     # ── Topology slices ───────────────────────────────────────────────────
     sg = _qp_global("sampler")
-    topo_db       = sg.get("avg_db_exec_time_ms")
-    topo_transfer = sg.get("avg_network_transfer_ms")
-    topo_driver   = sg.get("avg_driver_overhead_ms")
-    topo_etl      = metrics.get("topo_etl_ms")
+    topo_startup     = sg.get("avg_query_startup_ms")
+    topo_exec_ser    = sg.get("avg_exec_serialize_ms")
+    topo_client_recv = sg.get("avg_client_recv_ms")
+    topo_etl         = metrics.get("topo_etl_ms")
 
     topo_slices: list[tuple[str, float, str]] = []
-    if topo_db is not None:
-        topo_slices.append(("DB: Cypher execution", topo_db, "#4C78A8"))
-    if topo_transfer is not None and topo_transfer > 0:
-        topo_slices.append(("Result transfer", topo_transfer, _C_TRANSFER))
-    if topo_driver is not None and topo_transfer is not None:
-        pure_driver = max(0.0, topo_driver - topo_transfer)
-        if pure_driver > 0:
-            topo_slices.append(("Driver / Python recv", pure_driver, _C_DRIVER))
+    if topo_startup is not None and topo_startup > 0:
+        topo_slices.append(("DB: query startup", float(topo_startup), "#2171B5"))
+    if topo_exec_ser is not None and topo_exec_ser > 0:
+        topo_slices.append(("DB: Cypher execution + serialize", float(topo_exec_ser), "#4C78A8"))
+    if topo_client_recv is not None and topo_client_recv > 0:
+        topo_slices.append(("Network + driver recv", float(topo_client_recv), _C_DRIVER))
     if topo_etl is not None:
         topo_slices.append(("Python ETL", float(topo_etl), _C_ETL))
 
+    # Fall back to wall-time bar if new metrics are absent (old profile data).
+    if not topo_slices:
+        topo_wall = sg.get("avg_client_wall_time_ms") or metrics.get("topo_fetch_ms")
+        if topo_wall:
+            topo_slices.append(("Total fetch (wall)", float(topo_wall), "#2171B5"))
+        if topo_etl is not None:
+            topo_slices.append(("Python ETL", float(topo_etl), _C_ETL))
+
     # ── Feature slices ────────────────────────────────────────────────────
     fg = _qp_global("feat_x")
-    feat_db       = fg.get("avg_db_exec_time_ms")
-    feat_transfer = fg.get("avg_network_transfer_ms")
-    feat_driver   = fg.get("avg_driver_overhead_ms")
-    feat_etl      = metrics.get("feat_x_etl_ms")
+    feat_startup     = fg.get("avg_query_startup_ms")
+    feat_exec_ser    = fg.get("avg_exec_serialize_ms")
+    feat_client_recv = fg.get("avg_client_recv_ms")
+    feat_etl         = metrics.get("feat_x_etl_ms")
 
     feat_slices: list[tuple[str, float, str]] = []
-    if feat_db is not None:
-        feat_slices.append(("DB: property I/O", feat_db, "#F58518"))
-    if feat_transfer is not None and feat_transfer > 0:
-        feat_slices.append(("Result transfer", feat_transfer, _C_TRANSFER))
-    if feat_driver is not None and feat_transfer is not None:
-        pure_driver = max(0.0, feat_driver - feat_transfer)
-        if pure_driver > 0:
-            feat_slices.append(("Driver / Python recv", pure_driver, _C_DRIVER))
+    if feat_startup is not None and feat_startup > 0:
+        feat_slices.append(("DB: query startup", float(feat_startup), "#D94F00"))
+    if feat_exec_ser is not None and feat_exec_ser > 0:
+        feat_slices.append(("DB: property I/O + serialize", float(feat_exec_ser), "#F58518"))
+    if feat_client_recv is not None and feat_client_recv > 0:
+        feat_slices.append(("Network + driver recv", float(feat_client_recv), _C_DRIVER))
     if feat_etl is not None:
         feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
+
+    # Fall back to wall-time bar if new metrics are absent (old profile data).
+    if not feat_slices:
+        feat_wall = fg.get("avg_client_wall_time_ms")
+        if feat_wall:
+            feat_slices.append(("Total fetch (wall)", float(feat_wall), "#D94F00"))
+        if feat_etl is not None:
+            feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
 
     # ── GNN slices (from train_profile.txt) ──────────────────────────────
     gnn_slices: list[tuple[str, float, str]] = []
@@ -987,7 +1001,7 @@ def plot_end_to_end_latency(
                     left + width / 2, y,
                     f"{width:.1f}",
                     ha="center", va="center", fontsize=7,
-                    color="white" if color not in (_C_TRANSFER, _C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
+                    color="white" if color not in (_C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
                     fontweight="bold",
                 )
             left += width
@@ -1005,7 +1019,8 @@ def plot_end_to_end_latency(
     ax.set_yticklabels(ylabels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("mean ms per batch (cumulative timeline)")
-    ax.set_title("End-to-end per-batch latency breakdown")
+    ax.set_title("End-to-end per-batch latency breakdown\n"
+                 "DB startup | DB exec+serialize | Network+driver recv | Python ETL | GNN compute")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
     # Legend – upper right (topology bar is short, leaving whitespace there).
