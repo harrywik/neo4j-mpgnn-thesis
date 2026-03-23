@@ -90,6 +90,8 @@ class Trainer:
         else:
             if train_indices is None or num_neighbors is None:
                 raise ValueError("Train indices and num_neighbors cannot be None when data is a Data or HeteroData object")
+            if nodeloader_args is None or "shuffle" not in nodeloader_args:
+                raise ValueError("nodeloader_args with a 'shuffle' key is required when data is a Data or HeteroData object")
             self.train_indices = train_indices 
             self.data = data
             self.feature_store = None
@@ -107,16 +109,16 @@ class Trainer:
             else:
                 backend = "pure-python"
             self.measurer.log_event("sampling_backend", backend)
+            _shuffle = nodeloader_args["shuffle"]
             self.train_loader = NeighborLoader(
                 data,
-                # Sample 30 neighbors for each node for 2 iterations
                 num_neighbors=num_neighbors,
-                # Use a batch size of 128 for sampling training nodes
                 batch_size=batch_size,
-                replace=False, # default is false too
-                disjoint=False, # default is false too
+                replace=False,
+                disjoint=False,
                 input_nodes=data.train_mask,
-                subgraph_type="directional", #bidirectional, induced, directional (default)
+                subgraph_type="directional",
+                shuffle=_shuffle,
                 drop_last=drop_last
             )
             self.measurer.log_event("nbr_training_datapoints", int(data.train_mask.sum().item()))

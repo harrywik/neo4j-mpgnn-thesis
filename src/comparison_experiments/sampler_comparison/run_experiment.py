@@ -36,8 +36,6 @@ from neo4j_pyg.samplers import (
     Neo4jEdgeModeSampler,
     Neo4jNeighborSampler,
     Neo4jSampler,
-    Neo4jSamplerEquiv,
-    Neo4jSamplerFast,
     OldNeighborSampler,
 )
 from Neo4jConnection import Neo4jConnection
@@ -275,6 +273,7 @@ def main() -> None:
                     min_delta=config.get("min_delta"),
                     batch_size=batch_size,
                     lr=config.get("lr"),
+                    nodeloader_args=nodeloader_args,
                     drop_last=drop_last,
                 )
 
