@@ -1,6 +1,6 @@
 {
   "profile": false,
-  "num_runs": 3,
+  "num_runs": 10,
   "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
@@ -14,9 +14,7 @@
   "hidden_dim2": 12,
   "neo4j_edge_mode": "incoming",
   "samplers": [
-    "Neo4jSamplerEquiv",
-    "Neo4jSamplerFast",
-    "Neo4jEdgeModeSampler",
+    "Neo4jSampler",
     "PyGNeighborLoader"
   ]
 }
