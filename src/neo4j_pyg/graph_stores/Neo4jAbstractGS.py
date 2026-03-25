@@ -93,16 +93,21 @@ class Neo4jAbstractGS(GraphStore, ABC):
             edges = [[r["src"], r["dst"]] for r in result] if first is not None else []
             t_all_records = time.monotonic()
 
-        t_etl_start = time.monotonic()
-
         if self.measurer is not None:
             self.measurer.log_event("topo_query_sent_ms", (t_query_sent - t_send) * 1000)
             self.measurer.log_event("topo_first_record_ms", (t_first_record - t_query_sent) * 1000)
             self.measurer.log_event("topo_transfer_ms", (t_all_records - t_first_record) * 1000)
 
+        t_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
+
         if len(edges) == 0:
             if self.measurer is not None:
                 self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
+                self.measurer.log_event("end_etl", 1)
+                self.measurer.set_phase("sampling")
             empty = torch.zeros((2, 0), dtype=torch.long)
             return torch.tensor([], dtype=torch.long), empty
 
@@ -112,6 +117,8 @@ class Neo4jAbstractGS(GraphStore, ABC):
 
         if self.measurer is not None:
             self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("sampling")
 
         return unique_nodes, edge_index_local
 
@@ -151,8 +158,57 @@ class Neo4jAbstractGS(GraphStore, ABC):
             self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
 
         return records[0] if records else None
-            
-    
+
+    def build_topo_etl(
+        self, record: dict | None, fallback_seeds: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Convert a raw ``fetch_ordered_subgraph`` record into PyG tensors.
+
+        This is the topology ETL step: pure Python / C++ work that happens
+        *after* the Neo4j round-trip completes.  Emits ``start_etl`` /
+        ``end_etl`` events and logs ``topo_etl_ms`` so the CPU-timeline plot
+        shows topo ETL in the same green band as feature ETL.
+
+        Returns ``(node_tensor, row, col)``.  On an empty result the caller's
+        *fallback_seeds* are returned as the node tensor with zero-length
+        edge tensors.
+        """
+        t_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
+
+        if record is None or not record.get("ordered_nodes"):
+            if self.measurer is not None:
+                self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
+                self.measurer.log_event("end_etl", 1)
+                self.measurer.set_phase("sampling")
+            empty = torch.zeros(0, dtype=torch.long)
+            return fallback_seeds, empty, empty
+
+        ordered_global_ids = torch.tensor(record["ordered_nodes"], dtype=torch.long)
+        global_to_local = {
+            int(gid): i for i, gid in enumerate(ordered_global_ids.tolist())
+        }
+
+        edge_pairs = record.get("edge_pairs") or []
+        if edge_pairs:
+            row = torch.tensor(
+                [global_to_local[e[0]] for e in edge_pairs], dtype=torch.long
+            )
+            col = torch.tensor(
+                [global_to_local[e[1]] for e in edge_pairs], dtype=torch.long
+            )
+        else:
+            row = col = torch.zeros(0, dtype=torch.long)
+
+        if self.measurer is not None:
+            self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("sampling")
+
+        return ordered_global_ids, row, col
+
     def _put_edge_index(self):
         pass
     def _remove_edge_index(self):

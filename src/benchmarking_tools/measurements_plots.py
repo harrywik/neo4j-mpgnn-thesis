@@ -788,6 +788,163 @@ def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame, output_dir: Path | No
     plt.close(fig)
 
 
+def plot_cpu_bar(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
+    """Bar chart of average CPU utilization: Python/C++ vs Neo4j.
+
+    Uses the coarse CPU samples (``python_cpu_coarse`` / ``neo4j_cpu_coarse``)
+    logged every few seconds during training.  Saves as ``cpu_bar.png``.
+    No-op if no coarse CPU data exists in *df*.
+    """
+    py_vals = pd.to_numeric(
+        df.loc[df["Event"] == "python_cpu_coarse", "Value"], errors="coerce"
+    ).dropna()
+
+    neo_vals = pd.to_numeric(
+        df.loc[df["Event"] == "neo4j_cpu_coarse", "Value"], errors="coerce"
+    ).dropna()
+
+    if py_vals.empty:
+        return
+
+    labels = ["Python / C++"]
+    means = [float(py_vals.mean())]
+    colors = ["#4C78A8"]
+
+    if not neo_vals.empty:
+        labels.append("Neo4j")
+        means.append(float(neo_vals.mean()))
+        colors.append("#F58518")
+
+    fig, ax = plt.subplots(figsize=(max(4, len(labels) * 1.8), 4))
+    bars = ax.bar(labels, means, color=colors, width=0.5)
+
+    for bar, val in zip(bars, means):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + max(means) * 0.02,
+            f"{val:.1f}%",
+            ha="center", va="bottom", fontsize=9,
+        )
+
+    ax.set_ylabel("Mean CPU utilization (%)")
+    ax.set_title("Average CPU utilization by component")
+    ax.set_ylim(0, max(means) * 1.25)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    out = (output_dir or csv_path.parent) / "cpu_bar.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
+def plot_cpu_timeline(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
+    """Timeline of CPU utilization from intensive per-batch burst samples.
+
+    Plots two lines (Python/C++ and Neo4j) over wall time for the epochs
+    covered by the burst monitor.  Background colour reflects the training
+    phase: light blue for sampling (DB I/O), light green for ETL (Python
+    assembly), light orange for GNN training.
+
+    Uses the six event names: ``python_cpu_sampling``, ``python_cpu_etl``,
+    ``python_cpu_training``, ``neo4j_cpu_sampling``, ``neo4j_cpu_etl``,
+    ``neo4j_cpu_training``.
+
+    Saves as ``cpu_timeline.png``.  No-op if no intensive CPU data exists.
+    """
+    py_samp  = df[df["Event"] == "python_cpu_sampling"][["Time", "Value"]].copy()
+    py_etl   = df[df["Event"] == "python_cpu_etl"][["Time", "Value"]].copy()
+    py_train = df[df["Event"] == "python_cpu_training"][["Time", "Value"]].copy()
+    neo_samp  = df[df["Event"] == "neo4j_cpu_sampling"][["Time", "Value"]].copy()
+    neo_etl   = df[df["Event"] == "neo4j_cpu_etl"][["Time", "Value"]].copy()
+    neo_train = df[df["Event"] == "neo4j_cpu_training"][["Time", "Value"]].copy()
+
+    py_all  = pd.concat([py_samp, py_etl, py_train], ignore_index=True)
+    neo_all = pd.concat([neo_samp, neo_etl, neo_train], ignore_index=True)
+
+    if py_all.empty:
+        return
+
+    # Determine t0 from first epoch or program start
+    epoch_start = df.loc[df["Event"] == "epoch_start", "Time"]
+    t0 = float(epoch_start.iloc[0]) if len(epoch_start) else float(df["Time"].min())
+
+    def _prepare(frame: pd.DataFrame):
+        frame = frame.copy()
+        frame["rel_time"] = pd.to_numeric(frame["Time"], errors="coerce") - t0
+        frame["Value"] = pd.to_numeric(frame["Value"], errors="coerce")
+        frame = frame.dropna().sort_values("rel_time")
+        return frame
+
+    py_all  = _prepare(py_all)
+    neo_all = _prepare(neo_all)
+
+    # X-axis window: only the time range covered by burst samples (+5% margin)
+    burst_tmin = float(py_all["rel_time"].min())
+    burst_tmax = float(py_all["rel_time"].max())
+    margin = max((burst_tmax - burst_tmin) * 0.05, 0.05)
+    x_min = max(0.0, burst_tmin - margin)
+    x_max = burst_tmax + margin
+
+    # Absolute time bounds for filtering spans
+    abs_tmin = t0 + x_min
+    abs_tmax = t0 + x_max
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    # Background spans: only draw spans that overlap the burst window.
+    # Render order matters: sampling (blue) first, ETL (green) on top to
+    # replace its sub-window, then training (orange) in its own region.
+    for phase_start_event, phase_end_event, color in [
+        ("start_batch_fetch",      "end_batch_fetch",      "#FFD6D6"),
+        ("start_etl",              "end_etl",              "#D4EDDA"),
+        ("start_batch_processing", "end_batch_processing", "#FFF0DC"),
+    ]:
+        starts = df.loc[df["Event"] == phase_start_event, "Time"].to_list()
+        ends   = df.loc[df["Event"] == phase_end_event,   "Time"].to_list()
+        for s, e in zip(starts[:len(ends)], ends):
+            s_f, e_f = float(s), float(e)
+            # Skip spans entirely outside the burst window
+            if e_f < abs_tmin or s_f > abs_tmax:
+                continue
+            ax.axvspan(s_f - t0, e_f - t0, color=color, alpha=0.45, lw=0, zorder=0)
+
+    # Plot Python/C++ line
+    ax.plot(
+        py_all["rel_time"].to_numpy(),
+        py_all["Value"].to_numpy(),
+        color="#4C78A8", linewidth=1.2, label="Python / C++", zorder=2,
+    )
+
+    # Plot Neo4j line if data exists
+    if not neo_all.empty:
+        ax.plot(
+            neo_all["rel_time"].to_numpy(),
+            neo_all["Value"].to_numpy(),
+            color="#F58518", linewidth=1.2, label="Neo4j", zorder=2,
+        )
+
+    # Legend entry for background colours
+    from matplotlib.patches import Patch
+    legend_handles = ax.get_legend_handles_labels()[0][:]
+    legend_labels  = ax.get_legend_handles_labels()[1][:]
+    legend_handles += [
+        Patch(facecolor="#FFD6D6", alpha=0.8, label="DB fetching phase"),
+        Patch(facecolor="#D4EDDA", alpha=0.8, label="ETL phase"),
+        Patch(facecolor="#FFF0DC", alpha=0.8, label="Training phase"),
+    ]
+    legend_labels += ["DB fetching phase", "ETL phase", "Training phase"]
+
+    ax.legend(handles=legend_handles, labels=legend_labels, fontsize=8, loc="upper right")
+    ax.set_xlabel("Elapsed seconds")
+    ax.set_ylabel("CPU utilization (%)")
+    ax.set_title("CPU utilization over time (burst samples, first N epochs)")
+    ax.set_xlim(x_min, x_max)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    out = (output_dir or csv_path.parent) / "cpu_timeline.png"
+    fig.savefig(out, dpi=150)
+    plt.close(fig)
+
+
 # ---------------------------------------------------------------------------
 # End-to-end latency: combined query_profile.json + train_profile.txt
 # ---------------------------------------------------------------------------

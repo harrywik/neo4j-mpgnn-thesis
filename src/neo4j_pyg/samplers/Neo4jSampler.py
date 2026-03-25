@@ -1,4 +1,3 @@
-import time
 from typing import List
 
 import torch
@@ -144,49 +143,18 @@ class Neo4jSampler(BaseSampler):
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
         seeds = ns_input.node.to(torch.int64)
         seed_time = getattr(ns_input, "time", None)
-        measurer = getattr(self.graph_store, "measurer", None)
 
-        # Delegate the DB call to the graph store — timing lives there.
+        # DB call — timing lives in the graph store.
         record = self.graph_store.fetch_ordered_subgraph(
             self.query, {"seed_ids": seeds.tolist()}
         )
 
-        t_etl_start = time.monotonic()
-
-        if record is None or not record["ordered_nodes"]:
-            if measurer is not None:
-                measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
-            return SamplerOutput(
-                node=seeds,
-                row=torch.zeros(0, dtype=torch.long),
-                col=torch.zeros(0, dtype=torch.long),
-                edge=None,
-                batch=None,
-                metadata=(seeds, seed_time),
-            )
-
-        # Build encounter-order local mapping — mirrors pyg-lib Mapper.
-        ordered_global_ids = torch.tensor(record["ordered_nodes"], dtype=torch.long)
-        global_to_local = {
-            int(gid): i for i, gid in enumerate(ordered_global_ids.tolist())
-        }
-
-        edge_pairs = record["edge_pairs"]
-        if edge_pairs:
-            row = torch.tensor(
-                [global_to_local[e[0]] for e in edge_pairs], dtype=torch.long
-            )
-            col = torch.tensor(
-                [global_to_local[e[1]] for e in edge_pairs], dtype=torch.long
-            )
-        else:
-            row = col = torch.zeros(0, dtype=torch.long)
-
-        if measurer is not None:
-            measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
+        # ETL (tensor building) delegated to graph store so all ETL
+        # instrumentation lives in one place.
+        node, row, col = self.graph_store.build_topo_etl(record, seeds)
 
         return SamplerOutput(
-            node=ordered_global_ids,
+            node=node,
             row=row,
             col=col,
             edge=None,

@@ -13,6 +13,8 @@ from .measurements_plots import (
     plot_validation_convergence,
     plot_validation_convergence_time,
     plot_cpu_utilization,
+    plot_cpu_bar,
+    plot_cpu_timeline,
     plot_subphase_latency,
     plot_subphase_latency_waterfall,
     plot_all_operator_profiles,
@@ -22,7 +24,13 @@ from .measurements_plots import (
 from .QueryProfileAccumulator import QueryProfileAccumulator
 
 class Measurer:
-    def __init__(self, config: dict, profile_accumulator: Optional[QueryProfileAccumulator] = None):
+    def __init__(
+        self,
+        config: dict,
+        profile_accumulator: Optional[QueryProfileAccumulator] = None,
+        coarse_cpu_interval: float = 5,
+        intensive_cpu_epochs: int = 3,
+    ):
         # Handles all results path logic internally
         results_path = Path(__file__).parent.parent.parent / "experiment_results" / "results"
         results_path.mkdir(parents=True, exist_ok=True)
@@ -45,6 +53,12 @@ class Measurer:
         self.profile_accumulator = profile_accumulator
         self.node_visit_counter: Counter = Counter()
         self.edge_visit_counter: Counter = Counter()
+
+        self.coarse_cpu_interval = coarse_cpu_interval
+        self.intensive_cpu_epochs = intensive_cpu_epochs
+        self.cpu_burst_batches = int(config.get("cpu_burst_batches", 3))
+        self.neo4j_proc = None
+        self._current_phase: str = "idle"
 
         self.measurements_path = run_results_path / "measurements.csv"
         self.run_results_path = run_results_path
@@ -78,6 +92,8 @@ class Measurer:
         plot_validation_convergence(csv_path, df)
         plot_validation_convergence_time(csv_path, df)
         plot_cpu_utilization(csv_path, df)
+        plot_cpu_bar(csv_path, df)
+        plot_cpu_timeline(csv_path, df)
         if self.profile_accumulator is not None and self.profile_accumulator.has_data():
             # Inject derived DB-exec / network-transfer metrics into the main
             # summary so they appear in measurements.json as well.
@@ -154,6 +170,18 @@ class Measurer:
     def log_edge_visits(self, edge_keys: list[str]) -> None:
         """Count occurrences of undirected edges ``\"{min_id}_{max_id}\"`` in training batches."""
         self.edge_visit_counter.update(edge_keys)
+
+    def set_phase(self, phase: str) -> None:
+        """Set the current training phase ('sampling', 'training', or 'idle').
+
+        Read by the CPU burst monitor thread to label each sample with the
+        correct phase-specific event name.
+        """
+        self._current_phase = phase
+
+    def get_phase(self) -> str:
+        """Return the current training phase string."""
+        return self._current_phase
 
     def log_event(self, event_name: str, value: int | float = 1):
         self._writer.writerow([event_name, time.monotonic(), value])

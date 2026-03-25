@@ -240,6 +240,7 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "feat_x_first_record_ms": _mean_event_ms(df, "feat_x_first_record_ms"),
             "feat_x_transfer_ms": _mean_event_ms(df, "feat_x_transfer_ms"),
             "feat_x_etl_ms": _mean_event_ms(df, "feat_x_etl_ms"),
+            "feat_x_etl_parse_ms": _mean_event_ms(df, "feat_x_etl_parse_ms"),
             "feat_y_query_sent_ms": _mean_event_ms(df, "feat_y_query_sent_ms"),
             "feat_y_first_record_ms": _mean_event_ms(df, "feat_y_first_record_ms"),
             "feat_y_transfer_ms": _mean_event_ms(df, "feat_y_transfer_ms"),

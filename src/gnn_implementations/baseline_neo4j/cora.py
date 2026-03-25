@@ -12,7 +12,7 @@ GNN_IMPL_DIR = Path(__file__).resolve().parent.parent
 if str(GNN_IMPL_DIR) not in sys.path:
     sys.path.insert(0, str(GNN_IMPL_DIR))
 
-from neo4j_pyg.models import GCN
+from neo4j_pyg.models import GCN, BigGCN
 from training.Training import Trainer, put_nodeLoader_args_map
 from neo4j_pyg.feature_stores import Neo4jCachedFS, Neo4jNoCacheFS
 from neo4j_pyg.graph_stores import Neo4jMultiGS, Neo4SingleGS
@@ -41,6 +41,8 @@ def main(config: dict):
 
     model_args = {"in_dim": 1433, "hidden_dim1": 12, "hidden_dim2": 12, "nbr_classes": 7, "init_weights": config.get("init_weights")}
     model = GCN(**model_args)
+    # model = BigGCN(in_dim=1433, nbr_classes=7, hidden_dim=2048)
+
 
     measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
     measurer.write_to_configresult("sampler", {"name": "NeighborSampler", "num_neighbors": num_neighbors})

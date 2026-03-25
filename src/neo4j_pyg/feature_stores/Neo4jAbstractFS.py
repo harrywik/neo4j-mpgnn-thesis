@@ -35,6 +35,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self.node_label = node_label
         self._labels: Dict[str, int] = {}
         self._feature_dim: Optional[int] = None
+        self.t_feat_etl_start: Optional[float] = None
 
     @cached_property
     def _query_both(self) -> str:
@@ -137,6 +138,12 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 self._update_cached_value(nid, feat_matrix[i], x_attr)
                 self._update_cached_value(nid, int(y_array[i]), y_attr)
         else:
+            # All nodes cached — no DB call, ETL starts immediately.
+            self.t_feat_etl_start = time.monotonic()
+            if self.measurer is not None:
+                self.measurer.log_event("start_etl", 1)
+                self.measurer.set_phase("etl")
+
             feat_out = np.empty((n, feat_dim), dtype=np.float32)
             y_out = np.empty(n, dtype=np.int64)
             for nid, val in cached_x.items():
@@ -155,6 +162,12 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 result.append(y_tensor)
             else:
                 raise ValueError(f"Unsupported attribute: {attr.attr_name}")
+
+        if self.measurer is not None:
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("sampling")
+            self.measurer.log_event("feat_x_etl_ms", (time.monotonic() - self.t_feat_etl_start) * 1000)
+
         return result
 
     def _get_both_from_db(
@@ -177,6 +190,12 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         total_ms = (t_all_records - t_send) * 1000
 
+        # DB call is done — start timing pure Python assembly.
+        self.t_feat_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
+
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_ms)
@@ -188,7 +207,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         if not records:
             if self.measurer is not None:
-                self.measurer.log_event("feat_x_etl_ms", 0.0)
+                self.measurer.log_event("feat_x_etl_parse_ms", 0.0)
             empty_feats = np.empty((0, self._feature_dim or 0), dtype=np.float32)
             return [], empty_feats, np.empty(0, dtype=np.int64)
 
@@ -222,12 +241,13 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 y_array[i] = int(rec["label"])
 
         if self.measurer is not None:
-            self.measurer.log_event("feat_x_etl_ms", (time.monotonic() - t_etl) * 1000)
+            self.measurer.log_event("feat_x_etl_parse_ms", (time.monotonic() - t_etl) * 1000)
 
         return fetched_nids, feat_matrix, y_array
 
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
+        self.t_feat_etl_start = time.monotonic()
         node_ids: list = attr.index.tolist()
         data_map: dict = {}
         missing_indices = []
@@ -253,8 +273,15 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         ordered_list = [data_map[i] for i in node_ids]
         if is_label:
-            return torch.tensor(ordered_list, dtype=torch.int64)
-        return torch.from_numpy(np.stack(ordered_list))
+            result = torch.tensor(ordered_list, dtype=torch.int64)
+        else:
+            result = torch.from_numpy(np.stack(ordered_list))
+
+        if self.measurer is not None:
+            metric = "feat_y_etl_ms" if is_label else "feat_x_etl_ms"
+            self.measurer.log_event(metric, (time.monotonic() - self.t_feat_etl_start) * 1000)
+
+        return result
 
     @abstractmethod
     def _get_cached_value(self, nid: int, attr: TensorAttr, **kwargs) -> FeatureTensorType:
@@ -297,7 +324,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         if not records:
             if self.measurer is not None:
-                self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
+                self.measurer.log_event(f"{phase}etl_parse_ms", (time.monotonic() - t_etl_start) * 1000)
             return result_map
 
         if is_label:
@@ -328,7 +355,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 result_map[rec["id"]] = feat_matrix[i]
 
         if self.measurer is not None:
-            self.measurer.log_event(f"{phase}etl_ms", (time.monotonic() - t_etl_start) * 1000)
+            self.measurer.log_event(f"{phase}etl_parse_ms", (time.monotonic() - t_etl_start) * 1000)
         return result_map
 
     @abstractmethod

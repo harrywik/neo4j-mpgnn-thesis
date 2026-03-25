@@ -1,3 +1,3 @@
 from .Measurer import Measurer
-from .CPU_utilization_logger import start_cpu_monitor
+from .CPU_utilization_logger import start_cpu_monitor, start_cpu_burst
 from .QueryProfileAccumulator import QueryProfileAccumulator

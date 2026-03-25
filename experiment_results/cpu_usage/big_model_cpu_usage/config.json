@@ -1,0 +1,35 @@
+{
+    "lr": 0.001,
+    "batch_size": 30,
+    "max_epochs": 90,
+    "patience": 200,
+    "min_delta": 0.01,
+    "shuffle": true,
+    "initialise_weights": true,
+    "drop_last": true,
+    "profile": true,
+    "logg_cpu_utilization": false,
+    "cpu_burst_batches": 10,
+    "max_training_size": 30000,
+    "max_validation_size": 100,
+    "max_test_size": 1000,
+    "sampler": {
+        "name": "NeighborSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "NoCacheFeatureStore",
+    "graph_store": "Neo4SingleGS",
+    "dataset": "cora",
+    "nodeloader_args": {
+        "pickle_safe": false,
+        "num_workers": 0,
+        "prefetch_factor": 2,
+        "filter_per_worker": false,
+        "persistent_workers": false,
+        "pin_memory": false,
+        "shuffle": true
+    }
+}
