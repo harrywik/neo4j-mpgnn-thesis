@@ -90,7 +90,9 @@ def aggregate_runs(
     edge_visit_counts: Counter = Counter()
 
     for run_idx in range(num_runs):
-        run_dir = sampler_dir / f"run_{run_idx}"
+        # Support both legacy "run_N" and date-stamped "run_N_YYYY-MM-DD" names.
+        candidates = sorted(sampler_dir.glob(f"run_{run_idx}_*")) + [sampler_dir / f"run_{run_idx}"]
+        run_dir = next((c for c in candidates if c.is_dir()), sampler_dir / f"run_{run_idx}")
         data = load_run_data(run_dir)
         if data is None:
             continue

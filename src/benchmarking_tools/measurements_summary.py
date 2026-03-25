@@ -245,6 +245,19 @@ def build_summary(csv_path: Path, df: pd.DataFrame) -> Dict[str, Any]:
             "feat_y_transfer_ms": _mean_event_ms(df, "feat_y_transfer_ms"),
             "feat_y_etl_ms": _mean_event_ms(df, "feat_y_etl_ms"),
             "network_baseline_ms": _mean_event_ms(df, "network_baseline_ms"),
+            # Per-hop node/edge counts logged by Neo4jTestFanoutSampler.
+            # Discovered dynamically so new hop depths require no code changes.
+            **{
+                event: float(
+                    pd.to_numeric(df.loc[df["Event"] == event, "Value"], errors="coerce")
+                    .dropna()
+                    .mean()
+                )
+                for event in df["Event"].unique()
+                if isinstance(event, str)
+                and event.startswith("hop_")
+                and event.endswith(("_nodes", "_edges"))
+            },
         },
         "notes": [
             "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",

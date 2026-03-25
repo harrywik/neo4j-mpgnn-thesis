@@ -5,6 +5,7 @@ from neo4j import Driver
 from benchmarking_tools import Measurer
 from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 from typing import Optional, Dict, List, Tuple
+from functools import cached_property
 import torch
 import numpy as np
 import time
@@ -33,6 +34,39 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self.profile_accumulator = profile_accumulator
         self.node_label = node_label
         self._labels: Dict[str, int] = {}
+        self._feature_dim: Optional[int] = None
+
+    @cached_property
+    def _query_both(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        lf = f":{self.node_label}" if self.node_label else ""
+        return (
+            f"{prefix}UNWIND $node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"RETURN nid AS id, "
+            f"n.{self.feature_property} AS feature, "
+            f"n.{self.target_property} AS label"
+        )
+
+    @cached_property
+    def _query_x(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        lf = f":{self.node_label}" if self.node_label else ""
+        return (
+            f"{prefix}UNWIND $node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"RETURN nid AS id, n.{self.feature_property} AS value"
+        )
+
+    @cached_property
+    def _query_y(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        lf = f":{self.node_label}" if self.node_label else ""
+        return (
+            f"{prefix}UNWIND $node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"RETURN nid AS id, n.{self.target_property} AS value"
+        )
 
     def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
         """Override the base-class default to fetch features and labels together.
@@ -49,38 +83,69 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             return [self._get_tensor(attr) for attr in attrs]
 
         node_ids: List[int] = x_attr.index.tolist()
+        n = len(node_ids)
+        nid_to_pos: Dict[int, int] = {nid: i for i, nid in enumerate(node_ids)}
 
         # Check per-attr caches (LRU in CachedFS; always-miss in NoCacheFS).
-        x_map: Dict[int, object] = {}
-        y_map: Dict[int, object] = {}
+        cached_x: Dict[int, object] = {}
+        cached_y: Dict[int, object] = {}
         missing: List[int] = []
 
         for nid in node_ids:
             xc = self._get_cached_value(nid, x_attr)
             yc = self._get_cached_value(nid, y_attr)
             if xc is not None:
-                x_map[nid] = xc
+                cached_x[nid] = xc
             if yc is not None:
-                y_map[nid] = yc
+                cached_y[nid] = yc
             if xc is None or yc is None:
                 missing.append(nid)
 
         if self.measurer is not None:
-            self.measurer.log_event("cache_hit", len(x_map) + len(y_map))
+            self.measurer.log_event("cache_hit", len(cached_x) + len(cached_y))
             self.measurer.log_event("cache_miss", len(missing))
             self.measurer.log_event("remote_feature_fetch", 1)
 
-        if missing:
-            fetched_x, fetched_y = self._get_both_from_db(missing, x_attr)
-            for nid, val in fetched_x.items():
-                x_map[nid] = val
-                self._update_cached_value(nid, val, x_attr)
-            for nid, val in fetched_y.items():
-                y_map[nid] = val
-                self._update_cached_value(nid, val, y_attr)
+        feat_dim = self._feature_dim
+        if feat_dim is None and cached_x:
+            feat_dim = next(iter(cached_x.values())).shape[0]
+            self._feature_dim = feat_dim
 
-        x_tensor = torch.from_numpy(np.stack([x_map[nid] for nid in node_ids]))
-        y_tensor = torch.tensor([y_map[nid] for nid in node_ids], dtype=torch.int64)
+        if missing:
+            fetched_nids, feat_matrix, y_array = self._get_both_from_db(missing, x_attr)
+
+            if feat_dim is None and len(feat_matrix):
+                feat_dim = feat_matrix.shape[1]
+                self._feature_dim = feat_dim
+
+            feat_out = np.empty((n, feat_dim), dtype=np.float32)
+            y_out = np.empty(n, dtype=np.int64)
+
+            for nid, val in cached_x.items():
+                feat_out[nid_to_pos[nid]] = val
+            for nid, val in cached_y.items():
+                y_out[nid_to_pos[nid]] = val
+
+            pos_array = np.fromiter(
+                (nid_to_pos[nid] for nid in fetched_nids),
+                dtype=np.int64, count=len(fetched_nids),
+            )
+            feat_out[pos_array] = feat_matrix
+            y_out[pos_array] = y_array
+
+            for i, nid in enumerate(fetched_nids):
+                self._update_cached_value(nid, feat_matrix[i], x_attr)
+                self._update_cached_value(nid, int(y_array[i]), y_attr)
+        else:
+            feat_out = np.empty((n, feat_dim), dtype=np.float32)
+            y_out = np.empty(n, dtype=np.int64)
+            for nid, val in cached_x.items():
+                feat_out[nid_to_pos[nid]] = val
+            for nid, val in cached_y.items():
+                y_out[nid_to_pos[nid]] = val
+
+        x_tensor = torch.from_numpy(feat_out)
+        y_tensor = torch.from_numpy(y_out)
 
         result = []
         for attr in attrs:
@@ -94,24 +159,18 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
     def _get_both_from_db(
         self, nids: List[int], x_attr: TensorAttr
-    ) -> Tuple[Dict[int, object], Dict[int, object]]:
+    ) -> Tuple[List[int], np.ndarray, np.ndarray]:
         """Fetch both feature vector and label for *nids* in one Cypher query.
 
-        Returns a pair ``(x_map, y_map)`` where keys are node IDs and values
-        are the processed feature array and integer label respectively.
+        Returns ``(fetched_nids, feat_matrix, y_array)`` where *fetched_nids*
+        is the list of node IDs in DB-returned order, *feat_matrix* is shape
+        ``(len(fetched_nids), feature_dim)`` float32, and *y_array* is shape
+        ``(len(fetched_nids),)`` int64.  The caller is responsible for placing
+        rows into the correct output positions via ``nid_to_pos``.
         """
-        profile_prefix = "PROFILE " if self.profile else ""
-        label_filter = f":{self.node_label}" if self.node_label else ""
-        query = (
-            f"{profile_prefix}MATCH (n{label_filter}) WHERE n.{self.nodeid_property} IN $node_ids "
-            f"RETURN n.{self.nodeid_property} AS id, "
-            f"n.{self.feature_property} AS feature, "
-            f"n.{self.target_property} AS label"
-        )
-
-        with self._get_driver().session(database=self.database_name) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             t_send = time.monotonic()
-            result = session.run(query, node_ids=nids)
+            result = session.run(self._query_both, node_ids=nids)
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
@@ -125,40 +184,47 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
 
-        x_map: Dict[int, object] = {}
-        y_map: Dict[int, object] = {}
         t_etl = time.monotonic()
 
-        if records:
-            fpt = self.feature_property_type
-            if fpt == "byte[]":
-                feat_matrix = np.stack([
-                    np.frombuffer(bytes(rec["feature"]), dtype=np.float32)
-                    for rec in records
-                ])
-            elif fpt == "f64[]":
-                feat_matrix = np.array(
-                    [rec["feature"] for rec in records], dtype=np.float32
-                )
-            else:
-                raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
+        if not records:
+            if self.measurer is not None:
+                self.measurer.log_event("feat_x_etl_ms", 0.0)
+            empty_feats = np.empty((0, self._feature_dim or 0), dtype=np.float32)
+            return [], empty_feats, np.empty(0, dtype=np.int64)
 
+        fpt = self.feature_property_type
+        if fpt == "byte[]":
+            feat_matrix = np.stack([
+                np.frombuffer(memoryview(rec["feature"]), dtype=np.float32)
+                for rec in records
+            ])
+        elif fpt == "f64[]":
+            feat_matrix = np.asarray(
+                [rec["feature"] for rec in records], dtype=np.float32
+            )
+        else:
+            raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
+
+        fetched_nids: List[int] = []
+        y_array = np.empty(len(records), dtype=np.int64)
+
+        first_label = records[0]["label"]
+        if isinstance(first_label, str):
             for i, rec in enumerate(records):
-                nid = rec["id"]
-                x_map[nid] = feat_matrix[i]
-
-                raw_label = rec["label"]
-                if isinstance(raw_label, str):
-                    if raw_label not in self._labels:
-                        self._labels[raw_label] = len(self._labels)
-                    y_map[nid] = self._labels[raw_label]
-                else:
-                    y_map[nid] = int(raw_label)
+                fetched_nids.append(rec["id"])
+                lbl = rec["label"]
+                if lbl not in self._labels:
+                    self._labels[lbl] = len(self._labels)
+                y_array[i] = self._labels[lbl]
+        else:
+            for i, rec in enumerate(records):
+                fetched_nids.append(rec["id"])
+                y_array[i] = int(rec["label"])
 
         if self.measurer is not None:
             self.measurer.log_event("feat_x_etl_ms", (time.monotonic() - t_etl) * 1000)
 
-        return x_map, y_map
+        return fetched_nids, feat_matrix, y_array
 
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
@@ -207,16 +273,9 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         """
         is_label = attr.attr_name == "y"
         phase = "feat_y_" if is_label else "feat_x_"
-        profile_prefix = "PROFILE " if self.profile else ""
-        prop = self.target_property if is_label else self.feature_property
-        label_filter = f":{self.node_label}" if self.node_label else ""
+        query = self._query_y if is_label else self._query_x
 
-        query = (
-            f"{profile_prefix}MATCH (n{label_filter}) WHERE n.{self.nodeid_property} IN $node_ids "
-            f"RETURN n.{self.nodeid_property} AS id, n.{prop} AS value"
-        )
-
-        with self._get_driver().session(database=self.database_name) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             t_send = time.monotonic()
             result = session.run(query, node_ids=nids)
             records = list(result)
@@ -255,11 +314,11 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             fpt = self.feature_property_type
             if fpt == "byte[]":
                 feat_matrix = np.stack([
-                    np.frombuffer(bytes(rec["value"]), dtype=np.float32)
+                    np.frombuffer(memoryview(rec["value"]), dtype=np.float32)
                     for rec in records
                 ])
             elif fpt == "f64[]":
-                feat_matrix = np.array(
+                feat_matrix = np.asarray(
                     [rec["value"] for rec in records], dtype=np.float32
                 )
             else:

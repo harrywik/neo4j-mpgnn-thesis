@@ -1,0 +1,174 @@
+{
+  "Neo4jGraphSAINTRandomWalkSampler": {
+    "n_runs_completed": 5,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7608000229227312,
+      "final_validation_accuracy": 0.7520000226788041,
+      "throughput_samples_per_s": 541.7905441426442,
+      "time_to_best_accuracy_s": 22.022692933608777,
+      "training_time_s": 23.257118966593406,
+      "avg_batch_nodes": 1664.6382222222223,
+      "avg_batch_edges": 5608.159111111112,
+      "remote_feature_total_s": 6.534443665691652,
+      "sampling_mean_s": 0.020049671889800166,
+      "training_mean_s": 0.0030849474081510882,
+      "sampling_overhead_fraction": 0.8666567585881276,
+      "batch_nodes_cv": 0.010277762410831361,
+      "epochs_to_best_accuracy": 84.0,
+      "feature_fetch_overhead_fraction": 0.28096940449457686,
+      "topo_etl_ms": 0.5925319761128934,
+      "feat_x_etl_ms": 6.419190134455794
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.0037094474758537365,
+      "final_validation_accuracy": 0.0057965508737086715,
+      "throughput_samples_per_s": 3.3602733257752835,
+      "time_to_best_accuracy_s": 1.6653382436895163,
+      "training_time_s": 0.14497155033560077,
+      "avg_batch_nodes": 0.6157527161185492,
+      "avg_batch_edges": 3.9491187577690168,
+      "remote_feature_total_s": 0.04569535817308964,
+      "sampling_mean_s": 0.0001867244465296661,
+      "training_mean_s": 6.189995975379469e-05,
+      "sampling_overhead_fraction": 0.002099323608097465,
+      "batch_nodes_cv": 0.0004869341554227288,
+      "epochs_to_best_accuracy": 6.164414002968976,
+      "feature_fetch_overhead_fraction": 0.001767822511273218,
+      "topo_etl_ms": 0.006707009682818516,
+      "feat_x_etl_ms": 0.05902147194334292
+    }
+  },
+  "PyGGraphSAINTRandomWalkSampler": {
+    "n_runs_completed": 5,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7452,
+      "final_validation_accuracy": 0.7375999999999999,
+      "throughput_samples_per_s": 6930.757404333874,
+      "time_to_best_accuracy_s": 0.9718942416016944,
+      "training_time_s": 1.8193485249881634,
+      "avg_batch_nodes": 1599.1017777777777,
+      "avg_batch_edges": 5470.670222222223,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0007300782725214958,
+      "training_mean_s": 0.002822096090479236,
+      "sampling_overhead_fraction": 0.20559353109583997,
+      "batch_nodes_cv": 0.012068877097787888,
+      "epochs_to_best_accuracy": 44.6,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.006523802572120042,
+      "final_validation_accuracy": 0.0014966629547095778,
+      "throughput_samples_per_s": 191.0326510845916,
+      "time_to_best_accuracy_s": 0.24638401899277554,
+      "training_time_s": 0.04954368990727318,
+      "avg_batch_nodes": 0.5441702711014295,
+      "avg_batch_edges": 3.296351173908599,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 1.3496906082275369e-05,
+      "training_mean_s": 8.841087617347573e-05,
+      "sampling_overhead_fraction": 0.0024248224867639816,
+      "batch_nodes_cv": 0.00032990036457562815,
+      "epochs_to_best_accuracy": 11.447270417003349,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "Neo4jSampler": {
+    "n_runs_completed": 5,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7828000236485825,
+      "final_validation_accuracy": 0.7724000232126258,
+      "throughput_samples_per_s": 467.1432398840734,
+      "time_to_best_accuracy_s": 20.982599141600076,
+      "training_time_s": 26.972663933213333,
+      "avg_batch_nodes": 356.2116666666667,
+      "avg_batch_edges": 571.0577777777778,
+      "remote_feature_total_s": 10.211422594299075,
+      "sampling_mean_s": 0.019503189120344662,
+      "training_mean_s": 0.001435891651942964,
+      "sampling_overhead_fraction": 0.9314305658212219,
+      "batch_nodes_cv": 0.09482752597415742,
+      "epochs_to_best_accuracy": 69.4,
+      "feature_fetch_overhead_fraction": 0.3785825729638056,
+      "topo_etl_ms": 0.3248777652034358,
+      "feat_x_etl_ms": 3.3256854841216836
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.0027129320600901372,
+      "final_validation_accuracy": 0.005122499467894083,
+      "throughput_samples_per_s": 1.2979726916862895,
+      "time_to_best_accuracy_s": 3.4174866703881617,
+      "training_time_s": 0.0752082006746547,
+      "avg_batch_nodes": 0.45811072034910505,
+      "avg_batch_edges": 0.40319863070508677,
+      "remote_feature_total_s": 0.0703708223218942,
+      "sampling_mean_s": 7.754100952620096e-05,
+      "training_mean_s": 3.777357996870298e-05,
+      "sampling_overhead_fraction": 0.0015493699438868626,
+      "batch_nodes_cv": 0.004447462660359673,
+      "epochs_to_best_accuracy": 11.35957745693034,
+      "feature_fetch_overhead_fraction": 0.0021271525825012467,
+      "topo_etl_ms": 0.00239557789537677,
+      "feat_x_etl_ms": 0.01676123501570466
+    }
+  },
+  "PyGNeighborLoader": {
+    "n_runs_completed": 5,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7872000236109998,
+      "final_validation_accuracy": 0.7716000232036363,
+      "throughput_samples_per_s": 11655.125229669637,
+      "time_to_best_accuracy_s": 0.7660730249946937,
+      "training_time_s": 1.0821191916009412,
+      "avg_batch_nodes": 355.76388888888886,
+      "avg_batch_edges": 570.2161111111111,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0003379936887197094,
+      "training_mean_s": 0.001204016935759379,
+      "sampling_overhead_fraction": 0.21918851659358163,
+      "batch_nodes_cv": 0.09429820662985548,
+      "epochs_to_best_accuracy": 64.4,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.0024000001986017425,
+      "final_validation_accuracy": 0.006858571460062332,
+      "throughput_samples_per_s": 361.5416563329974,
+      "time_to_best_accuracy_s": 0.0869073073381009,
+      "training_time_s": 0.033845310981075793,
+      "avg_batch_nodes": 0.7045180473290475,
+      "avg_batch_edges": 0.6786137831393521,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 8.309975889130115e-06,
+      "training_mean_s": 2.5983345249478273e-05,
+      "sampling_overhead_fraction": 0.002442811288456282,
+      "batch_nodes_cv": 0.005653276196273505,
+      "epochs_to_best_accuracy": 6.651315659326356,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "pairwise_distribution_stats": {
+    "Neo4jSampler vs PyGNeighborLoader": {
+      "js_divergence": 0.000307,
+      "kl_a_to_b": 0.001225,
+      "kl_b_to_a": 0.001231,
+      "n_nodes_tested": 1664,
+      "n_nodes_significant": 0,
+      "pct_nodes_significant": 0.0
+    }
+  },
+  "pairwise_edge_distribution_stats": {
+    "Neo4jSampler vs PyGNeighborLoader": {
+      "js_divergence": 0.000366,
+      "kl_a_to_b": 0.001466,
+      "kl_b_to_a": 0.001465,
+      "n_edges_tested": 2702,
+      "n_edges_significant": 0,
+      "pct_edges_significant": 0.0
+    }
+  }
+}

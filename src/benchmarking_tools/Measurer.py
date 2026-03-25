@@ -2,6 +2,7 @@ import csv
 import time
 import json
 from collections import Counter
+from datetime import date
 from pathlib import Path
 from typing import Any, Optional
 
@@ -31,11 +32,12 @@ class Measurer:
         for p in results_path.iterdir():
             if p.is_dir() and p.name.startswith("run_"):
                 try:
-                    existing.append(int(p.name.split("_", 1)[1]))
-                except ValueError:
+                    existing.append(int(p.name.split("_")[1]))
+                except (ValueError, IndexError):
                     pass
         next_id = (max(existing) + 1) if existing else 0
-        run_results_path = results_path / f"run_{next_id}"
+        date_str = date.today().isoformat()
+        run_results_path = results_path / f"run_{next_id}_{date_str}"
         run_results_path.mkdir(parents=True, exist_ok=False)
 
         # Save config
@@ -134,6 +136,8 @@ class Measurer:
             profile_path = csv_path.with_name("query_profile.json")
             try:
                 self.profile_accumulator.save(profile_path, subphase_metrics=summary.get("metrics"))
+                raw_profile_path = csv_path.with_name("query_profile_raw.json")
+                self.profile_accumulator.save_raw(raw_profile_path)
                 profile_dir = csv_path.parent / "query_profile_plots"
                 profile_dir.mkdir(exist_ok=True)
                 plot_all_operator_profiles(profile_path, output_dir=profile_dir)

@@ -75,14 +75,14 @@ class Neo4jAbstractGS(GraphStore, ABC):
         RETURN n.{self.nodeid_property} AS id
         """
 
-        with self._get_driver().session(database=self.database_name) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             result = session.run(query, limit=limit, split=split, offset=offset)
             seed_ids = [record["id"] for record in result]
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
     def sample_from_nodes(self, kwargs, query: str):
-        with self._get_driver().session(database=self.database_name) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             t_send = time.monotonic()
             result = session.run(query, **kwargs)
             t_query_sent = time.monotonic()
@@ -131,7 +131,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
 
         Returns the record dict, or ``None`` if the query produced no rows.
         """
-        with self._get_driver().session(database=self.database_name) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             t_send = time.monotonic()
             result = session.run(query, **kwargs)
 
