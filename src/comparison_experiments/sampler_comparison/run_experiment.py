@@ -15,6 +15,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -36,10 +37,12 @@ from neo4j_pyg.samplers import (
     Neo4jEdgeModeSampler,
     Neo4jNeighborSampler,
     Neo4jSampler,
+    Neo4jGraphSAINTRandomWalkSampler,
     OldNeighborSampler,
 )
 from Neo4jConnection import Neo4jConnection
 from training.Training import Trainer, put_nodeLoader_args_map
+from training.GraphSAINTTrainer import GraphSAINTTrainer
 from comparison_experiments.sampler_comparison.experiment_measurer import ExperimentMeasurer
 from comparison_experiments.sampler_comparison.comparison_plots import plot_comparison
 
@@ -98,6 +101,8 @@ def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
             "neo4j",
             lambda gs, nn: OldNeighborSampler(gs, num_neighbors=nn),
         ),
+        "Neo4jGraphSAINTRandomWalkSampler": RunSpec("graphsaint_neo4j", None),
+        "PyGGraphSAINTRandomWalkSampler": RunSpec("graphsaint_pyg", None),
         "PyGNeighborLoader": RunSpec("pyg", None),
     }
 
@@ -106,17 +111,18 @@ def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
 # ---------------------------------------------------------------------------
 
 def _next_comparison_dir(base: Path) -> Path:
-    """Return the next auto-incremented comparison_N directory."""
+    """Return the next auto-incremented comparison_N_YYYY-MM-DD directory."""
     existing = []
     if base.exists():
         for p in base.iterdir():
             if p.is_dir() and p.name.startswith("comparison_"):
                 try:
-                    existing.append(int(p.name.split("_", 1)[1]))
-                except ValueError:
+                    existing.append(int(p.name.split("_")[1]))
+                except (ValueError, IndexError):
                     pass
     next_id = (max(existing) + 1) if existing else 0
-    out = base / f"comparison_{next_id}"
+    date_str = date.today().isoformat()
+    out = base / f"comparison_{next_id}_{date_str}"
     out.mkdir(parents=True, exist_ok=False)
     return out
 
@@ -168,11 +174,11 @@ def main() -> None:
     pyg_train_indices = None
 
     needs_neo4j = any(
-        SAMPLER_REGISTRY[n].data_key == "neo4j" for n in sampler_names
+        SAMPLER_REGISTRY[n].data_key in ("neo4j", "graphsaint_neo4j") for n in sampler_names
         if n in SAMPLER_REGISTRY
     )
     needs_pyg = any(
-        SAMPLER_REGISTRY[n].data_key == "pyg" for n in sampler_names
+        SAMPLER_REGISTRY[n].data_key in ("pyg", "graphsaint_pyg") for n in sampler_names
         if n in SAMPLER_REGISTRY
     )
 
@@ -228,7 +234,7 @@ def main() -> None:
         for run_idx in range(num_runs):
             print(f"  Run {run_idx + 1}/{num_runs} ...", flush=True)
 
-            run_dir = experiment_dir / sampler_name / f"run_{run_idx}"
+            run_dir = experiment_dir / sampler_name / f"run_{run_idx}_{date.today().isoformat()}"
             measurer = ExperimentMeasurer(run_dir, config)
             measurer.write_to_configresult("sampler", sampler_name)
             measurer.write_to_configresult("run_idx", run_idx)
@@ -261,6 +267,51 @@ def main() -> None:
                     lr=config.get("lr"),
                     nodeloader_args=nodeloader_args,
                     drop_last=drop_last,
+                )
+            elif spec.data_key == "graphsaint_neo4j":
+                train_loader = Neo4jGraphSAINTRandomWalkSampler(
+                    graph_store=neo4j_graph_store,
+                    feature_store=neo4j_feature_store,
+                    batch_size=config["graphsaint_batch_size"],
+                    walk_length=config["walk_length"],
+                    num_steps=config["num_steps"],
+                    sample_coverage=config["sample_coverage"],
+                    node_label="Paper",
+                    measurer=measurer,
+                    profile=profile,
+                    # Cache norms in the experiment dir so they are computed
+                    # once and reused across all runs of this comparison.
+                    save_dir=str(experiment_dir),
+                )
+                eval_sampler = Neo4jNeighborSampler(
+                    neo4j_graph_store,
+                    num_neighbors=num_neighbors,
+                    node_label="Paper",
+                    profile=profile,
+                )
+                trainer = GraphSAINTTrainer(
+                    model=model,
+                    data=(neo4j_feature_store, neo4j_graph_store),
+                    train_loader=train_loader,
+                    eval_sampler=eval_sampler,
+                    patience=config.get("patience"),
+                    min_delta=config.get("min_delta"),
+                    batch_size=config["graphsaint_batch_size"],
+                    lr=config.get("lr"),
+                    measurer=measurer,
+                )
+            elif spec.data_key == "graphsaint_pyg":
+                trainer = GraphSAINTTrainer(
+                    model=model,
+                    data=pyg_graph,
+                    walk_length=config["walk_length"],
+                    num_steps=config["num_steps"],
+                    sample_coverage=config["sample_coverage"],
+                    patience=config.get("patience"),
+                    min_delta=config.get("min_delta"),
+                    batch_size=config["graphsaint_batch_size"],
+                    lr=config.get("lr"),
+                    measurer=measurer,
                 )
             else:  # "pyg"
                 trainer = Trainer(

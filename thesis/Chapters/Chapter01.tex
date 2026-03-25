@@ -1,0 +1,65 @@
+%************************************************
+\chapter{Introduction}\label{ch:introduction}
+%************************************************
+
+Graph structures can be helpful as a tool in modeling several important domains.
+Examples of applications of such models are found in domains as different as that of
+predicting likely chemical bonds between atoms within medical science, and the problem
+of fraud detection in the field of finance. The prevalence of graph-structured data
+across many domains creates a need for efficient and accurate methods for modeling and
+analyzing graphs.
+
+\acsfont{GNN}s have emerged as a leading approach for representation learning on
+graphs, combining the structural intuition behind classical graph algorithms with the
+expressiveness and inductivity of neural networks. Unlike traditional graph
+representation learning (\acsfont{GRL}) algorithms, \acsfont{GNN}s are inductive in
+nature, and unlike most traditional neural networks they do not treat datapoints
+independently of other inputs. This allows \acsfont{GNN}s to capture graph structure
+as well as generalize to unseen nodes, making them highly effective when analyzing
+graph-structured data. However, the graph structure also introduces a new challenge
+absent from traditional neural networks: the challenge of growing training data. The
+inter-connectivity between datapoints in a graph makes it impossible to consider
+datapoints independently, as is typically assumed in stochastic gradient descent
+(\acsfont{SGD}).
+
+A natural solution is to store the graph in a dedicated graph database and query it
+during training for the relevant neighbors of nodes in a mini-batch. Graph databases
+are especially built for efficient graph traversal and feature look-up---precisely the
+operations needed when training \acsfont{GNN}s on large graphs. Yet there have been
+few studies exploring synergies between \acsfont{GNN}s and graph databases.
+
+This thesis explores whether graph databases can be used as a scalable and efficient
+solution for training \acsfont{GNN}s on large graphs. We build upon the
+\texttt{PyTorch Geometric} machine learning library and couple it with subgraph
+fetching from \texttt{Neo4j}, where the graph data resides.
+
+
+%------------------------------------------------
+\section{Research Questions}\label{sec:rq}
+%------------------------------------------------
+
+This thesis addresses the following research questions:
+
+\begin{enumerate}
+    \item \textbf{\acsfont{RQ}1 --- Bottlenecks:} What are the primary bottlenecks
+    in \acsfont{GNN} training when using a graph database for graph storage, and to
+    what extent can they be mitigated?
+
+    \item \textbf{\acsfont{RQ}2 --- Sampling:} Which subgraph sampling strategies
+    are most efficient when the graph is stored in a graph database?
+
+    \item \textbf{\acsfont{RQ}3 --- Graph size:} For which graph sizes does a
+    graph-database-based storage approach provide the greatest benefits?
+\end{enumerate}
+
+
+%------------------------------------------------
+\section{Scope and Limitations}\label{sec:scope}
+%------------------------------------------------
+
+The experiments in this thesis are conducted on four datasets of varying sizes using a
+two-layer Graph Convolutional Network (\acsfont{GCN}) for node classification. The
+main emphasis is on the training pipeline, rather than on a particular downstream task
+or model architecture. Since the core stages of the training pipeline remain broadly
+similar across multiple graph learning tasks, the conclusions may have relevance beyond
+the specific task considered here.
