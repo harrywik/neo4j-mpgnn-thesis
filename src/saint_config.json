@@ -4,6 +4,7 @@
   "patience": 50,
   "min_delta": 0.001,
   "logg_cpu_utilization": false,
+  "cpu_burst_batches": 3,
   "max_validation_size": null,
   "max_test_size": null,
   "init_weights": null,

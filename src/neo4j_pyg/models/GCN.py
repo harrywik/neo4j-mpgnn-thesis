@@ -38,6 +38,58 @@ class GCN(nn.Module):
             torch.cuda.set_rng_state_all(gpu_state)
 
 
+class BigGCN(nn.Module):
+    """A deliberately oversized GCN to maximise training-phase CPU time.
+
+    8 GCNConv layers with 2048-wide hidden representations, followed by a
+    wide MLP classifier. Purely for benchmarking — not intended to converge.
+    """
+
+    def __init__(self, in_dim: int, nbr_classes: int, hidden_dim: int = 2048, init_weights: bool = True):
+        super().__init__()
+        self.convs = nn.ModuleList([
+            GCNConv(in_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+            GCNConv(hidden_dim, hidden_dim),
+        ])
+        self.classifier = nn.Sequential(
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, hidden_dim),
+            nn.ReLU(),
+            nn.Linear(hidden_dim, nbr_classes),
+        )
+        if init_weights:
+            self.reset_parameters()
+
+    def forward(self, X: Tensor, edge_index: Tensor) -> Tensor:
+        for conv in self.convs:
+            X = conv(X, edge_index).relu_()
+        return self.classifier(X)
+
+    def reset_parameters(self):
+        cpu_state = torch.get_rng_state()
+        gpu_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+        torch.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
+
+        for conv in self.convs:
+            conv.reset_parameters()
+        for layer in self.classifier:
+            if isinstance(layer, nn.Linear):
+                init.xavier_uniform_(layer.weight)
+                init.zeros_(layer.bias)
+
+        torch.set_rng_state(cpu_state)
+        if gpu_state is not None:
+            torch.cuda.set_rng_state_all(gpu_state)
+
+
 class TinyGCN(nn.Module):
     def __init__(self, in_dim:int, hidden_dim:int, nbr_classes:int, init_weights:bool=True):
         super().__init__()
