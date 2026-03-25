@@ -10,7 +10,7 @@ from torch_geometric.data import Data, GraphStore, FeatureStore, HeteroData
 from torch import nn
 from torch import optim
 from training.evaluate import evaluate
-from benchmarking_tools import Measurer, start_cpu_monitor
+from benchmarking_tools import Measurer, start_cpu_monitor, start_cpu_burst
 from training.EarlyStopping import EarlyStopping
 
 
@@ -227,14 +227,20 @@ class Trainer:
         loss.backward()
         self.optimizer.step()
 
-    def _run_epoch(self, epoch: int) -> None:        
-                
+    def _run_epoch(self, epoch: int) -> None:
         it = iter(self.train_loader)
         nbr_batches = len(self.train_loader)
 
-        for _ in range(nbr_batches):
+        # One continuous burst covering the first N consecutive batches of epoch 0.
+        _BURST_BATCHES = self.measurer.cpu_burst_batches
+        burst_handle = None
+        if epoch == 0 or epoch == 1:
+            burst_handle = start_cpu_burst(self.measurer)
+
+        for batch_idx in range(nbr_batches):
+            self.measurer.set_phase("sampling")
             self.measurer.log_event("start_batch_fetch", 1)
-            batch = next(it) 
+            batch = next(it)
             self.measurer.log_event("end_batch_fetch", 1)
 
             if hasattr(batch, "n_id"):
@@ -254,10 +260,26 @@ class Trainer:
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))
             self._log_seed_nodes(batch)
-            
+
+            self.measurer.set_phase("training")
             self.measurer.log_event("start_batch_processing", 1)
             self._run_batch(batch)
-            self.measurer.log_event("end_batch_processing", 1)                    
+            self.measurer.log_event("end_batch_processing", 1)
+
+            # Stop burst after the 3rd consecutive batch completes.
+            if burst_handle is not None and batch_idx == _BURST_BATCHES - 1:
+                stop_event, thread = burst_handle
+                stop_event.set()
+                thread.join(timeout=0.5)
+                burst_handle = None
+
+        # Ensure burst is stopped if the epoch had fewer than _BURST_BATCHES batches.
+        if burst_handle is not None:
+            stop_event, thread = burst_handle
+            stop_event.set()
+            thread.join(timeout=0.5)
+
+        self.measurer.set_phase("idle")                    
                 
 
     def train(self, max_epochs: int) -> None:
@@ -269,7 +291,7 @@ class Trainer:
         pr.enable()
         monitor = None
         try:
-            monitor = start_cpu_monitor(self.measurer, interval=self.cpu_monitor_interval)
+            monitor = start_cpu_monitor(self.measurer, interval=self.measurer.coarse_cpu_interval)
             self._start_training(max_epochs, start_time)
         finally:
             if monitor is not None:
