@@ -393,35 +393,47 @@ def plot_driver_time_breakdown(
     #   (file, line, func) → (pcalls, ncalls, tottime, cumtime, callers)
     raw = st.stats  # type: ignore[attr-defined]
 
-    # Lookup helpers: match by (filename_fragment, function_name)
-    def _find_tottime(file_frag: str, func_name: str) -> float:
+    def _find_tottime_py(file_frag: str, func_name: str) -> float:
+        """Look up tottime for a Python function by filename fragment + name."""
         for (fname, _line, fn), entry in raw.items():
             if file_frag in fname and fn == func_name:
-                return entry[2]  # tottime
+                return entry[2]
         return 0.0
 
-    entries = [
-        ("Socket receive\n(recv_into)",       "_socket",      "recv_into",             "#4C78A8"),
-        ("Socket overhead\n(settimeout)",      "_socket",      "settimeout",            "#7BAFD4"),
-        ("Packstream decode\n(unpack)",        "packstream",   "unpack",                "#AED4F0"),
-        ("byte[] → ndarray\n(frombuffer)",     "fromnumeric",  "frombuffer",            "#9ECAE1"),
-        ("Record obj. creation\n(__new__)",    "_data",        "__new__",               "#6BAED6"),
-    ]
+    def _find_tottime_builtin(func_name_substr: str) -> float:
+        """Look up tottime for a built-in / C-extension function.
 
-    # frombuffer is a built-in — try alternate key patterns
-    _frombuffer_total = _find_tottime("fromnumeric", "frombuffer")
-    if _frombuffer_total == 0.0:
-        # built-in method entry stored differently
+        In pstats, built-in methods are stored with '~' as the filename.
+        We match the function name as a substring to handle entries like
+        '{method 'recv_into' of '_socket.socket' objects}' and Rust
+        extensions like '{built-in method neo4j._rust.codec.packstream...}'.
+        Returns the *largest* tottime among all matching entries so that
+        the dominant cost is captured when multiple variants exist.
+        """
+        best = 0.0
         for (fname, _line, fn), entry in raw.items():
-            if "frombuffer" in fn:
-                _frombuffer_total = max(_frombuffer_total, entry[2])
+            if fname == "~" and func_name_substr in fn:
+                best = max(best, entry[2])
+        return best
+
+    def _find_tottime(file_frag: str, func_name: str) -> float:
+        """Prefer the built-in entry; fall back to the Python wrapper."""
+        builtin = _find_tottime_builtin(func_name)
+        if builtin > 0.0:
+            return builtin
+        return _find_tottime_py(file_frag, func_name)
+
+    entries = [
+        ("Socket receive\n(recv_into)",       "_socket",      "recv_into",   "#4C78A8"),
+        ("Socket overhead\n(settimeout)",      "_socket",      "settimeout",  "#7BAFD4"),
+        ("Packstream decode\n(unpack)",        "packstream",   "unpack",      "#AED4F0"),
+        ("byte[] → ndarray\n(frombuffer)",     "fromnumeric",  "frombuffer",  "#9ECAE1"),
+        ("Record obj. creation\n(__new__)",    "_data",        "__new__",     "#6BAED6"),
+    ]
 
     totals_s: list[tuple[str, float, str]] = []
     for label, file_frag, func_name, color in entries:
-        if func_name == "frombuffer":
-            t = _frombuffer_total
-        else:
-            t = _find_tottime(file_frag, func_name)
+        t = _find_tottime(file_frag, func_name)
         if t > 0:
             totals_s.append((label, t, color))
 
@@ -872,17 +884,24 @@ def plot_end_to_end_latency(
     _C_ETL      = "#F0F0F0"   # Python ETL
 
     # ── Topology slices ───────────────────────────────────────────────────
+    # The darker sub-segment covers t_first (time to first row); the lighter
+    # remainder covers t_last − t_first.  Both appear in the legend separately.
     sg = _qp_global("sampler")
     topo_startup     = sg.get("avg_query_startup_ms")
-    topo_exec_ser    = sg.get("avg_exec_serialize_ms")
+    topo_server_lat  = sg.get("avg_result_consumed_after_ms")
     topo_client_recv = sg.get("avg_client_recv_ms")
     topo_etl         = metrics.get("topo_etl_ms")
 
     topo_slices: list[tuple[str, float, str]] = []
-    if topo_startup is not None and topo_startup > 0:
-        topo_slices.append(("DB: query startup", float(topo_startup), "#2171B5"))
-    if topo_exec_ser is not None and topo_exec_ser > 0:
-        topo_slices.append(("DB: Cypher execution + serialize", float(topo_exec_ser), "#4C78A8"))
+    if topo_server_lat is not None and topo_server_lat > 0:
+        t_first = float(topo_startup) if topo_startup and topo_startup > 0 else 0.0
+        t_rest  = float(topo_server_lat) - t_first
+        if t_first > 0:
+            topo_slices.append((f"DB time-to-first-row ({t_first:.2f} ms)", t_first, "#08519C"))
+        if t_rest > 0:
+            topo_slices.append(("DB server latency (topology)", t_rest, "#2171B5"))
+        else:
+            topo_slices.append(("DB server latency (topology)", float(topo_server_lat), "#2171B5"))
     if topo_client_recv is not None and topo_client_recv > 0:
         topo_slices.append(("Network + driver recv", float(topo_client_recv), _C_DRIVER))
     if topo_etl is not None:
@@ -899,15 +918,20 @@ def plot_end_to_end_latency(
     # ── Feature slices ────────────────────────────────────────────────────
     fg = _qp_global("feat_x")
     feat_startup     = fg.get("avg_query_startup_ms")
-    feat_exec_ser    = fg.get("avg_exec_serialize_ms")
+    feat_server_lat  = fg.get("avg_result_consumed_after_ms")
     feat_client_recv = fg.get("avg_client_recv_ms")
     feat_etl         = metrics.get("feat_x_etl_ms")
 
     feat_slices: list[tuple[str, float, str]] = []
-    if feat_startup is not None and feat_startup > 0:
-        feat_slices.append(("DB: query startup", float(feat_startup), "#D94F00"))
-    if feat_exec_ser is not None and feat_exec_ser > 0:
-        feat_slices.append(("DB: property I/O + serialize", float(feat_exec_ser), "#F58518"))
+    if feat_server_lat is not None and feat_server_lat > 0:
+        t_first = float(feat_startup) if feat_startup and feat_startup > 0 else 0.0
+        t_rest  = float(feat_server_lat) - t_first
+        if t_first > 0:
+            feat_slices.append((f"DB time-to-first-row ({t_first:.2f} ms)", t_first, "#C44E00"))
+        if t_rest > 0:
+            feat_slices.append(("DB server latency (features)", t_rest, "#F58518"))
+        else:
+            feat_slices.append(("DB server latency (features)", float(feat_server_lat), "#F58518"))
     if feat_client_recv is not None and feat_client_recv > 0:
         feat_slices.append(("Network + driver recv", float(feat_client_recv), _C_DRIVER))
     if feat_etl is not None:
@@ -917,7 +941,7 @@ def plot_end_to_end_latency(
     if not feat_slices:
         feat_wall = fg.get("avg_client_wall_time_ms")
         if feat_wall:
-            feat_slices.append(("Total fetch (wall)", float(feat_wall), "#D94F00"))
+            feat_slices.append(("Total fetch (wall)", float(feat_wall), "#F58518"))
         if feat_etl is not None:
             feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
 
@@ -981,7 +1005,7 @@ def plot_end_to_end_latency(
         return
 
     n_rows = len(rows)
-    fig, ax = plt.subplots(figsize=(11, max(2.5, n_rows * 1.5)))
+    fig, ax = plt.subplots(figsize=(11, max(2.5, n_rows * 1.6)))
 
     bar_height = 0.5
     yticks, ylabels = [], []
@@ -996,7 +1020,9 @@ def plot_end_to_end_latency(
                 continue
             ax.barh(y, width, left=left, height=bar_height, color=color,
                     edgecolor="white", linewidth=0.5)
-            if total > 0 and width / total > 0.03:
+            # Only label segments wide enough that the text won't crowd the
+            # total-time annotation at the bar end (8% of bar = safe minimum).
+            if total > 0 and width / total > 0.08:
                 ax.text(
                     left + width / 2, y,
                     f"{width:.1f}",
@@ -1005,10 +1031,11 @@ def plot_end_to_end_latency(
                     fontweight="bold",
                 )
             left += width
-            legend_handles.setdefault(seg_label, (seg_label, color))
+            # Always overwrite so the last (lighter) shade wins for shared labels.
+            legend_handles[seg_label] = (seg_label, color)
 
         ax.text(
-            left + (ax.get_xlim()[1] * 0.005 if ax.get_xlim()[1] > 0 else 0.5),
+            left + (ax.get_xlim()[1] * 0.03 if ax.get_xlim()[1] > 0 else 0.5),
             y, f"{left:.1f} ms",
             ha="left", va="center", fontsize=8,
         )
@@ -1019,8 +1046,7 @@ def plot_end_to_end_latency(
     ax.set_yticklabels(ylabels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("mean ms per batch (cumulative timeline)")
-    ax.set_title("End-to-end per-batch latency breakdown\n"
-                 "DB startup | DB exec+serialize | Network+driver recv | Python ETL | GNN compute")
+    ax.set_title("End-to-end per-batch latency breakdown")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
     # Legend – upper right (topology bar is short, leaving whitespace there).
@@ -1032,7 +1058,7 @@ def plot_end_to_end_latency(
               framealpha=0.85, ncol=1)
 
     max_total = max(sum(s[1] for s in slices) for _, slices in rows)
-    ax.set_xlim(0, max_total * 1.18)
+    ax.set_xlim(0, max_total * 1.22)
 
     fig.tight_layout()
     out = (output_dir or profile_json_path.parent) / "end_to_end_latency.png"

@@ -1,6 +1,7 @@
 import time
 from typing import Tuple, Union
 import torch
+import torch.nn.functional as F
 import cProfile
 import pstats
 from torch_geometric.loader import NeighborLoader, NodeLoader
@@ -122,13 +123,44 @@ class Trainer:
                 drop_last=drop_last
             )
             self.measurer.log_event("nbr_training_datapoints", int(data.train_mask.sum().item()))
+        self._finish_init(
+            model=model,
+            optimizer=optimizer,
+            lr=lr,
+            snapshot_path=snapshot_path,
+            max_train_seconds=max_train_seconds,
+            device=device,
+            patience=patience,
+            min_delta=min_delta,
+            criterion=criterion,
+            cpu_monitor_interval=cpu_monitor_interval,
+            max_validation_size=max_validation_size,
+            max_test_size=max_test_size,
+        )
+
+    def _finish_init(
+        self,
+        model: nn.Module,
+        optimizer: optim.Optimizer | None,
+        lr: float,
+        snapshot_path: str | None,
+        max_train_seconds: int,
+        device: str,
+        patience: int,
+        min_delta: float,
+        criterion,
+        cpu_monitor_interval: float | None,
+        max_validation_size: int | None,
+        max_test_size: int | None,
+    ) -> None:
+        """Shared post-loader initialisation. Called by __init__ and subclass __init__."""
         self.model = model
         self.optimizer = optimizer if optimizer is not None else optim.Adam(
             model.parameters(), lr=lr, weight_decay=5e-4
         )
         self.snapshot_path = snapshot_path
         self.max_train_seconds = max_train_seconds
-        self.epochs_run = 0        
+        self.epochs_run = 0
         self.device = torch.device(device)
         self.model.to(self.device)
         self.nbr_training_datapoints = len(self.train_indices)
@@ -138,7 +170,31 @@ class Trainer:
         self.cpu_monitor_interval = cpu_monitor_interval
         self.max_validation_size = max_validation_size
         self.max_test_size = max_test_size
-        
+
+    def _evaluate_split(self, split: str, limit: int | None, iteration: int | None = None) -> tuple:
+        """Evaluate on a dataset split. Override in subclasses for custom eval logic."""
+        if self.data is not None:
+            return evaluate(
+                model=self.model,
+                data=self.data,
+                num_neighbors=self.num_neighbors,
+                split=split,
+                iteration=iteration,
+                limit=limit,
+            )
+        return evaluate(
+            model=self.model,
+            data=(self.feature_store, self.graph_store),
+            sampler=self.sampler,
+            split=split,
+            iteration=iteration,
+            limit=limit,
+        )
+
+    def _log_seed_nodes(self, batch) -> None:
+        """Log the number of seed (training) nodes in a batch. Override in subclasses."""
+        if hasattr(batch, "input_id"):
+            self.measurer.log_event("batch_nbr_seed_nodes", int(batch.input_id.shape[0]))
 
     def _save_snapshot(self, epoch: int) -> None:
         if not self.snapshot_path:
@@ -197,8 +253,7 @@ class Trainer:
 
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))
-            if hasattr(batch, "input_id"):
-                self.measurer.log_event("batch_nbr_seed_nodes", int(batch.input_id.shape[0]))
+            self._log_seed_nodes(batch)
             
             self.measurer.log_event("start_batch_processing", 1)
             self._run_batch(batch)
@@ -230,23 +285,7 @@ class Trainer:
             pr.dump_stats(str(prof_path))
         duration = time.monotonic() - start_time
         print(f"Training duration: {duration:.2f}s")
-        test_accuracy = None
-        if self.data:
-            test_accuracy, _ = evaluate(
-                model=self.model,
-                data=self.data,
-                num_neighbors=self.num_neighbors,
-                split="test",
-                limit=self.max_test_size,
-            )
-        else:
-            test_accuracy, _ = evaluate(
-                model=self.model,
-                data=(self.feature_store, self.graph_store),
-                sampler=self.sampler,
-                split="test",
-                limit=self.max_test_size,
-            )
+        test_accuracy, _ = self._evaluate_split("test", self.max_test_size)
         self.measurer.log_event("test_accuracy", test_accuracy)
         self.measurer.close()
         try:
@@ -261,25 +300,7 @@ class Trainer:
             self._run_epoch(epoch)
             self.measurer.log_event("epoch_end", 1)
             self.measurer.log_event("start_validation_accuracy", 1)
-            # if we have a data object and not FS and GS
-            if self.data:
-                validation_acc, validation_loss = evaluate(
-                    model=self.model,
-                    data=self.data,
-                    num_neighbors=self.num_neighbors,
-                    split="val",
-                    iteration=epoch,
-                    limit=self.max_validation_size,
-                )
-            else:
-                validation_acc, validation_loss = evaluate(
-                    model=self.model,
-                    data=(self.feature_store, self.graph_store),
-                    sampler=self.sampler,
-                    split="val",
-                    iteration=epoch,
-                    limit=self.max_validation_size,
-                )
+            validation_acc, validation_loss = self._evaluate_split("val", self.max_validation_size, iteration=epoch)
             self.measurer.log_event("validation_accuracy", validation_acc)
             self.measurer.log_event("validation_loss", validation_loss)
             self.measurer.log_event("end_validation_accuracy", 1)
@@ -296,6 +317,8 @@ class Trainer:
                 self.measurer.log_event("training_time_exceeded", (epoch + 1))
                 break
         self.measurer.log_event("program_end", 1)
+
+
 
 def put_nodeLoader_args_map(
     pickle_safe: bool | None = None,

@@ -2,3 +2,4 @@ from .Neo4jEdgeModeSampler import Neo4jEdgeModeSampler
 from .Neo4jSampler import Neo4jSampler
 from .Neo4jNeighborSampler import Neo4jNeighborSampler
 from .OldNeighborSampler import OldNeighborSampler
+from .Neo4jGraphSAINTSampler import Neo4jGraphSAINTSampler, Neo4jGraphSAINTRandomWalkSampler

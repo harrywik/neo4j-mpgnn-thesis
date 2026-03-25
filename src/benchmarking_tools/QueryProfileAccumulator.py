@@ -125,6 +125,8 @@ class QueryProfileAccumulator:
     def __init__(self) -> None:
         # source → { count, global_sums, operators, plan_meta }
         self._data: Dict[str, dict] = {}
+        # source → raw summary.profile tree from the first recorded query
+        self._raw_profiles: Dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -144,6 +146,10 @@ class QueryProfileAccumulator:
         will be ``None``; global driver timings are still accumulated.
         """
         metrics = extract_query_metrics(summary, t_send_query, t_all_records)
+
+        # Capture the raw plan tree from the first query for this source.
+        if source not in self._raw_profiles and summary.profile:
+            self._raw_profiles[source] = summary.profile
 
         if source not in self._data:
             self._data[source] = {
@@ -196,6 +202,19 @@ class QueryProfileAccumulator:
             }
 
         self._accumulate_operators(metrics["operators"], src["operators"])
+
+    def save_raw(self, path: Path) -> None:
+        """Write the raw Neo4j PROFILE plan tree(s) to *path* as JSON.
+
+        One entry per source (e.g. ``"sampler"``, ``"feat_x"``), each
+        containing the full nested plan tree exactly as returned by the
+        driver for the first recorded query.  Only written when PROFILE
+        was active (i.e. at least one source has a non-None plan tree).
+        """
+        if not self._raw_profiles:
+            return
+        with open(path, "w") as f:
+            json.dump(self._raw_profiles, f, indent=2)
 
     def has_data(self) -> bool:
         return bool(self._data)

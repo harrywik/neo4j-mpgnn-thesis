@@ -1,6 +1,6 @@
 {
   "profile": false,
-  "num_runs": 10,
+  "num_runs": 5,
   "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
@@ -13,8 +13,12 @@
   "hidden_dim1": 12,
   "hidden_dim2": 12,
   "neo4j_edge_mode": "incoming",
+  "graphsaint_batch_size": 1000,
+  "walk_length": 2,
+  "num_steps": 5,
+  "sample_coverage": 200,
   "samplers": [
-    "Neo4jSampler",
-    "PyGNeighborLoader"
+    "Neo4jGraphSAINTRandomWalkSampler",
+    "Neo4jSampler"
   ]
 }
