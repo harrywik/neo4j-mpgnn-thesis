@@ -4,6 +4,8 @@ import numpy as np
 import io
 from neo4j import GraphDatabase
 from pathlib import Path
+from torch_geometric.datasets import Planetoid
+import torch
 
 def ingest_cora_binary(tgz_path, uri, user, password):
     driver = GraphDatabase.driver(uri, auth=(user, password))
@@ -22,6 +24,17 @@ def ingest_cora_binary(tgz_path, uri, user, password):
         # Cora: 1433 features
         features = df.iloc[:, 1:-1].values.astype(np.float32)
 
+        # Use Planetoid masks to assign split labels per row
+        split = np.full(len(df), "unknown", dtype=object)
+        planetoid = Planetoid(root="data/Planetoid", name="Cora")
+        graph = planetoid[0]
+        if len(graph.train_mask) != len(df):
+            raise ValueError("Planetoid mask length does not match cora.content rows")
+        split[graph.train_mask.numpy()] = "train"
+        split[graph.val_mask.numpy()] = "val"
+        split[graph.test_mask.numpy()] = "test"
+        
+
         print(f"Ingesting {len(df)} nodes...")
         with driver.session() as session:
             # Preparing the batch: ID, Subject, and RAW BYTES
@@ -29,7 +42,8 @@ def ingest_cora_binary(tgz_path, uri, user, password):
                 {
                     "id": int(paper_ids[i]), 
                     "sub": subjects[i], 
-                    "bin": features[i].tobytes() # <--- RAW FLOAT32 BYTES
+                    "bin": features[i].tobytes(), # <--- RAW FLOAT32 BYTES
+                    "split": split[i]
                 } 
                 for i in range(len(df))
             ]
@@ -38,7 +52,8 @@ def ingest_cora_binary(tgz_path, uri, user, password):
             UNWIND $batch AS item
             MERGE (p:Paper {id: item.id})
             SET p.subject = item.sub,
-                p.embedding = item.bin
+                p.embedding = item.bin,
+                p.split = item.split
             """, batch=batch)
 
         # Load the Cites (Edges) file

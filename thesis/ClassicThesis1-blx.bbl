@@ -1,0 +1,290 @@
+% $ biblatex auxiliary file $
+% $ biblatex bbl format version 3.3 $
+% Do not modify the above lines!
+%
+% This is an auxiliary file used by the 'biblatex' package.
+% This file may safely be deleted. It will be recreated as
+% required.
+%
+\begingroup
+\makeatletter
+\@ifundefined{ver@biblatex.sty}
+  {\@latex@error
+     {Missing 'biblatex' package}
+     {The bibliography requires the 'biblatex' package.}
+      \aftergroup\endinput}
+  {}
+\endgroup
+
+\datalist[entry]{nyt/global//global/global/global}
+  \entry{Isenberg2006}{inproceedings}{}{}
+    \name{author}{3}{}{%
+      {{hash=IT}{%
+         family={Isenberg},
+         familyi={I\bibinitperiod},
+         given={Tobias},
+         giveni={T\bibinitperiod},
+      }}%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr{\'e}},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=CS}{%
+         family={Carpendale},
+         familyi={C\bibinitperiod},
+         given={Sheelagh},
+         giveni={S\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {IEEE}%
+    }
+    \strng{namehash}{ITMACS1}
+    \strng{fullhash}{ITMACS1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{I}
+    \field{sortinithash}{I}
+    \field{booktitle}{Proceedings of the Fourth International Conference on
+  Creating, Connecting, and Collaborating through Computing
+  (C\textsuperscript{\,5} 2006)}
+    \field{isbn}{978-0-7695-2563-1}
+    \field{pages}{262\bibrangedash 269}
+    \field{title}{{A} {B}uffer {F}ramework for {S}upporting {R}esponsive
+  {I}nteraction in {I}nformation {V}isualization {I}nterfaces}
+    \field{year}{2006}
+  \endentry
+
+  \entry{Lampe2013c}{inproceedings}{}{}
+    \name{author}{5}{}{%
+      {{hash=LU}{%
+         family={Lampe},
+         familyi={L\bibinitperiod},
+         given={Ulrich},
+         giveni={U\bibinitperiod},
+      }}%
+      {{hash=KM}{%
+         family={Kieselmann},
+         familyi={K\bibinitperiod},
+         given={Markus},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr{\'e}},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=ZlS}{%
+         family={Z{\"o}l\-ler},
+         familyi={Z\bibinithyphendelim l\bibinitperiod},
+         given={Sebastian},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=SR}{%
+         family={Steinmetz},
+         familyi={S\bibinitperiod},
+         given={Ralf},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \list{publisher}{1}{%
+      {Springer}%
+    }
+    \strng{namehash}{LU+1}
+    \strng{fullhash}{LUKMMAZlSSR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{booktitle}{Proceedings of the Second European Conference on
+  Service-Oriented and Cloud Computing (ESOCC 2013)}
+    \field{isbn}{978-3-642-40650-8}
+    \field{pages}{172\bibrangedash 179}
+    \field{title}{{A} {T}ale of {M}illis and {N}anos: {O}n the {A}ccuracy of
+  {T}ime {M}easurements in {V}irtual {M}achines}
+    \field{year}{2013}
+  \endentry
+
+  \entry{Lampe2013a}{inproceedings}{}{}
+    \name{author}{5}{}{%
+      {{hash=LU}{%
+         family={Lampe},
+         familyi={L\bibinitperiod},
+         given={Ulrich},
+         giveni={U\bibinitperiod},
+      }}%
+      {{hash=WQ}{%
+         family={Wu},
+         familyi={W\bibinitperiod},
+         given={Qiong},
+         giveni={Q\bibinitperiod},
+      }}%
+      {{hash=HR}{%
+         family={Hans},
+         familyi={H\bibinitperiod},
+         given={Ronny},
+         giveni={R\bibinitperiod},
+      }}%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr\'e},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=SR}{%
+         family={Steinmetz},
+         familyi={S\bibinitperiod},
+         given={Ralf},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{LU+1}
+    \strng{fullhash}{LUWQHRMASR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{L}
+    \field{sortinithash}{L}
+    \field{booktitle}{Proceedings of the Third International Conference on
+  Cloud Computing and Services Science (CLOSER 2013)}
+    \field{isbn}{978-898-8565-52-5}
+    \field{pages}{5\bibrangedash 12}
+    \field{title}{{T}o {F}rag {O}r {T}o {B}e {F}ragged -- {A}n {E}mpirical
+  {A}ssessment of {L}atency in {C}loud {G}aming}
+    \field{year}{2013}
+  \endentry
+
+  \entry{Miede2010:tugboat}{article}{}{}
+    \name{author}{1}{}{%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr{\'e}},
+         giveni={A\bibinitperiod},
+      }}%
+    }
+    \keyw{classicthesis}
+    \strng{namehash}{MA1}
+    \strng{fullhash}{MA1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{M}
+    \field{sortinithash}{M}
+    \field{issn}{0896-3207}
+    \field{number}{1}
+    \field{pages}{18\bibrangedash 20}
+    \field{title}{{T}heses and other {B}eautiful {D}ocuments with
+  \texttt{clas\-sic\-the\-sis}}
+    \field{volume}{31}
+    \field{journaltitle}{TUGboat -- The Communications of the \TeX\ Users
+  Group}
+    \field{year}{2010}
+  \endentry
+
+  \entry{Miede2011}{inproceedings}{}{}
+    \name{author}{6}{}{%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr{\'e}},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=cG}{%
+         family={\c{S}im\c{s}ek},
+         familyi={c\bibinitperiod},
+         given={G\"{o}khan},
+         giveni={G\bibinitperiod},
+      }}%
+      {{hash=SS}{%
+         family={Schulte},
+         familyi={S\bibinitperiod},
+         given={Stefan},
+         giveni={S\bibinitperiod},
+      }}%
+      {{hash=ADF}{%
+         family={Abawi},
+         familyi={A\bibinitperiod},
+         given={Daniel\bibnamedelima F.},
+         giveni={D\bibinitperiod\bibinitdelim F\bibinitperiod},
+      }}%
+      {{hash=EJ}{%
+         family={Eckert},
+         familyi={E\bibinitperiod},
+         given={Julian},
+         giveni={J\bibinitperiod},
+      }}%
+      {{hash=SR}{%
+         family={Steinmetz},
+         familyi={S\bibinitperiod},
+         given={Ralf},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{MA+1}
+    \strng{fullhash}{MAcGSSADFEJSR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{M}
+    \field{sortinithash}{M}
+    \field{booktitle}{Proceedings of the Tenth International Conference
+  Wirtschaftsinformatik (WI 2011)}
+    \field{isbn}{978-1-4467-9236-0}
+    \field{pages}{1083\bibrangedash 1092}
+    \field{title}{{R}evealing {B}usiness {R}elationships -- {E}avesdropping
+  {C}ross-organizational {C}ollaboration in the {I}nternet of {S}ervices}
+    \field{volume}{2}
+    \field{year}{2011}
+  \endentry
+
+  \entry{Tsai2012}{article}{}{}
+    \name{author}{5}{}{%
+      {{hash=THY}{%
+         family={Tsai},
+         familyi={T\bibinitperiod},
+         given={Hsin-Yi},
+         giveni={H\bibinithyphendelim Y\bibinitperiod},
+      }}%
+      {{hash=SM}{%
+         family={Siebenhaar},
+         familyi={S\bibinitperiod},
+         given={Melanie},
+         giveni={M\bibinitperiod},
+      }}%
+      {{hash=MA}{%
+         family={Miede},
+         familyi={M\bibinitperiod},
+         given={Andr{\'e}},
+         giveni={A\bibinitperiod},
+      }}%
+      {{hash=HYL}{%
+         family={Huang},
+         familyi={H\bibinitperiod},
+         given={Yu-Lun},
+         giveni={Y\bibinithyphendelim L\bibinitperiod},
+      }}%
+      {{hash=SR}{%
+         family={Steinmetz},
+         familyi={S\bibinitperiod},
+         given={Ralf},
+         giveni={R\bibinitperiod},
+      }}%
+    }
+    \strng{namehash}{THY+1}
+    \strng{fullhash}{THYSMMAHYLSR1}
+    \field{labelnamesource}{author}
+    \field{labeltitlesource}{title}
+    \field{sortinit}{T}
+    \field{sortinithash}{T}
+    \field{issn}{1520-9202}
+    \field{number}{1}
+    \field{pages}{32\bibrangedash 37}
+    \field{title}{{T}hreat as a {S}ervice? {V}irtualization's {I}mpact on
+  {C}loud {S}ecurity}
+    \field{volume}{14}
+    \field{journaltitle}{IEEE IT Professional}
+    \field{year}{2012}
+  \endentry
+\enddatalist
+\endinput

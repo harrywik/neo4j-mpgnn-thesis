@@ -1,0 +1,24 @@
+{
+  "latex-workshop.latex.autoBuild.run": "onFileChange",
+  "latex-workshop.latex.rootFile.useSubFileAsRoot": true,
+  "latex-workshop.latex.outDir": "%DIR%/../thesis",
+  "latex-workshop.latex.recipes": [
+    {
+      "name": "latexmk (pdflatex)",
+      "tools": ["latexmk"]
+    }
+  ],
+  "latex-workshop.latex.tools": [
+    {
+      "name": "latexmk",
+      "command": "latexmk",
+      "args": [
+        "-pdf",
+        "-interaction=nonstopmode",
+        "-synctex=1",
+        "-cd",
+        "%DOC%"
+      ]
+    }
+  ]
+}

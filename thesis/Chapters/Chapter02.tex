@@ -1,0 +1,305 @@
+%************************************************
+\chapter{Background}\label{ch:background}
+%************************************************
+
+
+Graphs in mathematics are used to model pairwise relationships between objects. Objects are modeled as nodes $\mathcal{V}$, and their relations are called edges $\mathcal{E}$. 
+Many domains benefit from modeling data as objects (nodes) and relationships (edges). Consider, for example, social networks, protein--drug interactions, or railway networks. 
+Studying graph structure and node features allows us to predict properties of the graph. For example, predictions may concern how a graph evolves over time. In fraud detection, nodes can represent accounts and edges transactions. By modeling typical graph evolution, such as which transactions and accounts are added, it becomes possible to detect anomalous transactions that deviate from expected patterns.
+
+When making predictions about graphs it is often good to start by creating an embedding of the graph. The optimal embedding depends on the downstream task. There are several ways to embed a graph, transductively with traditional graph representation learning (GRL) approaches, and inductively with GNNs.
+
+In this chapter we hope to give a fundamental understanding in topics such as traditional GRL algorithms, neural networks, describe how GNNs combine ideas from traditional graph representation learning and neural networks. From traditional GRL they inherit the idea that node embeddings should reflect graph structure, while from neural networks they adopt a learnable, parameterized function. We also bring up challenges working with GNNs on big datasets, that don't exist in traditional neural networks.
+
+Lastly we hope to give a basic introduction in \texttt{PyTorch Geometric}, the machine learning library we use during experiments, and \texttt{Neo4j}, a graph database that provides useful graph operations for training GNNs, which is used as the graph storage during the experiments.
+
+%------------------------------------------------
+\section{Traditional Graph Representation Learning}\label{sec:traditional_grl}
+%------------------------------------------------
+
+In graph representation learning we aim to find a representation of the graph that encodes it's structure. Embeddings like this are often used in  downstream tasks such as node classification, link prediction, or clustering. Finding a good embedding is somewhat dependent on what the downstream task is.
+
+The simplest way of constructing node embeddings is to manually choose a node statistic to encode the node (e.g. node degree or centrality measures). A more advanced group of methods involve factorizing the adjacency matrix into node-node similarity. Another class of methods is based on random walks. These methods learn embeddings by maximizing co-occurrence between nodes appearing in the same random walks, and can be shown to implicitly perform matrix factorization.
+
+
+
+%------------------------------------------------
+\subsection{Transductive Nature of Traditional \acsfont{GRL}}\label{sec:transductive}
+%------------------------------------------------
+
+A common feature of all \acsfont{GRL} algorithms discussed above---whether using node
+statistics, matrix factorization, or random walks---is that no weights are shared
+between nodes: no embedding-generating function is learned, only node embeddings for
+the current nodes in the graph. If new nodes are introduced, not only is there no way
+to compute their embeddings, the embeddings of the existing nodes also become
+inaccurate (the latter also occurs if nodes are removed).
+
+Consider a simplified version of the optimization problem for random walk algorithms:
+\[
+\min_{\{z_x \,\,: \,\,x \in \mathcal{V} \}}
+\sum_{(u,v)\in\mathcal{D}}
+-\log\!\left(\sigma(\mathbf{z}_u^\top \mathbf{z}_v)\right),
+\]
+where $\mathcal{D}$ is the set of node pairs encountered on random walks, and
+$\mathcal{V}$ is the set of nodes in the graph. The optimization problem above
+optimizes the actual node embeddings directly, rather than some embedding-generating
+function. This is what makes all traditional representation learning algorithms
+\emph{transductive} in nature.
+
+Consider a social network in which people are nodes and their relationships are edges.
+If a transductive graph representation is used, we learn feature vectors for specific
+people in the graph. If more people are introduced to the network, we must recompute
+every person's feature vector.
+
+
+%------------------------------------------------
+\section{Neural Networks}\label{sec:neural_networks}
+%------------------------------------------------
+
+In contrast to the transductive nature of traditional \acsfont{GRL}, neural networks
+are \emph{inductive}: they learn a generalizable function.
+
+Neural networks are models composed of interconnected processing units called neurons.
+How neurons are connected depends on the model architecture. Some neurons receive
+external input and pass it further into the network; others aggregate information from
+preceding neurons; and output neurons produce the final result. Every connection
+between two neurons is associated with a weight, by which the activation of the
+upstream neuron is scaled before reaching the next neuron. The network learns patterns
+by adjusting these weights.
+
+The neural network can be defined as a function of weights $\theta$ that takes an
+arbitrary input $x$ and outputs $\hat{y}$:
+\[
+f(x \,, \,\theta) = \hat{y}.
+\]
+
+The network learns by optimizing $\theta$ to minimize a loss function $\mathcal{L}$
+over training data $X$, which quantifies the prediction error---either supervised
+(given a desired output $y$) or unsupervised (without a ground-truth outcome):
+\begin{equation}
+    \min_{\theta} \, \mathcal{L}(X, \theta) = \sum_{x \in X} \, l \, (\,f(x, \theta)\,, \, y \,).
+    \tag{supervised}
+\end{equation}
+
+The training data consists of input datapoints $\{x \in X_{\text{train}}\}$ mapped to
+targets $\{y \in Y_{\text{train}}\}$, forming the training set
+$\{(x_1,y_1),(x_2,y_2),\ldots,(x_n,y_n)\}$. The idea is to maximize the likelihood
+$p(y_i \mid x_i,\theta)$ of the network producing the correct output for each input by
+adjusting the weights, in the hope that the learned weights generalize to unseen data.
+The model's generalization ability is evaluated on a separate test set drawn from the
+same distribution as the training data.
+
+
+%------------------------------------------------
+\subsection{Weight Optimization}\label{sec:optimization}
+%------------------------------------------------
+
+The optimization method used to find the optimal weights is typically some variant of
+gradient descent (\acsfont{GD}). \acsfont{GD} involves iteratively updating the model
+weights based on the current gradient of the loss function. Differentiating the loss
+with respect to the weights $\nabla_{\theta} \mathcal{L}$ gives the direction along
+which the loss increases most steeply; hence the negative gradient indicates the
+direction of steepest descent.\footnote{%
+    \acsfont{GD} converges to the global minimizer for convex differentiable functions
+    with appropriate step sizes. The loss function for neural networks is generally
+    not convex, but variants of gradient descent are still used to find ``good''
+    weights.}
+The weights are updated in proportion to the gradient with step size $\eta$, commonly
+called the learning rate:
+\[
+\theta^{(k+1)} = \theta^{(k)} - \eta \, \cdot \nabla_{\theta^{(k)}} \mathcal{L}.
+\]
+
+Datapoints are typically assumed to be independent in standard supervised learning,
+meaning each prediction $\hat{y}_i$ depends only on $x_i$. Under this assumption the
+full gradient is a sum over all datapoints, making vanilla gradient descent
+computationally expensive. Stochastic gradient descent (\acsfont{SGD}) approximates
+this gradient using a uniformly sampled mini-batch, reducing computation per update.
+Although \acsfont{SGD} does not guarantee a decrease in loss at every step, its
+expected gradient is an unbiased estimate of the full-batch gradient, yielding
+convergence in expectation under the independence assumption.
+
+%------------------------------------------------
+\section{Graph Neural Networks}\label{sec:gnns}
+%------------------------------------------------
+
+
+Graph neural networks incorporate ideas from traditional graph representation learning by preserving the intuition that node representations should reflect the structure of the graph, i.e., nodes that are close or structurally similar should have similar embeddings. However, instead of relying on fixed similarity measures or directly optimizing node embeddings, GNNs use a neural network architecture to learn this relationship.
+
+By combining this structural inductive bias with a parameterized, trainable function, GNNs learn to generate node embeddings through neighborhood aggregation. This allows the model to adapt the representation to the downstream task using gradient-based optimization, rather than relying on manually designed features or predefined objectives. As a result, GNNs are more expressive and flexible than traditional GRL methods. At the same time, they have a fundamentally different architecture: instead of learning embeddings tied to specific nodes in a fixed graph, they learn a shared function that can generate embeddings for any node based on its features and local neighborhood.
+
+
+Consider the social network example from section \ref{sec:traditional_grl}. When a new person enters the social network, an embedding can be generated directly using the learned embedding function. Unlike transductive methods, there is no need to retrain the model or recompute embeddings for existing nodes. The same function can also be applied to an entirely new social network, as long as the underlying data distribution is similar to the one seen during training. This ability to generalize to unseen nodes and graphs is what makes GNNs inductive.
+
+
+
+%------------------------------------------------
+\subsection{Graph Neural Network Architecture}\label{sec:gnn_arch}
+%------------------------------------------------
+
+
+The assumption of independence between datapoints is fundamentally violated in graph-structured data. In a graph, each node is explicitly defined through its relationships to other nodes, therefore considering nodes in isolation looses lots of information. The label $\hat{y}_v$ or representation $h_v$ of a node $v$ is often highly dependent on its neighborhood structure and on the attributes of nearby nodes. Ignoring these dependencies discards essential information.
+
+GNNs address this limitation by explicitly modeling relational dependencies. Instead of learning a function where the output for a object (node) is calculated solely with its own features $f(h_v, \theta) = \hat{y}_i$, GNNs learn representations that incorporate information from a node’s local neighborhood in the graph $f(\,v \,\, \cup \,\, \mathcal{N}(v), \theta) = \hat{y}_i$, allowing predictions to depend on both node attributes and the structure of their connections.\\
+
+
+\noindent GNNs are built from stacked message passing layers. At each message passing layer $k$, a node $v$ updates its representation $\mathbf{x}_v^{(k)}$ by aggregating information from its neighbors:
+\[
+\mathbf{x}_v^{(k)} =
+\phi^{(k)}\!\left(
+\mathbf{x}_v^{(k-1)},
+\bigoplus_{u \in \mathcal{N}(v)}
+\psi^{(k)}\!\left(\mathbf{x}_v^{(k-1)}, \mathbf{x}_u^{(k-1)}\right)
+\right).
+\]
+
+\begin{itemize}
+    \item $\psi^{(k)}$ is neighborhood aggregation function. It takes the feature vectors of the neighbors and outputs a vector representing the neigborhood. $\psi^{(k)}$ is usuallt permutation invariant of the neighbors to avoid encoding bias in the order of neighbors.
+    \item $\phi^{(k)}$ takes as input the feature vector $\mathbf{x}_v^{(k)}$ and output of $\psi^{(k)}$, and outputs the updated feature vector $\mathbf{x}_v^{(k)}$.
+\end{itemize}
+
+After $K$ layers, the final node representation encodes information about it's $K$-hop neighborhood. This iterative message passing enables the GNN to capture long range dependencies between $K$-hop neighboors, inaccesible to standard neural networks.
+
+
+
+%------------------------------------------------
+\section{Graph Neural Networks and Large Graphs}\label{sec:gnns_large}
+%------------------------------------------------
+
+
+In typical neural networks, datapoints are either independent or have dependencies with a clear and structured form. This structure is determined by the architectural inductive bias, which makes it straightforward to derive which datapoints influence each other. For example, in RNNs, $t_n$ depends on $\{t_{n-1}, t_{n-2}, \dots\}$, while in convolutional neural networks (CNNs), a pixel $p_{x,y}$ depends only on a local neighborhood $\{\,p_{i,j} \mid |i-x| \le r,\ |j-y| \le r \,\}$ in the same image.
+In both cases, the set of dependent datapoints is explicitly defined and bounded.
+
+In contrast, graph neural networks lack such explicit structural assumptions. The dependency structure is determined by the graph itself, making it harder to determine which datapoints influence a given node. Moreover, these dependencies are not only less structured, but also significantly larger. The representation of a node depends on its $k$-hop neighborhood, which can grow exponentially with $k$. As a result, each datapoint in a GNN may depend on orders of magnitude more datapoints than in models such as CNNs, where dependencies are limited to small local regions.
+
+%------------------------------------------------
+\subsection{Training on Large Datasets Under Memory Constraints}\label{sec:memory}
+%------------------------------------------------
+
+In standard neural networks, the independence (or structured-bounded dependence) between datapoints allows training on datasets larger than available memory. Data can be processed in virtual mini-batches $\{d^{(1)}, \dots, d^{(n)}\}$ such that
+\[
+\sum_i d^{(i)}_x < Y,
+\]
+where $Y$ is the available memory. Crucially, the gradient computed on a batch depends only on the datapoints within that batch. This assumption breaks for GNNs as the output for one node is dependent on an un-bounded number of neighbors. The gradient for the seed nodes in the batch can't be computed accuraretely without their neighbors. To solve this the neighbors of the seed nodes are fetched in the beginning of every batch, to build a sub-graph around the seed nodes so that the gradient for that batch can be computed accuretly.
+
+\begin{algorithm}[H]
+\label{algo:sampling}
+\footnotesize
+\caption{Mini-batch GNN Training (Single Epoch)}
+\DontPrintSemicolon
+\tcp{Mini-batch training with neighbor-sampled subgraphs}
+\KwIn{$f_\theta$, $V$}
+\KwOut{$\theta$}
+\For{each batch $B \subseteq V$}{
+    $\mathcal{G}_B \leftarrow \emptyset$\;
+    \For{each seed node $v \in B$}{
+        $(\mathbf{X}_v, \mathbf{y}_v, E_v) \leftarrow \textsc{Sample}(v)$\;
+        $\mathcal{G}_B \leftarrow \mathcal{G}_B \cup (\mathbf{X}_v, \mathbf{y}_v, E_v)$\;
+    }
+    $\hat{\mathbf{y}} \leftarrow f_\theta(\mathbf{X}_B,\, E_B)$\;
+    $\mathcal{L} \leftarrow \textsc{CrossEntropy}(\hat{\mathbf{y}},\, \mathbf{y}_B)$\;
+    $\theta \leftarrow \theta - \eta \nabla_\theta \mathcal{L}$\;
+}
+\Return $\theta$\;
+\end{algorithm}
+
+
+%------------------------------------------------
+\subsection{Subgraph Sampling}\label{sec:subgraph_sampling}
+%------------------------------------------------
+
+The un-structured and un-bounded node-node dependence makes it impossible to consider the full k-hop neighborhoods for nodes in a batch, because of copmutation and memory constraints.
+
+To solve this a fast bounded neighborhood sampling algorithm is needed. Upper bounds are usually defined as \texttt{[$k_0, k_1,..,k_n$]} where $k_i$ defines the maximum number of neighbors to be sampled at that level $k$. If the number of neighbors exceeds the bound, then neighbors are usually sampled uniformly at random without replacement.
+
+Some sampling algorithms like the one used in graphsage introduce bias in the GNN output. The expected neighborhood aggregation is the same for sampling in graphsage. But bias is introduced when the expected neighboorhood aggregation is inserted in a non-linear activation function, in the update step. GNNs have shown to converge well enough even though this bias, one recent is because GNNs are usually relatively shallow with commonly 2 layers.
+
+
+%------------------------------------------------
+\section{PyTorch Geometric}\label{sec:pyg}
+%------------------------------------------------
+
+PyTorch Geometric is a graph neural network library that enables easy creation of
+\acsfont{GNN}s in Python. It is built on top of PyTorch and provides helpful modules
+such as predefined message-passing layers (graph attention, graph convolution, and
+more), making it straightforward to construct customizable \acsfont{GNN}s by combining
+different layers within implementations of the abstract PyTorch \texttt{nn.Module}
+class.
+
+PyTorch Geometric also provides a framework for storing the graph remotely in a
+database, through the following abstract classes:
+
+\begin{itemize}
+    \item \texttt{FeatureStore:} Defines how node feature vectors are stored and
+    fetched. A fast feature-vector look-up is essential.
+
+    \item \texttt{GraphStore:} Defines how the graph topology is stored. In contrast
+    to the \texttt{FeatureStore}, the emphasis here is on fast traversal rather than
+    fast look-up, since efficient neighbor sampling requires rapid graph traversal.
+
+    \item \texttt{BaseSampler:} Allows the user to define a sampling method for
+    selecting neighbors used in the forward pass. The \texttt{BaseSampler} is tightly
+    coupled with the \texttt{GraphStore}. Multiple sampling processes can be spawned;
+    since instances of the sampler are recreated in each separate process, it is
+    important not to store large amounts of data in the sampler.
+
+    \item \texttt{NodeLoader:} Takes implementations of \texttt{FeatureStore},
+    \texttt{GraphStore}, and \texttt{BaseSampler} together with batching
+    hyperparameters (\eg, batch size) and provides a data loader that splits the data
+    into mini-batches, samples a subgraph for each batch, and fetches the
+    corresponding node feature vectors from the \texttt{FeatureStore}.
+\end{itemize}
+
+
+%------------------------------------------------
+\section{Neo4j}\label{sec:neo4j}
+%------------------------------------------------
+
+Neo4j is a persistence layer used in diverse applications where graph data modeling is
+of importance. More concretely, Neo4j is an \acsfont{ACID}-compliant database
+management system. Neo4j's query language is called Cypher and has been influential in
+developing a standardized Graph Query Language (\acsfont{GQL}).\footnote{ISO/IEC 39075}
+
+A Cypher string is parsed into an Abstract Syntax Tree (\acsfont{AST}), which is then
+validated---raising an error, for example, if a non-existent label, relationship type,
+or property filter predicate is used. The validated \acsfont{AST} is normalized into
+canonical form and subsequently used to generate one or more logical plans. A logical
+plan is an operator tree that specifies how to produce the query response.
+
+As in a standard algebraic expression, operators in the tree are evaluated
+bottom-up according to precedence. Leaf operators access the data source directly,
+using primitives such as \texttt{NodeByLabelScan} (retrieve all nodes with a given
+label) or \texttt{Filter} (apply a predicate such as \texttt{n.age}~$> 30$). Higher
+operators combine or transform these results. The physical execution plan is derived
+from the logical plan by the query planner, which selects concrete index structures and
+join strategies to minimize execution cost.
+
+
+%------------------------------------------------
+\section{Evaluation Metrics}\label{sec:eval_metrics}
+%------------------------------------------------
+
+Throughout the experiments a set of metrics is used to evaluate the system
+implementation:
+
+\begin{itemize}
+    \item \textbf{Accuracy.} Node classification accuracy on the held-out test set,
+    used to verify that the graph-database-backed pipeline converges to the same
+    quality as an in-memory baseline.
+
+    \item \textbf{Latency and throughput.} Per-batch wall-clock time and the number
+    of batches processed per second, decomposed into sub-phases: \acsfont{DB}
+    execution, Python \acsfont{ETL}, and \acsfont{GNN} compute.
+
+    \item \textbf{End-to-end latency breakdown.} A fine-grained decomposition of the
+    per-batch latency into driver-level components: time to first result row
+    ($t_{\text{first}}$), total server-side latency ($t_{\text{last}}$), network and
+    driver receive time, and Python \acsfont{ETL} overhead.
+
+    \item \textbf{Query execution profiling.} Operator-level statistics (rows
+    processed, \acsfont{DB} hits, memory) obtained via the Cypher \texttt{PROFILE}
+    keyword, used to diagnose query plan inefficiencies.
+
+    \item \textbf{Python-level profiling.} Call-stack profiles collected with
+    \texttt{cProfile}, used to identify hot-spots in the Python data pipeline.
+\end{itemize}

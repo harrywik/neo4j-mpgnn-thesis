@@ -1,0 +1,16 @@
+{
+  "lr": 0.001,
+  "max_epochs": 10,
+  "patience": 50,
+  "min_delta": 0.001,
+  "logg_cpu_utilization": false,
+  "cpu_burst_batches": 3,
+  "max_validation_size": null,
+  "max_test_size": null,
+  "init_weights": null,
+  "graphsaint_batch_size": 1000,
+  "walk_length": 2,
+  "num_steps": 30,
+  "sample_coverage": 50,
+  "profile": true
+}

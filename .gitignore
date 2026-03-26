@@ -28,5 +28,13 @@ data/Planetoid/
 random_notes.txt
 GNN-implementations/data
 GNN-implementations/profiles
-
+experiment_results/results
+experiment_results/sampler_comparison
+!**/measurements.csv
+*.csv
 .env
+notes
+data/ogbn-products/ogbn_products
+data/ogbn-papers100M/ogbn_papers100M
+data/ogbn-arxiv/ogbn_arxiv
+data/arxiv/

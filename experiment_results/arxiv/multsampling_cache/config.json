@@ -1,0 +1,35 @@
+{
+    "lr": 0.01,
+    "batch_size": 100,
+    "max_epochs": 1,
+    "patience": 1,
+    "min_delta": 0.001,
+    "dataset": "arxiv",
+    "model": {
+        "name": "GCN",
+        "args": {
+            "in_dim": 128,
+            "hidden_dim1": 32,
+            "hidden_dim2": 32,
+            "nbr_classes": 40
+        }
+    },
+    "sampler": {
+        "name": "UniformSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "PickleSafeFeatureStore",
+    "graph_store": "PickleSafeGS",
+    "nodeloader_args": {
+        "pickle_safe": true,
+        "num_workers": 5,
+        "prefetch_factor": 5,
+        "filter_per_worker": false,
+        "persistent_workers": true,
+        "pin_memory": false,
+        "shuffle": true
+    }
+}

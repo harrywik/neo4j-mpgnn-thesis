@@ -1,0 +1,98 @@
+{
+  "Neo4jSampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7832000236385731,
+      "final_validation_accuracy": 0.7650000230496994,
+      "throughput_samples_per_s": 468.83763569458733,
+      "time_to_best_accuracy_s": 21.46821488320129,
+      "training_time_s": 26.875523154210534,
+      "avg_batch_nodes": 356.38000000000005,
+      "avg_batch_edges": 570.6602777777778,
+      "remote_feature_total_s": 10.24855439797975,
+      "sampling_mean_s": 0.019467619933679493,
+      "training_mean_s": 0.0014063273525971452,
+      "sampling_overhead_fraction": 0.9326427395920831,
+      "batch_nodes_cv": 0.09399196575857723,
+      "epochs_to_best_accuracy": 71.2,
+      "feature_fetch_overhead_fraction": 0.38133355816325853,
+      "topo_etl_ms": 0.32046346652136626,
+      "feat_x_etl_ms": 3.273330714171821
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.0032496154358623514,
+      "final_validation_accuracy": 0.008160882532906807,
+      "throughput_samples_per_s": 2.1123565929510413,
+      "time_to_best_accuracy_s": 3.675731116713455,
+      "training_time_s": 0.12154045237985,
+      "avg_batch_nodes": 0.40404933386596725,
+      "avg_batch_edges": 1.1193017899179665,
+      "remote_feature_total_s": 0.0616693445671063,
+      "sampling_mean_s": 0.00013235280074164212,
+      "training_mean_s": 5.848866808837344e-05,
+      "sampling_overhead_fraction": 0.002316968306531128,
+      "batch_nodes_cv": 0.0033346343678123773,
+      "epochs_to_best_accuracy": 12.106196760337246,
+      "feature_fetch_overhead_fraction": 0.0013665186106878635,
+      "topo_etl_ms": 0.0051668030412317075,
+      "feat_x_etl_ms": 0.028732421183323538
+    }
+  },
+  "PyGNeighborLoader": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7824000236005751,
+      "final_validation_accuracy": 0.768600023206186,
+      "throughput_samples_per_s": 11584.857052233529,
+      "time_to_best_accuracy_s": 0.7938233832945116,
+      "training_time_s": 1.0877303668006788,
+      "avg_batch_nodes": 356.25694444444446,
+      "avg_batch_edges": 570.0808333333333,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0003442409430701648,
+      "training_mean_s": 0.0012214977582657917,
+      "sampling_overhead_fraction": 0.21986087246732905,
+      "batch_nodes_cv": 0.09514863543447191,
+      "epochs_to_best_accuracy": 65.4,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.0024979992367193697,
+      "final_validation_accuracy": 0.0065757130408623556,
+      "throughput_samples_per_s": 112.96253941720117,
+      "time_to_best_accuracy_s": 0.15592513167516683,
+      "training_time_s": 0.010630644832808397,
+      "avg_batch_nodes": 0.7594723334715027,
+      "avg_batch_edges": 1.593747161701672,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 3.699081093680683e-06,
+      "training_mean_s": 9.289500187126313e-06,
+      "sampling_overhead_fraction": 0.0021096052014063665,
+      "batch_nodes_cv": 0.0023108639588290867,
+      "epochs_to_best_accuracy": 12.815615474880634,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "pairwise_distribution_stats": {
+    "Neo4jSampler vs PyGNeighborLoader": {
+      "js_divergence": 0.00016,
+      "kl_a_to_b": 0.000643,
+      "kl_b_to_a": 0.00064,
+      "n_nodes_tested": 1664,
+      "n_nodes_significant": 0,
+      "pct_nodes_significant": 0.0
+    }
+  },
+  "pairwise_edge_distribution_stats": {
+    "Neo4jSampler vs PyGNeighborLoader": {
+      "js_divergence": 0.0002,
+      "kl_a_to_b": 0.000805,
+      "kl_b_to_a": 0.0008,
+      "n_edges_tested": 2702,
+      "n_edges_significant": 0,
+      "pct_edges_significant": 0.0
+    }
+  }
+}

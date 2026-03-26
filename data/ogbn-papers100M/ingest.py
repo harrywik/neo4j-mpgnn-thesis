@@ -1,69 +1,95 @@
-import pyarrow as pa
-from graphdatascience import GraphDataScience
-import numpy as np
-from tqdm import tqdm
 import os
-from ogb.nodeproppred import NodePropPredDataset
-from graphdatascience import GraphDataScience
+import numpy as np
 from pathlib import Path
+from neo4j import GraphDatabase
+from dotenv import load_dotenv
+from ogb.nodeproppred import NodePropPredDataset
 
-# Get the directory where the script is located
+load_dotenv()
+
+DATABASE = "papers100M"
+NODE_BATCH_SIZE = 10_000
+EDGE_BATCH_SIZE = 10_000
 SCRIPT_DIR = Path(__file__).resolve().parent
 
-print("Initializing OGB dataset...")
-dataset = NodePropPredDataset(name='ogbn-papers100M', root=SCRIPT_DIR)
+def ingest_papers100M(uri, user, password):
+    driver = GraphDatabase.driver(uri, auth=(user, password))
 
-# PATH VALIDATION
-base_path = SCRIPT_DIR / "ogbn_papers100M" / "raw"
-feat_path = base_path / 'node-feat.npy'
-edge_path = base_path / 'edge.npy'
+    # Load split info via OGB (lightweight — does not load features into RAM)
+    print("Loading split info...")
+    dataset = NodePropPredDataset(name="ogbn-papers100M", root=str(SCRIPT_DIR))
+    split_idx = dataset.get_idx_split()
 
-for file in os.listdir(str(base_path)):
-    if file.endswith(".gz"):
-        file_to_rem = base_path / file
-        print(f"Removing compressed file to save space: {str(file)}")
-        os.remove(str(file_to_rem))
+    # Load raw arrays via mmap — data stays on disk, only accessed slices enter RAM
+    raw_dir = SCRIPT_DIR / "ogbn_papers100M" / "raw"
+    feat_path = raw_dir / "node-feat.npy"
+    label_path = raw_dir / "node-label.npy"
+    edge_path = raw_dir / "edge.npy"
 
-NODE_CHUNK = 100_000
-EDGE_CHUNK = 1_000_000
+    print("Memory-mapping raw numpy files...")
+    features = np.load(str(feat_path), mmap_mode="r")   # (111059956, 128) float16
+    labels = np.load(str(label_path), mmap_mode="r")    # (111059956, 1)
+    edge_index = np.load(str(edge_path), mmap_mode="r") # (2, 1615685872)
+    num_nodes = features.shape[0]
+    num_edges = edge_index.shape[1]
 
-# Connect to GDS Enterprise
-gds = GraphDataScience("bolt://localhost:7687", auth=("neo4j", "database-password"))
+    # Build split lookup as int8 to minimise RAM (0=unknown, 1=train, 2=val, 3=test)
+    print("Building split lookup...")
+    _SPLIT_NAMES = {0: "unknown", 1: "train", 2: "val", 3: "test"}
+    split = np.zeros(num_nodes, dtype=np.int8)
+    split[split_idx["train"]] = 1
+    split[split_idx["valid"]] = 2
+    split[split_idx["test"]] = 3
 
-feats = np.load(str(feat_path), mmap_mode='r')
-num_nodes = feats.shape[0]
+    with driver.session(database=DATABASE) as session:
+        session.run("CREATE INDEX paper_id IF NOT EXISTS FOR (p:Paper) ON (p.id)")
+        print("Index on Paper.id ensured.")
 
-edges = np.load(str(edge_path), mmap_mode='r') 
-total_edges = edges.shape[1]
+    # Ingest nodes in chunks
+    print(f"Ingesting {num_nodes:,} nodes in batches of {NODE_BATCH_SIZE:,}...")
+    with driver.session(database=DATABASE) as session:
+        # for start in range(0, num_nodes, NODE_BATCH_SIZE):
+        for start in range(num_edges - EDGE_BATCH_SIZE, -1, -EDGE_BATCH_SIZE):
+            end = min(start + NODE_BATCH_SIZE, num_nodes)
+            batch = [
+                {
+                    "id": int(i),
+                    "subject": int(labels[i]),
+                    "feature_vector": features[i].astype(np.float32).tobytes(),
+                    "split": _SPLIT_NAMES[int(split[i])],
+                }
+                for i in range(start, end)
+            ]
+            session.run("""
+            UNWIND $batch AS item
+            MERGE (p:Paper {id: item.id})
+            SET p.subject        = item.subject,
+                p.feature_vector = item.feature_vector,
+                p.split          = item.split
+            """, batch=batch)
+            if start % 500_000 == 0:
+                print(f"  Nodes {start:,}–{end:,} done")
 
-def node_generator(chunk_size=NODE_CHUNK):
-    for i in range(0, num_nodes, chunk_size):
-        end = min(i + chunk_size, num_nodes)
-        
-        # Use PyArrow for zero-copy efficiency
-        # Convert features to 'binary' type for Neo4j ByteArray storage
-        node_ids = pa.array(np.arange(i, end), type=pa.int64())
-        features = pa.array([feats[j].tobytes() for j in range(i, end)], type=pa.binary())
-        
-        yield pa.Table.from_arrays([node_ids, features], names=["nodeId", "features"])
+    # Ingest edges in chunks
+    print(f"Ingesting {num_edges:,} edges in batches of {EDGE_BATCH_SIZE:,}...")
+    with driver.session(database=DATABASE) as session:
+        for start in range(0, num_edges, EDGE_BATCH_SIZE):
+            end = min(start + EDGE_BATCH_SIZE, num_edges)
+            edge_batch = [
+                {"src": int(edge_index[0, i]), "dst": int(edge_index[1, i])}
+                for i in range(start, end)
+            ]
+            session.run("""
+            UNWIND $batch AS edge
+            MATCH (p1:Paper {id: edge.src})
+            MATCH (p2:Paper {id: edge.dst})
+            MERGE (p1)-[:CITES]->(p2)
+            """, batch=edge_batch)
+            if start % 50_000_000 == 0:
+                print(f"  Edges {start:,}–{end:,} done")
 
-def edge_generator(chunk_size=EDGE_CHUNK): # Adapt to RAM size
-    for i in range(0, total_edges, chunk_size):
-        end = min(i + chunk_size, total_edges)
-        # OGB is usually (2, num_edges); slice and convert
-        source = pa.array(edges[0, i:end], type=pa.int64())
-        target = pa.array(edges[1, i:end], type=pa.int64())
-        
-        yield pa.Table.from_arrays([source, target], names=["source", "target"])
+    driver.close()
+    print("Ingestion complete!")
 
-# Project to GDS Memory via Arrow Flight
-G, result = gds.alpha.graph.project.arrow(
-    graph_name="papers_graph",
-    nodes=tqdm(node_generator(), total=num_nodes // NODE_CHUNK, desc="Streaming Nodes"),
-    relationships=tqdm(edge_generator(), total=total_edges // EDGE_CHUNK, desc="Streaming Edges")
-)
-
-# Export to Disk
-# IMPORTANT: Exporting 1.6B edges can take significant time. 
-# Ensure your SSD has at least 300GB of free space before running.
-gds.graph.export(G, dbName="papers100M")
+if __name__ == "__main__":
+    ingest_papers100M(os.environ["URI"], os.environ["USERNAME"], os.environ["PASSWORD"])
