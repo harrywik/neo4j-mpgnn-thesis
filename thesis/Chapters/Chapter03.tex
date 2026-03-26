@@ -2,4 +2,182 @@
 \chapter{Methodology}\label{ch:methodology}
 %************************************************
 
-% TODO: Fill in article methodology here.
+This research was conducted at Neo4j, within the Graph Data Science team. The goal
+was to build and evaluate a \acsfont{GNN} training pipeline that uses Neo4j as the
+primary graph store.
+
+The first step was to implement a naive \acsfont{GNN} training system coupled with a
+graph database. This was compared with a PyTorch Geometric in-memory implementation
+to verify that the graph-database backend did not degrade model quality, \ie that it
+did not cause slower convergence or a worse final test accuracy. Training throughput
+was not compared between the two implementations at this stage, since the PyG baseline
+keeps the entire graph in \acsfont{RAM} while the graph-database implementation stores
+the majority of the graph on disk.
+
+
+%------------------------------------------------
+\section{System Architecture}\label{sec:sys_arch}
+%------------------------------------------------
+
+The system consists of three main components: a Neo4j graph database acting as the
+graph and feature store, a Python training process that implements the PyG abstract
+interfaces, and a \texttt{NodeLoader} that orchestrates mini-batch construction during
+training. The implementations \texttt{FeatureStore} and \texttt{GraphStore} acts as the interface
+between the training process and the \texttt{Neo4j} database. The implementation of \texttt{BaseSampler}
+defines how the subgraph sampling is being done.
+
+
+%------------------------------------------------
+\section{Graph Representation in Neo4j}\label{sec:graph_repr}
+%------------------------------------------------
+
+Nodes in Neo4j are stored with a label corresponding to the node type (\eg,
+\texttt{Paper} for citation networks). Each node carries the following properties:
+
+\begin{itemize}
+    \item A unique integer id.
+    \item Pre-computed node feature vectors. The vectors can either be stored as Float64[] or bytes[]
+    \item A target class label for supervised node classification, which is an integer signifying what class the node belongs to
+    \item A split indicator (\texttt{train}, \texttt{val}, \texttt{test}) used to
+    partition the dataset. This can either be a string, or integer.
+\end{itemize}
+
+Edges are stored as typed relationships connecting pairs of nodes. No edge features
+are used in the experiments.
+
+
+%------------------------------------------------
+\section{PyG Interface Implementations}\label{sec:pyg_impl}
+%------------------------------------------------
+
+We implement the three PyG abstract classes described in \autoref{sec:pyg}:\\
+
+\noindent \textbf{\texttt{Neo4jAbstractFS}} is an abstract class extending FeatureStore. The
+ purpose of this class is to provide storage of the feature vectors (e.g. a graph database), and
+ to implement an efficient interface for fetching feature vectors. The reason it is kept abstract
+is that while there are some methods any Neo4j interacting PyG FeatureStore needs (e.g. executing queries)
+there are also some features that may vary depending on the use case. One example of this is caching.
+Avoiding the neo4j fetching by storing commonly used features in RAM is a good optimization, but how this 
+caching is done in the feature store is something that should be up to the user. There are also two extensions of the 
+\texttt{Neo4jAbstractFS}, which in the \texttt{Neo4jCachedFS} and \texttt{Neo4jNoCacheFS}.\\
+
+\noindent \textbf{\texttt{Neo4jAbstractGS}} an abstract class extending GraphStore, with the main goal
+of implementing efficient traversal over the graph to enable fast subgraph sampling. It has two implementations
+\texttt{Neo4jMultiGS} and \texttt{Neo4jSingleGS} where the difference is how many sampler they are 
+optimized of being able to handle.\\
+
+\noindent \textbf{\texttt{Neo4jSampler}} implements the sampling algorithm, and is tightly coupled
+with the graph store where it executes the sampling algorithm.
+
+%------------------------------------------------
+\section{Sampling Algorithms}\label{sec:sampling_algs}
+%------------------------------------------------
+
+Two sampling strategies are evaluated:
+
+\paragraph{Neighbor sampling.} For each seed node in the mini-batch, the sampler
+issues a Cypher query that traverses the graph up to $K$ hops, sampling at most
+$[k_0, k_1, \ldots, k_{K-1}]$ neighbors at each hop. Neighbors exceeding the limit
+are selected uniformly at random without replacement. This corresponds to the GraphSAGE
+sampling strategy.
+
+\paragraph{GraphSAINT random-walk sampling.} Instead of expanding neighborhoods
+around seed nodes, GraphSAINT constructs a subgraph by first sampling a set of nodes
+via random walks and then inducing the subgraph over those nodes.
+
+
+%------------------------------------------------
+\section{Graph Neural Network Model}\label{sec:model}
+%------------------------------------------------
+
+All experiments use a two-layer Graph Convolutional Network (\acsfont{GCN}). The
+model applies two \texttt{GCNConv} message-passing layers with \acsfont{ReLU}
+activations and a final linear classifier. The architecture is intentionally kept
+simple to focus evaluation on the data pipeline rather than the model itself.
+
+
+%------------------------------------------------
+\section{Datasets and Experimental Setup}\label{sec:datasets}
+%------------------------------------------------
+
+Experiments are conducted on the following datasets:
+
+All experiments are run on a single machine with the Neo4j database instance running
+locally. Hyperparameters such as learning rate, number of epochs, batch size, and
+sampling limits are kept consistent across compared configurations and recorded in a
+central configuration file.
+
+
+%------------------------------------------------
+\section{Benchmarking Methodology}\label{sec:benchmarking}
+%------------------------------------------------
+
+A dedicated \texttt{Measurer} class wraps the training loop and collects timing,
+profiling, and resource utilization data for each run, by logging events to a csv file. the 
+csv file is then compiled into plots, and other result files summarizing the experiment outcome
+
+
+%------------------------------------------------
+\subsection{End-to-End Latency Decomposition}\label{sec:e2e_latency}
+%------------------------------------------------
+
+Per-batch wall-clock time is decomposed into the following segments:
+
+\begin{itemize}
+    \item \textbf{DB server latency (topology / features).} The total time from query
+    submission to consumption of the last result row ($t_{\text{last}}$), as reported
+    by the Neo4j Bolt protocol summary. This includes query planning, execution,
+    serialization, and network round-trip time. The time to the first result row
+    ($t_{\text{first}}$) is indicated as a darker sub-segment within this bar.
+
+    \item \textbf{Network + driver receive.} The additional client-side time spent
+    receiving and deserializing Bolt protocol packets after the first row arrives,
+    computed as client wall time minus $t_{\text{last}}$.
+
+    \item \textbf{Python ETL.} Time spent constructing PyG data structures from raw
+    query results (index remapping, tensor assembly).
+
+    \item \textbf{GNN compute.} Time for the forward pass, loss computation, and
+    backward pass.
+\end{itemize}
+
+
+%------------------------------------------------
+\subsection{Query Execution Profiling}\label{sec:query_profiling}
+%------------------------------------------------
+
+Cypher queries are instrumented with the \texttt{PROFILE} keyword to collect
+operator-level statistics: rows produced, \acsfont{DB} hits, and estimated memory
+usage. These are aggregated across batches and stored as both averaged \acsfont{CSV}
+summaries and raw plan trees (\texttt{query\_profile\_raw.json}) for offline
+inspection.
+
+
+%------------------------------------------------
+\subsection{Python-Level Profiling}\label{sec:python_profiling}
+%------------------------------------------------
+
+Call-stack profiles are collected using Python's \texttt{cProfile} module and stored
+as \texttt{train\_profile.txt}. These are used to identify hot-spots in the Python
+data pipeline that are not visible in the query-level metrics, such as tensor
+allocation overhead or unnecessary data copies.
+
+
+%------------------------------------------------
+\subsection{Sampler Comparison Framework}\label{sec:sampler_comparison}
+%------------------------------------------------
+
+A dedicated experiment runner executes multiple samplers under identical conditions
+and aggregates their results for side-by-side comparison. Plots comparing accuracy
+convergence, per-batch latency, and subgraph statistics are generated automatically
+at the end of the experiment.
+
+
+%------------------------------------------------
+\section{Correctness and Verification}\label{sec:correctness}
+%------------------------------------------------
+
+The graph-database implementation is verified against the in-memory PyG baseline by
+comparing final test accuracy and convergence curves across multiple runs. Subgraph
+statistics (number of sampled nodes and edges per batch) are also checked to confirm
+that the samplers produce subgraphs of the expected size distribution.

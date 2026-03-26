@@ -48,7 +48,8 @@ def ingest_papers100M(uri, user, password):
     # Ingest nodes in chunks
     print(f"Ingesting {num_nodes:,} nodes in batches of {NODE_BATCH_SIZE:,}...")
     with driver.session(database=DATABASE) as session:
-        for start in range(0, num_nodes, NODE_BATCH_SIZE):
+        # for start in range(0, num_nodes, NODE_BATCH_SIZE):
+        for start in range(num_edges - EDGE_BATCH_SIZE, -1, -EDGE_BATCH_SIZE):
             end = min(start + NODE_BATCH_SIZE, num_nodes)
             batch = [
                 {
