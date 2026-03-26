@@ -9,7 +9,7 @@
   "drop_last": true,
   "profile": true,
   "logg_cpu_utilization": false,
-  "cpu_burst_batches": 10,
+  "cpu_burst_batches": 0,
   "max_training_size": 30000,
   "max_validation_size": 100,
   "max_test_size": 1000
