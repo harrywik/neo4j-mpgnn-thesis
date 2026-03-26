@@ -3,9 +3,21 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.nn.init as init
 from torch import Tensor
-
+from torch_geometric.nn import GCNConv
 
 class GCNPostAggregation(nn.Module):
+    def __init__(self, in_dim, hidden_dim1, hidden_dim2, nbr_classes, init_weights=True):
+        super().__init__()
+        self.lin1 = nn.Linear(in_dim, hidden_dim1)      # layer 1: agg done in Java, only linear here
+        self.gcn2 = GCNConv(hidden_dim1, hidden_dim2)   # layer 2: full GCNConv on seed→1-hop edges
+        self.classifier = nn.Linear(hidden_dim2, nbr_classes)
+
+    def forward(self, X: Tensor, edge_index: Tensor) -> Tensor:
+        X = F.relu(self.lin1(X))          # applied to pre-aggregated 1-hop node features
+        X = self.gcn2(X, edge_index).relu_()  # aggregates 1-hop → seed nodes
+        return self.classifier(X)
+
+class MLPPostAggregation(nn.Module):
     """GCN model for the Option-D hybrid: neighbour aggregation was already
     performed server-side by the ``custom.gcn.aggregateNeighbors`` Java UDP.
 
