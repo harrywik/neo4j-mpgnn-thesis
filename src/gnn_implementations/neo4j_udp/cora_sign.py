@@ -105,8 +105,7 @@ def main(config: dict):
     model_args = {
         "feature_dim":  feature_dim,
         "hops":         hops,
-        "hidden_dim1":  12,
-        "hidden_dim2":  12,
+        "hidden_dims":  [256, 128],
         "nbr_classes":  7,
         "init_weights": config.get("init_weights", True),
     }
