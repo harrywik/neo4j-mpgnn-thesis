@@ -50,16 +50,7 @@ class Trainer:
             self.train_indices = train_indices if train_indices is not None else self._get_train_indices(max_training_size)
             self.sampler = sampler
             self.data = None
-            self.nodeloader_args = nodeloader_args or put_nodeLoader_args_map(
-                pickle_safe=False,
-                num_workers=4,
-                prefetch_factor=2,
-                filter_per_worker=True,
-                persistent_workers=True,
-                pin_memory=False,
-                shuffle=False,
-                drop_last=drop_last,
-            )
+            self.nodeloader_args = nodeloader_args
             if self.nodeloader_args["pickle_safe"]:
                 self.train_loader = NodeLoader(
                     data=(self.feature_store, self.graph_store),

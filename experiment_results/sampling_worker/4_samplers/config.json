@@ -1,0 +1,44 @@
+{
+    "lr": 0.001,
+    "batch_size": 30,
+    "max_epochs": 90,
+    "patience": 200,
+    "min_delta": 0.01,
+    "shuffle": true,
+    "initialise_weights": true,
+    "drop_last": true,
+    "profile": true,
+    "logg_cpu_utilization": true,
+    "cpu_burst_batches": 5,
+    "max_training_size": 30000,
+    "max_validation_size": 100,
+    "max_test_size": 1000,
+    "model": {
+        "name": "GCN",
+        "args": {
+            "in_dim": 1433,
+            "hidden_dim1": 12,
+            "hidden_dim2": 12,
+            "nbr_classes": 7,
+            "init_weights": null
+        }
+    },
+    "sampler": {
+        "name": "NeighborSampler",
+        "num_neighbors": [
+            10,
+            5
+        ]
+    },
+    "feature_store": "Neo4jCachedFS",
+    "graph_store": "Neo4jMultiGS",
+    "nodeloader_args": {
+        "pickle_safe": true,
+        "num_workers": 4,
+        "prefetch_factor": 3,
+        "filter_per_worker": true,
+        "persistent_workers": true,
+        "pin_memory": false,
+        "shuffle": true
+    }
+}
