@@ -181,7 +181,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         ``(len(fetched_nids),)`` int64.  The caller is responsible for placing
         rows into the correct output positions via ``nid_to_pos``.
         """
-        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
             result = session.run(self._query_both, node_ids=nids)
             records = list(result)
@@ -302,7 +302,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         phase = "feat_y_" if is_label else "feat_x_"
         query = self._query_y if is_label else self._query_x
 
-        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
+        with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
             result = session.run(query, node_ids=nids)
             records = list(result)

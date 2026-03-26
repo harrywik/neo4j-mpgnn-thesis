@@ -34,8 +34,12 @@ def main(config: dict):
     database_name = "neo4j"
 
     driver = Neo4jConnection(uri, user, password).get_driver()
-    feature_store = Neo4jNoCacheFS(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type="byte[]", profile=profile, profile_accumulator=profile_accumulator, node_label="Paper")
-    graph_store = Neo4SingleGS(driver=driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property="embedding", nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", profile_accumulator=profile_accumulator)
+
+    feature_property = "embedding_bytes"
+    feature_property_type = "byte[]"
+
+    feature_store = Neo4jNoCacheFS(driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property=feature_property, nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", feature_property_type=feature_property_type, profile=profile, profile_accumulator=profile_accumulator, node_label="Paper")
+    graph_store = Neo4SingleGS(driver=driver, measurer=measurer, database_name="neo4j", dataset_name=dataset_name, feature_property=feature_property, nodeid_property="id", split_property_name="split", split_property_type="str", target_property="subject", profile_accumulator=profile_accumulator)
     num_neighbors = [10, 5]
     sampler = Neo4jNeighborSampler(graph_store, num_neighbors=num_neighbors, profile=profile, node_label="Paper")
 

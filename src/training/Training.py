@@ -234,7 +234,7 @@ class Trainer:
         # One continuous burst covering the first N consecutive batches of epoch 0.
         _BURST_BATCHES = self.measurer.cpu_burst_batches
         burst_handle = None
-        if epoch == 0 or epoch == 1:
+        if (epoch == 0 or epoch == 1) and _BURST_BATCHES > 0:
             burst_handle = start_cpu_burst(self.measurer)
 
         for batch_idx in range(nbr_batches):

@@ -4,7 +4,7 @@ PYTHONPATH := src
 GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
-	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j
+	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler
 EXPERIMENTS := sampler_comparison
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv

@@ -1,3 +1,6 @@
+% !TEX root = ../ClassicThesis.tex
+
+
 %************************************************
 \chapter{Introduction}\label{ch:introduction}
 %************************************************
@@ -63,3 +66,26 @@ main emphasis is on the training pipeline, rather than on a particular downstrea
 or model architecture. Since the core stages of the training pipeline remain broadly
 similar across multiple graph learning tasks, the conclusions may have relevance beyond
 the specific task considered here.
+
+
+%------------------------------------------------
+\section{Related Work}\label{sec:related_work}
+%------------------------------------------------
+
+Prior work on combining \acsfont{GNN} training with graph databases is limited. The
+main directly relevant work is by Lopushanskyy and Shi, who show that a \acsfont{GNN}
+can be trained directly on a graph database by retrieving only the required subgraphs
+and features into memory during training. Their results indicate that graph databases
+can serve as both graph store and feature store, and can support both single-machine
+and distributed training.
+
+Most previous work on scaling \acsfont{GNN} training instead relies on distributed
+systems built around graph partitioning. ByteGNN improves distributed mini-batch
+training through \acsfont{GNN}-tailored graph partitioning, parallel sampling, and
+scheduling strategies that increase throughput. In contrast, G3 focuses on scalable
+full-graph training, where workers exchange intermediate representations in a pipelined
+manner to avoid duplicate computation across partitions.
+
+Compared with these systems, our work studies a different point in the design space:
+using a graph database as the primary graph storage and sampling backend, and
+evaluating under what conditions this approach is efficient for \acsfont{GNN} training.
