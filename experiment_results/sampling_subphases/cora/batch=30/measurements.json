@@ -1,0 +1,112 @@
+{
+  "run": {
+    "csv": "/Users/victorpekkari/Desktop/neo4j-mpgnn-thesis/experiment_results/results/run_1/measurements.csv",
+    "runtime_s": 46.2241145420121,
+    "training_time_s": 45.75020300000324,
+    "epochs_completed": 100,
+    "batches_seen": 400,
+    "nbr_training_datapoints": 140.0
+  },
+  "metrics": {
+    "throughput_samples_per_s": 306.00957114876644,
+    "epoch_time_s": {
+      "count": 100,
+      "total_s": 12.493521662836429,
+      "mean_s": 0.12493521662836429,
+      "p50_s": 0.12373856200429145,
+      "p90_s": 0.13050029638106936,
+      "p99_s": 0.13475260672828895,
+      "min_s": 0.11801529099466279,
+      "max_s": 0.1625492079765536
+    },
+    "sampling_phase_time_s": {
+      "count": 400,
+      "total_s": 11.8971295748197,
+      "mean_s": 0.029742823937049252,
+      "p50_s": 0.029714812510064803,
+      "p90_s": 0.03244320380617864,
+      "p99_s": 0.036693839179351914,
+      "min_s": 0.02532779099419713,
+      "max_s": 0.045347874984145164
+    },
+    "training_phase_time_s": {
+      "count": 400,
+      "total_s": 0.5847698699799366,
+      "mean_s": 0.0014619246749498415,
+      "p50_s": 0.0014257704897318035,
+      "p90_s": 0.001666816702345386,
+      "p99_s": 0.0019405974182882335,
+      "min_s": 0.0010904590017162263,
+      "max_s": 0.014958124986151233
+    },
+    "convergence_time_s": null,
+    "converged_epoch": null,
+    "avg_cpu_utilization": 12.978260869565215,
+    "final_validation_accuracy": 0.7460000228144412,
+    "best_validation_accuracy": 0.7620000232843164,
+    "time_to_first_validation_accuracy_s": 0.591234333027387,
+    "time_to_best_accuracy_s": 23.090174042008584,
+    "final_validation_loss": 0.8411811590194702,
+    "best_validation_loss": 0.8185862898826599,
+    "time_to_best_loss_s": 40.677708625007654,
+    "final_test_accuracy": 0.7710000222813788,
+    "best_test_accuracy": 0.7710000222813788,
+    "time_to_best_test_accuracy_s": 46.680167542013805,
+    "remote_feature_latency_s": {
+      "count": 1208,
+      "total_s": 20.98136378460913,
+      "mean_s": 0.01736867862964332,
+      "p50_s": 0.008824416494462639,
+      "p90_s": 0.037123595603043215,
+      "p99_s": 0.03935628131381236,
+      "min_s": 0.006985124986385927,
+      "max_s": 0.08742075000191107
+    },
+    "remote_feature_total_s": 20.98136378460913,
+    "cache_hits": 1208,
+    "cache_misses": 1208,
+    "cache_hit_rate": 0.5,
+    "validation_time_s": {
+      "count": 100,
+      "total_s": 33.64498503602226,
+      "mean_s": 0.3364498503602226,
+      "p50_s": 0.3360495005035773,
+      "p90_s": 0.3435749791213311,
+      "p99_s": 0.3880822166832513,
+      "min_s": 0.3203109579917509,
+      "max_s": 0.389316416985821
+    },
+    "saving_weights_time_s": {
+      "count": 69,
+      "total_s": 0.00015808502212166786,
+      "mean_s": 2.2910872771256212e-06,
+      "p50_s": 2.249988028779626e-06,
+      "p90_s": 2.675189170986414e-06,
+      "p99_s": 4.369440721347919e-06,
+      "min_s": 1.541979145258665e-06,
+      "max_s": 5.332985892891884e-06
+    },
+    "batch_train_loss_mean": 0.5384189429390244,
+    "avg_batch_nodes": 350.3375,
+    "avg_batch_edges": 570.49,
+    "avg_seed_node_ratio": 0.08600072716694732,
+    "topo_query_sent_ms": 0.5370555004175901,
+    "topo_first_record_ms": 32.13689084607523,
+    "topo_transfer_ms": 0.08534077430238005,
+    "topo_etl_ms": 0.29955977578423854,
+    "feat_x_query_sent_ms": 0.6710801983640733,
+    "feat_x_first_record_ms": 0.11089610216124533,
+    "feat_x_transfer_ms": 17.481319601582022,
+    "feat_x_etl_ms": 2.5259657356358405,
+    "feat_y_query_sent_ms": 0.5978792236033913,
+    "feat_y_first_record_ms": 0.7144541341163039,
+    "feat_y_transfer_ms": 15.076746024888715,
+    "feat_y_etl_ms": 1.5512940912146664,
+    "network_baseline_ms": 1.3169542013201865
+  },
+  "notes": [
+    "GPU/CPU utilization and explicit DB write/query timings are not in the Measurer CSV (unless you log them); this parser will report None for those.",
+    "throughput_samples_per_s assumes nbr_training_datapoints is per-epoch; if it's total across training, remove the * epochs_completed multiplier.",
+    "remote_feature_total_s is a proxy for time spent waiting on remote feature reads (DB reads)."
+  ]
+}
