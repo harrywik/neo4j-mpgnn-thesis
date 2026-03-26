@@ -13,7 +13,7 @@ DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 #   make build-plugin NEO4J_PLUGINS_DIR=/var/lib/neo4j/plugins
 NEO4J_PLUGINS_DIR ?=
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin neo4j_udp_sign
 
 help:
 	@echo "Usage: make <implementation_folder> [DATASET=cora]"
@@ -33,6 +33,9 @@ $(IMPLS):
 		echo "Unknown target '$@'. Use 'make help' for usage."; \
 		exit 1; \
 	fi
+
+neo4j_udp_sign:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/neo4j_udp/cora_sign.py
 
 baseline_db:
 	@$(MAKE) baseline_neo4j DATASET=$(DATASET)

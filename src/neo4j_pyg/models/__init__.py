@@ -1,9 +1,9 @@
-from .GCN import GCN, TinyGCN, BigGCN, GCNPostAggregation, SIGNPostAggregation
+from .GCN import GCN
+from .GCNPostAggregation import GCNPostAggregation
+from .SIGNPostAggregation import SIGNPostAggregation
 
 __all__ = [
     "GCN",
-    "TinyGCN",
-    "BigGCN",
     "GCNPostAggregation",
     "SIGNPostAggregation",
 ]
