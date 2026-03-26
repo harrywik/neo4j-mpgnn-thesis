@@ -170,3 +170,60 @@ class GCNPostAggregation(nn.Module):
         torch.set_rng_state(cpu_state)
         if gpu_state is not None:
             torch.cuda.set_rng_state_all(gpu_state)
+
+
+class SIGNPostAggregation(nn.Module):
+    """SIGN model for the UDP hybrid with k-hop neighbourhood aggregation.
+
+    Input ``x`` is the concatenation of per-hop mean-aggregated feature vectors
+    produced by ``custom.gcn.signAggregate``:
+
+        x = [x_0 || x_1 || ... || x_k]   shape: (N, feature_dim * (hops + 1))
+
+    where ``x_0`` is the seed's own features, ``x_h`` is the mean of features
+    at hop-h distance.  A linear projection head maps the concatenation to class
+    logits; weight matrices stay in PyTorch so autograd is fully intact.
+
+    Equivalent to the SIGN architecture (Rossi et al., 2020) with the graph
+    diffusion computed server-side in Neo4j.
+    """
+
+    def __init__(
+        self,
+        feature_dim: int,
+        hops: int,
+        hidden_dim1: int,
+        hidden_dim2: int,
+        nbr_classes: int,
+        init_weights: bool = True,
+    ):
+        super().__init__()
+        in_dim = feature_dim * (hops + 1)
+        self.lin1 = nn.Linear(in_dim, hidden_dim1)
+        self.lin2 = nn.Linear(hidden_dim1, hidden_dim2)
+        self.classifier = nn.Linear(hidden_dim2, nbr_classes)
+        if init_weights:
+            self.reset_parameters()
+
+    def forward(self, X: Tensor, edge_index: Tensor = None) -> Tensor:
+        X = F.relu(self.lin1(X))
+        X = F.relu(self.lin2(X))
+        return self.classifier(X)
+
+    def reset_parameters(self):
+        cpu_state = torch.get_rng_state()
+        gpu_state = torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None
+
+        torch.manual_seed(0)
+        torch.cuda.manual_seed_all(0)
+
+        init.xavier_uniform_(self.lin1.weight)
+        init.zeros_(self.lin1.bias)
+        init.xavier_uniform_(self.lin2.weight)
+        init.zeros_(self.lin2.bias)
+        init.xavier_uniform_(self.classifier.weight)
+        init.zeros_(self.classifier.bias)
+
+        torch.set_rng_state(cpu_state)
+        if gpu_state is not None:
+            torch.cuda.set_rng_state_all(gpu_state)
