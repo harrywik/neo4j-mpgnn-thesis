@@ -354,7 +354,7 @@ def _aggregate_multi_run(parent_dir: Path, nbr_runs: int, impl_name: str) -> Non
         plot_accuracy_vs_epochs,
         plot_accuracy_vs_time,
     )
-
+    from benchmarking_tools.measurements_plots import plot_aggregated_folder
     agg = aggregate_runs(parent_dir, nbr_runs)
     n = agg["n_runs"]
     if n == 0:
@@ -377,6 +377,9 @@ def _aggregate_multi_run(parent_dir: Path, nbr_runs: int, impl_name: str) -> Non
     with open(out_path, "w") as f:
         json.dump(summary, f, indent=2)
     print(f"Aggregated summary → {out_path}")
+
+    # Generate averaged plots + measurements.json from per-run data
+    plot_aggregated_folder(parent_dir)
 
 
 # ---------------------------------------------------------------------------
