@@ -1,6 +1,6 @@
 {
   "profile": false,
-  "num_runs": 5,
+  "num_runs": 3,
   "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
@@ -9,6 +9,8 @@
   "min_delta": 0.01,
   "shuffle": true,
   "drop_last": true,
+  "max_validation_size": 100,
+  "max_test_size": 1000,
   "initialise_weights": true,
   "hidden_dim1": 12,
   "hidden_dim2": 12,
@@ -18,7 +20,8 @@
   "num_steps": 5,
   "sample_coverage": 200,
   "samplers": [
-    "Neo4jGraphSAINTRandomWalkSampler",
-    "Neo4jSampler"
+    "Neo4jNeighborSampler",
+    "Neo4jSampler",
+    "Neo4jEdgeModeSampler"
   ]
 }

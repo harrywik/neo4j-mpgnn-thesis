@@ -15,13 +15,15 @@ class Neo4jSampler(BaseSampler):
         graph_store: GraphStore,
         num_neighbors: List[int],
         expand_revisited: bool = False,
-        rel_type: str = None,
-        node_label: str = None,
+        edge_direction: str = "incoming",  # 'outgoing', 'incoming', 'both'
+        rel_type: str = "CITES",
+        node_label: str = "Paper",
         profile: bool = False,
     ):
         self.graph_store = graph_store
         self.num_neighbors = num_neighbors
         self.expand_revisited = expand_revisited
+        self.edge_direction = edge_direction
         self.nodeid_property = graph_store.nodeid_property
         self.rel_type = rel_type
         self.node_label = node_label
@@ -58,10 +60,25 @@ class Neo4jSampler(BaseSampler):
 
         # Incoming edge pattern: (src)<-[r]-(neighbor)
         # startNode(r) = neighbor, endNode(r) = src
-        edge_pat = f"<-[r{rel}]-"
-        nbr_expr = "startNode(rel)"
-        edge_src_expr = f"startNode(rel).{self.nodeid_property}"
-        edge_dst_expr = f"endNode(rel).{self.nodeid_property}"
+        edge_pat = None
+        nbr_expr = None
+        edge_src_expr = None
+        edge_dst_expr = None
+        if self.edge_direction == "outgoing":
+            edge_pat = f"-[rel{rel}]->"
+            nbr_expr = "endNode(rel)"
+            edge_src_expr = f"startNode(rel).{self.nodeid_property}"
+            edge_dst_expr = f"endNode(rel).{self.nodeid_property}"
+        elif self.edge_direction == "both":
+            edge_pat = f"-[rel{rel}]-"
+            nbr_expr = f"CASE WHEN startNode(rel) = src THEN endNode(rel) ELSE startNode(rel) END"
+            edge_src_expr = f"src.{self.nodeid_property}"
+            edge_dst_expr = f"CASE WHEN startNode(rel) = src THEN endNode(rel).{self.nodeid_property} ELSE startNode(rel).{self.nodeid_property} END"
+        else:
+            edge_pat = f"<-[rel{rel}]-"
+            nbr_expr = "startNode(rel)"
+            edge_src_expr = f"startNode(rel).{self.nodeid_property}"
+            edge_dst_expr = f"endNode(rel).{self.nodeid_property}"
 
         q = []
 
@@ -89,7 +106,7 @@ class Neo4jSampler(BaseSampler):
 
             // 3. match the neighbors
             MATCH (src){edge_pat}(neighbor{nbr_label})
-            WITH i, src, visited, edges, collect(r) AS cand_rels
+            WITH i, src, visited, edges, collect(rel) AS cand_rels
 
             // 4. pyg-lib "take all" rule (Case 1 in _sample).
             WITH i, src, visited, edges,

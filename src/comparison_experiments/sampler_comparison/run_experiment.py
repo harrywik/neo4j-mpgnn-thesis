@@ -70,7 +70,7 @@ def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
     return {
         "Neo4jSampler": RunSpec(
             "neo4j",
-            lambda gs, nn, p=profile: Neo4jSampler(gs, num_neighbors=nn, profile=p),
+            lambda gs, nn, p=profile: Neo4jSampler(gs, num_neighbors=nn, rel_type="CITES", node_label="Paper", profile=p),
         ),
         "Neo4jEdgeModeSampler": RunSpec(
             "neo4j",
@@ -78,6 +78,8 @@ def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
                 gs,
                 num_neighbors=nn,
                 edge_mode=em,
+                rel_type="CITES",
+                node_label="Paper",
                 profile=p,
             ),
         ),
@@ -192,7 +194,7 @@ def main() -> None:
             driver,
             database_name="neo4j",
             dataset_name="cora",
-            feature_property="embedding",
+            feature_property="embedding_bytes",
             nodeid_property="id",
             split_property_name="split",
             split_property_type="str",
@@ -203,7 +205,7 @@ def main() -> None:
             driver,
             database_name="neo4j",
             dataset_name="cora",
-            feature_property="embedding",
+            feature_property="embedding_bytes",
             nodeid_property="id",
             split_property_name="split",
             split_property_type="str",
@@ -267,6 +269,8 @@ def main() -> None:
                     lr=config.get("lr"),
                     nodeloader_args=nodeloader_args,
                     drop_last=drop_last,
+                    max_validation_size=config.get("max_validation_size"),
+                    max_test_size=config.get("max_test_size"),
                 )
             elif spec.data_key == "graphsaint_neo4j":
                 train_loader = Neo4jGraphSAINTRandomWalkSampler(

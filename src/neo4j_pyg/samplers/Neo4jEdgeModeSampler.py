@@ -34,8 +34,8 @@ class Neo4jEdgeModeSampler(BaseSampler):
         num_neighbors: List[int],
         edge_mode: EdgeMode = "incoming",
         expand_revisited: bool = False,
-        rel_type: str | None = None,
-        node_label: str | None = None,
+        rel_type: str | None = "CITES",
+        node_label: str | None = "Paper",
         profile: bool = False,
     ):
         self.graph_store = graph_store
