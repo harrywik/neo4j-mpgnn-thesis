@@ -1,3 +1,4 @@
 from .Measurer import Measurer
 from .CPU_utilization_logger import start_cpu_monitor, start_cpu_burst
 from .QueryProfileAccumulator import QueryProfileAccumulator
+from .measurements_plots import plot_aggregated_folder, generate_avg_measurements_json
