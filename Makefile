@@ -52,7 +52,7 @@ cache_neo4j_arxiv:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset arxiv --implementation cache_neo4j
 
 sampler_comparison:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) src/comparison_experiments/sampler_comparison/run_experiment.py
+	@DATASET=$(DATASET) PYTHONPATH=$(PYTHONPATH) $(PY) src/comparison_experiments/sampler_comparison/run_experiment.py
 
 ingest_cora:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/cora/new_ingest.py

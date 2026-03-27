@@ -59,31 +59,44 @@ class RunSpec:
     make_sampler: Optional[Callable]       # None for the PyG path
 
 
-def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
+def _build_registry(
+    profile: bool = False,
+    config: dict | None = None,
+    dataset_cfg: dict | None = None,
+) -> dict:
     """Build sampler registry. Optional ``config`` key for ``Neo4jEdgeModeSampler``:
 
     * ``neo4j_edge_mode`` — ``incoming`` | ``outgoing`` | ``undirected`` | ``induced``
     """
     cfg = config or {}
+    ds = dataset_cfg or {}
     edge_mode = cfg.get("neo4j_edge_mode", "incoming")
+    node_label = ds.get("node_label")
+    rel_type = ds.get("rel_type")
 
     return {
         "Neo4jSampler": RunSpec(
             "neo4j",
-            lambda gs, nn, p=profile: Neo4jSampler(gs, num_neighbors=nn, profile=p),
+            lambda gs, nn, p=profile, nl=node_label, rt=rel_type: Neo4jSampler(
+                gs, num_neighbors=nn, profile=p, node_label=nl, rel_type=rt
+            ),
         ),
         "Neo4jEdgeModeSampler": RunSpec(
             "neo4j",
-            lambda gs, nn, p=profile, em=edge_mode: Neo4jEdgeModeSampler(
+            lambda gs, nn, p=profile, em=edge_mode, nl=node_label, rt=rel_type: Neo4jEdgeModeSampler(
                 gs,
                 num_neighbors=nn,
                 edge_mode=em,
+                node_label=nl,
+                rel_type=rt,
                 profile=p,
             ),
         ),
         "Neo4jNeighborSampler": RunSpec(
             "neo4j",
-            lambda gs, nn, p=profile: Neo4jNeighborSampler(gs, num_neighbors=nn, profile=p),
+            lambda gs, nn, p=profile, nl=node_label, rt=rel_type: Neo4jNeighborSampler(
+                gs, num_neighbors=nn, profile=p, node_label=nl, rel_type=rt
+            ),
         ),
         "Neo4jSamplerEquiv": RunSpec(
             "neo4j",
@@ -99,7 +112,9 @@ def _build_registry(profile: bool = False, config: dict | None = None) -> dict:
         ),
         "OldNeighborSampler": RunSpec(
             "neo4j",
-            lambda gs, nn: OldNeighborSampler(gs, num_neighbors=nn),
+            lambda gs, nn, nl=node_label, rt=rel_type: OldNeighborSampler(
+                gs, num_neighbors=nn, node_label=nl, rel_type=rt
+            ),
         ),
         "Neo4jGraphSAINTRandomWalkSampler": RunSpec("graphsaint_neo4j", None),
         "PyGGraphSAINTRandomWalkSampler": RunSpec("graphsaint_pyg", None),
@@ -140,6 +155,60 @@ def main() -> None:
     with open(config_path) as f:
         config = json.load(f)
 
+    dataset_name = os.environ.get("DATASET", "cora")
+    dataset_cfgs = {
+        "cora": {
+            "database": "neo4j",
+            "dataset": "cora",
+            "node_label": "Paper",
+            "feature_property": "embedding",
+            "feature_property_type": "byte[]",
+            "target_property": "subject",
+            "in_dim": 1433,
+            "nbr_classes": 7,
+            "rel_type": "CITES",
+        },
+        "arxiv": {
+            "database": "arxiv2",
+            "dataset": "arxiv",
+            "node_label": "Paper",
+            "feature_property": "feature_vector",
+            "feature_property_type": "byte[]",
+            "target_property": "subject",
+            "in_dim": 128,
+            "nbr_classes": 40,
+            "rel_type": "CITES",
+        },
+        "products": {
+            "database": "products",
+            "dataset": "products",
+            "node_label": "Product",
+            "feature_property": "feature_vector",
+            "feature_property_type": "byte[]",
+            "target_property": "category",
+            "in_dim": 100,
+            "nbr_classes": 47,
+            "rel_type": "CO_PURCHASED",
+        },
+        "papers100M": {
+            "database": "papers100M",
+            "dataset": "papers100M",
+            "node_label": "Paper",
+            "feature_property": "feature_vector",
+            "feature_property_type": "byte[]",
+            "target_property": "subject",
+            "in_dim": 128,
+            "nbr_classes": 172,
+            "rel_type": "CITES",
+        },
+    }
+    if dataset_name not in dataset_cfgs:
+        raise ValueError(
+            f"Unsupported DATASET={dataset_name!r}. Choose one of: "
+            f"{', '.join(sorted(dataset_cfgs.keys()))}."
+        )
+    dataset_cfg = dataset_cfgs[dataset_name]
+
     num_runs: int = config["num_runs"]
     max_epochs: int = config["max_epochs"]
     batch_size: int = config["batch_size"]
@@ -148,13 +217,17 @@ def main() -> None:
     drop_last: bool = config.get("drop_last")
     profile: bool = config.get("profile", False)
 
-    SAMPLER_REGISTRY = _build_registry(profile=profile, config=config)
+    SAMPLER_REGISTRY = _build_registry(
+        profile=profile,
+        config=config,
+        dataset_cfg=dataset_cfg,
+    )
 
     model_args = {
-        "in_dim": 1433,
+        "in_dim": dataset_cfg["in_dim"],
         "hidden_dim1": config.get("hidden_dim1"),
         "hidden_dim2": config.get("hidden_dim2"),
-        "nbr_classes": 7,
+        "nbr_classes": dataset_cfg["nbr_classes"],
         "init_weights": config.get("initialise_weights"),
     }
 
@@ -190,27 +263,32 @@ def main() -> None:
 
         neo4j_feature_store = Neo4jNoCacheFS(
             driver,
-            database_name="neo4j",
-            dataset_name="cora",
-            feature_property="embedding",
+            database_name=dataset_cfg["database"],
+            dataset_name=dataset_cfg["dataset"],
+            feature_property=dataset_cfg["feature_property"],
             nodeid_property="id",
             split_property_name="split",
             split_property_type="str",
-            target_property="subject",
-            feature_property_type="byte[]",
+            target_property=dataset_cfg["target_property"],
+            feature_property_type=dataset_cfg["feature_property_type"],
         )
         neo4j_graph_store = Neo4SingleGS(
             driver,
-            database_name="neo4j",
-            dataset_name="cora",
-            feature_property="embedding",
+            database_name=dataset_cfg["database"],
+            dataset_name=dataset_cfg["dataset"],
+            feature_property=dataset_cfg["feature_property"],
             nodeid_property="id",
             split_property_name="split",
             split_property_type="str",
-            target_property="subject",
+            target_property=dataset_cfg["target_property"],
         )
 
     if needs_pyg:
+        if dataset_name != "cora":
+            raise ValueError(
+                "PyG samplers are only supported for DATASET=cora. "
+                "Remove PyG samplers from the config or set DATASET=cora."
+            )
         dataset = Planetoid(root="data/Planetoid", name="Cora")
         pyg_graph = dataset[0]
         pyg_train_indices = torch.where(pyg_graph.train_mask.reshape(-1))[0]
@@ -276,7 +354,8 @@ def main() -> None:
                     walk_length=config["walk_length"],
                     num_steps=config["num_steps"],
                     sample_coverage=config["sample_coverage"],
-                    node_label="Paper",
+                    node_label=dataset_cfg["node_label"],
+                    rel_type=dataset_cfg["rel_type"],
                     measurer=measurer,
                     profile=profile,
                     # Cache norms in the experiment dir so they are computed
@@ -286,7 +365,8 @@ def main() -> None:
                 eval_sampler = Neo4jNeighborSampler(
                     neo4j_graph_store,
                     num_neighbors=num_neighbors,
-                    node_label="Paper",
+                    node_label=dataset_cfg["node_label"],
+                    rel_type=dataset_cfg["rel_type"],
                     profile=profile,
                 )
                 trainer = GraphSAINTTrainer(

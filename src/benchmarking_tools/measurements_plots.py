@@ -279,7 +279,6 @@ def plot_validation_convergence(csv_path: Path, df: pd.DataFrame, output_dir: Pa
         fig, ax = plt.subplots(figsize=(8, 5))
 
         ax.plot(epochs, acc_values, color=color, linewidth=1.8)
-        ax.scatter(epochs, acc_values, color=color, s=18, zorder=3)
 
         # Mark best epoch with a dashed vertical line
         best_idx = int(np.argmax(acc_values))
@@ -336,7 +335,6 @@ def plot_validation_convergence_time(csv_path: Path, df: pd.DataFrame, output_di
     fig, ax = plt.subplots(figsize=(8, 5))
 
     ax.plot(times, acc_values, color=color, linewidth=1.8)
-    ax.scatter(times, acc_values, color=color, s=18, zorder=3)
 
     # Mark best epoch with a dashed vertical line
     best_idx = int(np.argmax(acc_values))
