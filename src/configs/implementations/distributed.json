@@ -1,0 +1,27 @@
+{
+  "_comment": "DEPRECATED — Distributed Data Parallel training. Requires torchrun + NCCL + GPU.",
+  "feature_store": {
+    "class_name": "PickleSafeFeatureStore",
+    "connection_mode": "uri"
+  },
+  "graph_store": {
+    "class_name": "PickleSafeGS",
+    "connection_mode": "uri"
+  },
+  "sampler": {
+    "class_name": "UniformSampler",
+    "num_neighbors": [10, 5]
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "DistributedTrainer",
+  "nodeloader_args": {
+    "pickle_safe": true,
+    "num_workers": 4,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": true,
+    "pin_memory": false
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "feature_store": {
+    "class_name": "Neo4jCachedFS",
+    "connection_mode": "uri",
+    "extra_kwargs": {
+      "cache_size": 3000
+    }
+  },
+  "graph_store": {
+    "class_name": "Neo4jMultiGS",
+    "connection_mode": "uri"
+  },
+  "sampler": {
+    "class_name": "Neo4jNeighborSampler",
+    "num_neighbors": [10, 5]
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "Trainer",
+  "nodeloader_args": {
+    "pickle_safe": true,
+    "num_workers": 5,
+    "prefetch_factor": 3,
+    "filter_per_worker": false,
+    "persistent_workers": true,
+    "pin_memory": false
+  }
+}
