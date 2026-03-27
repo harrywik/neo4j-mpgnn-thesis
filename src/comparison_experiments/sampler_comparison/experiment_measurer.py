@@ -32,6 +32,12 @@ class ExperimentMeasurer(Measurer):
         self.node_visit_counter: Counter = Counter()
         self.edge_visit_counter: Counter = Counter()
 
+        # Keep parity with Measurer so training code can rely on these fields.
+        self.coarse_cpu_interval = float(config.get("coarse_cpu_interval", 5))
+        self.intensive_cpu_epochs = int(config.get("intensive_cpu_epochs", 3))
+        self.cpu_burst_batches = int(config.get("cpu_burst_batches", 3))
+        self._current_phase = "idle"
+
         self._csvfile = open(self.measurements_path, "w", newline="\n")
         self._writer = csv.writer(self._csvfile)
         self._writer.writerow(["Event", "Time", "Value"])
