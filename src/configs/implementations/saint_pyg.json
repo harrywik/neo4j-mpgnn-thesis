@@ -1,0 +1,16 @@
+{
+  "in_memory": true,
+  "feature_store": null,
+  "graph_store": null,
+  "sampler": null,
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "GraphSAINTTrainer",
+  "saint_extra": {
+    "graphsaint_batch_size": 1000,
+    "walk_length": 2,
+    "num_steps": 30,
+    "sample_coverage": 50
+  }
+}

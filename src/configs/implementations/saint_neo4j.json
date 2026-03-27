@@ -1,0 +1,27 @@
+{
+  "feature_store": {
+    "class_name": "Neo4jNoCacheFS",
+    "connection_mode": "driver"
+  },
+  "graph_store": {
+    "class_name": "Neo4SingleGS",
+    "connection_mode": "driver"
+  },
+  "sampler": {
+    "class_name": "Neo4jGraphSAINTRandomWalkSampler"
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "GraphSAINTTrainer",
+  "eval_sampler": {
+    "class_name": "Neo4jNeighborSampler",
+    "num_neighbors": [10, 5]
+  },
+  "saint_extra": {
+    "graphsaint_batch_size": 1000,
+    "walk_length": 2,
+    "num_steps": 30,
+    "sample_coverage": 50
+  }
+}
