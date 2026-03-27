@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import sys
+from datetime import date
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -325,6 +326,60 @@ def _log_config(measurer, impl_cfg, dataset_cfg, sampler, model):
 
 
 # ---------------------------------------------------------------------------
+# Multi-run helpers
+# ---------------------------------------------------------------------------
+
+def _create_multi_run_parent_dir() -> Path:
+    """Create and return a fresh run_N_YYYY-MM-DD directory for a multi-run experiment."""
+    results_path = SRC_DIR.parent / "experiment_results" / "results"
+    results_path.mkdir(parents=True, exist_ok=True)
+    existing = []
+    for p in results_path.iterdir():
+        if p.is_dir() and p.name.startswith("run_"):
+            try:
+                existing.append(int(p.name.split("_")[1]))
+            except (ValueError, IndexError):
+                pass
+    next_id = (max(existing) + 1) if existing else 0
+    date_str = date.today().isoformat()
+    parent_dir = results_path / f"run_{next_id}_{date_str}"
+    parent_dir.mkdir(parents=True, exist_ok=False)
+    return parent_dir
+
+
+def _aggregate_multi_run(parent_dir: Path, nbr_runs: int, impl_name: str) -> None:
+    """Aggregate per-run results and write mean ± 95 % CI plots and summary JSON."""
+    from comparison_experiments.sampler_comparison.comparison_plots import (
+        aggregate_runs,
+        plot_accuracy_vs_epochs,
+        plot_accuracy_vs_time,
+    )
+
+    agg = aggregate_runs(parent_dir, nbr_runs)
+    n = agg["n_runs"]
+    if n == 0:
+        print("Warning: no run data found for aggregation.")
+        return
+
+    print(f"Aggregating {n} run(s) → {parent_dir}")
+    agg_dict = {impl_name: agg}
+    plot_accuracy_vs_epochs(agg_dict, parent_dir)
+    plot_accuracy_vs_time(agg_dict, parent_dir)
+
+    # Write scalar summary with mean, std and 95 % CI for every collected metric
+    summary: dict = {"n_runs": n, "metrics": {}}
+    for key, mean in agg["scalar_means"].items():
+        std = agg["scalar_stds"].get(key, 0.0)
+        ci = 1.96 * std / (n ** 0.5) if n > 1 else 0.0
+        summary["metrics"][key] = {"mean": mean, "std": std, "ci_95": ci}
+
+    out_path = parent_dir / "aggregated_summary.json"
+    with open(out_path, "w") as f:
+        json.dump(summary, f, indent=2)
+    print(f"Aggregated summary → {out_path}")
+
+
+# ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
@@ -343,58 +398,115 @@ def main():
     user     = os.environ.get("USERNAME", "")
     password = os.environ.get("PASSWORD", "")
 
-    in_memory = impl_cfg.get("in_memory", False)
+    in_memory    = impl_cfg.get("in_memory", False)
     trainer_name = impl_cfg["trainer"]
+    profile      = dataset_cfg.get("profile", False)
+    nbr_runs     = int(dataset_cfg.get("nbr_runs", 1))
 
     # -----------------------------------------------------------------------
-    # Measurer
+    # Single run — original behaviour
     # -----------------------------------------------------------------------
-    from benchmarking_tools import Measurer, QueryProfileAccumulator
-    profile = dataset_cfg.get("profile", False)
-    profile_accumulator = QueryProfileAccumulator() if profile else None
-    measurer = Measurer(dataset_cfg, profile_accumulator=profile_accumulator)
+    if nbr_runs <= 1:
+        from benchmarking_tools import Measurer, QueryProfileAccumulator
+        profile_accumulator = QueryProfileAccumulator() if profile else None
+        measurer = Measurer(dataset_cfg, profile_accumulator=profile_accumulator)
 
-    # -----------------------------------------------------------------------
-    # Model (always needed)
-    # -----------------------------------------------------------------------
-    model = _make_model(impl_cfg, dataset_cfg)
+        model = _make_model(impl_cfg, dataset_cfg)
 
-    # -----------------------------------------------------------------------
-    # In-memory paths (baseline_pyg, saint_pyg)
-    # -----------------------------------------------------------------------
-    if in_memory:
+        if in_memory:
+            if trainer_name == "GraphSAINTTrainer":
+                _run_saint_pyg(dataset_cfg, impl_cfg, measurer, model)
+            else:
+                _run_in_memory(dataset_cfg, impl_cfg, measurer, model)
+            return
+
+        from Neo4jConnection import Neo4jConnection
+        driver = Neo4jConnection(uri, user, password).get_driver()
+        common_kwargs = _build_common_kwargs(dataset_cfg, uri, user, password)
+
+        graph_store = _make_graph_store(impl_cfg, common_kwargs, driver, measurer, profile_accumulator)
+        sampler = None
+        if impl_cfg.get("sampler"):
+            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer)
+
+        feature_store = None
+        if impl_cfg.get("feature_store"):
+            feature_store = _make_feature_store(
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+            )
+
+        _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
+
         if trainer_name == "GraphSAINTTrainer":
-            _run_saint_pyg(dataset_cfg, impl_cfg, measurer, model)
+            _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, model)
+        elif trainer_name == "DistributedTrainer":
+            _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
         else:
-            _run_in_memory(dataset_cfg, impl_cfg, measurer, model)
+            _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
         return
 
     # -----------------------------------------------------------------------
-    # Neo4j-backed paths
+    # Multi-run — loop nbr_runs times, then aggregate with 95 % CI
     # -----------------------------------------------------------------------
-    from Neo4jConnection import Neo4jConnection
-    driver = Neo4jConnection(uri, user, password).get_driver()
-    common_kwargs = _build_common_kwargs(dataset_cfg, uri, user, password)
+    print(f"Multi-run experiment: {nbr_runs} runs for dataset={args.dataset}, "
+          f"implementation={args.implementation}")
 
-    graph_store = _make_graph_store(impl_cfg, common_kwargs, driver, measurer, profile_accumulator)
-    sampler = None
-    if impl_cfg.get("sampler"):
-        sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer)
+    from benchmarking_tools import Measurer, QueryProfileAccumulator
 
-    feature_store = None
-    if impl_cfg.get("feature_store"):
-        feature_store = _make_feature_store(
-            impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+    parent_dir = _create_multi_run_parent_dir()
+    print(f"Results parent directory: {parent_dir}")
+
+    # For Neo4j backends, create a shared driver once (connection pool).
+    driver = None
+    common_kwargs = None
+    if not in_memory:
+        from Neo4jConnection import Neo4jConnection
+        driver = Neo4jConnection(uri, user, password).get_driver()
+        common_kwargs = _build_common_kwargs(dataset_cfg, uri, user, password)
+
+    for run_i in range(nbr_runs):
+        print(f"\n=== Run {run_i + 1}/{nbr_runs} ===")
+        run_dir = parent_dir / f"run_{run_i}"
+        run_dir.mkdir(parents=True, exist_ok=True)
+
+        profile_accumulator = QueryProfileAccumulator() if profile else None
+        measurer = Measurer(
+            dataset_cfg,
+            profile_accumulator=profile_accumulator,
+            output_dir=run_dir,
         )
+        model = _make_model(impl_cfg, dataset_cfg)
 
-    _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
+        if in_memory:
+            if trainer_name == "GraphSAINTTrainer":
+                _run_saint_pyg(dataset_cfg, impl_cfg, measurer, model)
+            else:
+                _run_in_memory(dataset_cfg, impl_cfg, measurer, model)
+            continue
 
-    if trainer_name == "GraphSAINTTrainer":
-        _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, model)
-    elif trainer_name == "DistributedTrainer":
-        _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
-    else:
-        _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
+        graph_store = _make_graph_store(
+            impl_cfg, common_kwargs, driver, measurer, profile_accumulator
+        )
+        sampler = None
+        if impl_cfg.get("sampler"):
+            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer)
+
+        feature_store = None
+        if impl_cfg.get("feature_store"):
+            feature_store = _make_feature_store(
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+            )
+
+        _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
+
+        if trainer_name == "GraphSAINTTrainer":
+            _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, model)
+        elif trainer_name == "DistributedTrainer":
+            _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
+        else:
+            _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model)
+
+    _aggregate_multi_run(parent_dir, nbr_runs, impl_cfg["_name"])
 
 
 if __name__ == "__main__":

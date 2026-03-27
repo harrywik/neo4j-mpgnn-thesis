@@ -26,5 +26,6 @@
   "cpu_burst_batches": 5,
   "max_training_size": null,
   "max_validation_size": 5000,
-  "max_test_size": 10000
+  "max_test_size": 10000,
+  "nbr_runs": 1
 }
