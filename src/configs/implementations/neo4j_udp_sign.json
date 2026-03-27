@@ -1,0 +1,35 @@
+{
+  "needs_sampler_in_fs": true,
+  "feature_store": {
+    "class_name": "Neo4jSIGNFeatureStore",
+    "connection_mode": "driver",
+    "extra_kwargs": {
+      "hops": 2
+    }
+  },
+  "graph_store": {
+    "class_name": "Neo4SingleGS",
+    "connection_mode": "driver"
+  },
+  "sampler": {
+    "class_name": "Neo4jSIGNSampler",
+    "hops": 2,
+    "max_neighbors_per_hop": 10
+  },
+  "model": {
+    "class_name": "SIGNPostAggregation",
+    "extra_kwargs": {
+      "hops": 2,
+      "hidden_dims": [256, 128]
+    }
+  },
+  "trainer": "Trainer",
+  "nodeloader_args": {
+    "pickle_safe": false,
+    "num_workers": 0,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": false,
+    "pin_memory": false
+  }
+}

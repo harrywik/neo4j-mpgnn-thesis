@@ -21,6 +21,7 @@ wheels/
 
 # Virtual Env
 .venv/
+.cursor/
 
 # data
 data/cora/cora.tgz

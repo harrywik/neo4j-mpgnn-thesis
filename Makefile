@@ -16,8 +16,12 @@ NEO4J_PLUGINS_DIR ?=
 .PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin neo4j_udp_sign
 
 help:
-	@echo "Usage: make <implementation_folder> [DATASET=cora]"
+	@echo "Usage: make <implementation> [DATASET=cora]"
 	@echo "       make run SCRIPT=path/to/script.py"
+	@echo ""
+	@echo "Available datasets: cora arxiv products papers100M"
+	@echo "Available implementations: baseline_neo4j baseline_pyg cache_multsampler cache_neo4j"
+	@echo "                           multsampler neo4j_udp neo4j_udp_sign saint_neo4j saint_pyg distributed"
 
 run:
 	@if [ -z "$(SCRIPT)" ]; then \
@@ -27,30 +31,25 @@ run:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) $(SCRIPT)
 
 $(IMPLS):
-	@if [ -d "$(GNNSRC)/$@" ]; then \
-		PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/$@/$(DATASET).py; \
-	else \
-		echo "Unknown target '$@'. Use 'make help' for usage."; \
-		exit 1; \
-	fi
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset $(DATASET) --implementation $@
 
 neo4j_udp_sign:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/neo4j_udp/cora_sign.py
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset $(DATASET) --implementation neo4j_udp_sign
 
 baseline_db:
 	@$(MAKE) baseline_neo4j DATASET=$(DATASET)
 
 cache_multsampler_cora:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/cache_multsampler/cora.py
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset cora --implementation cache_multsampler
 
 cache_multsampler_arxiv:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/cache_multsampler/arxiv.py
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset arxiv --implementation cache_multsampler
 
 cache_neo4j_cora:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/cache_neo4j/cora.py
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset cora --implementation cache_neo4j
 
 cache_neo4j_arxiv:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) $(GNNSRC)/cache_neo4j/arxiv.py
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset arxiv --implementation cache_neo4j
 
 sampler_comparison:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) src/comparison_experiments/sampler_comparison/run_experiment.py

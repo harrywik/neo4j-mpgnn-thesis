@@ -1,0 +1,19 @@
+{
+  "in_memory": true,
+  "feature_store": null,
+  "graph_store": null,
+  "sampler": null,
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "Trainer",
+  "nodeloader_args": {
+    "pickle_safe": false,
+    "num_workers": 0,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": false,
+    "pin_memory": false
+  },
+  "num_neighbors": [10, 5]
+}
