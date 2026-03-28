@@ -6,7 +6,7 @@ DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp
 NBR_RUNS ?= 3
-EXPERIMENTS := sampler_comparison compare_implementations
+EXPERIMENTS := sampler_comparison compare_implementations compare_datasets
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
@@ -26,6 +26,8 @@ help:
 	@echo ""
 	@echo "Compare multiple implementations:"
 	@echo "  make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler\" [DATASET=cora] [NBR_RUNS=3]"
+	@echo "Compare one implementation across datasets:"
+	@echo "  make compare_datasets IMPL_CMP=baseline_pyg DATASETS_CMP=\"cora arxiv\" [NBR_RUNS=3]"
 
 run:
 	@if [ -z "$(SCRIPT)" ]; then \
@@ -66,6 +68,20 @@ compare_implementations:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.compare_implementations \
 		--dataset $(DATASET) \
 		--implementations $(IMPLS_CMP) \
+		--nbr_runs $(NBR_RUNS)
+
+compare_datasets:
+	@if [ -z "$(IMPL_CMP)" ]; then \
+		echo "IMPL_CMP is required, e.g. IMPL_CMP=baseline_pyg"; \
+		exit 1; \
+	fi
+	@if [ -z "$(DATASETS_CMP)" ]; then \
+		echo "DATASETS_CMP is required, e.g. DATASETS_CMP=\"cora arxiv products\""; \
+		exit 1; \
+	fi
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.compare_datasets \
+		--implementation $(IMPL_CMP) \
+		--datasets $(DATASETS_CMP) \
 		--nbr_runs $(NBR_RUNS)
 
 ingest_cora:
