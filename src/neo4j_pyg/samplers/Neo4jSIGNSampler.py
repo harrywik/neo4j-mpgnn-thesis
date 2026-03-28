@@ -1,6 +1,6 @@
 """Neo4jSIGNSampler — SIGN-style multi-hop aggregation via the Java UDP.
 
-Calls ``custom.gcn.signAggregate`` which returns one row per (seed, hop):
+Calls ``gnnProcedures.aggregation.sign.multiHop`` which returns one row per (seed, hop):
   - hop 0: seed's own feature vector
   - hop 1: mean of 1-hop incoming neighbours
   - hop k: mean of k-hop shell
@@ -25,7 +25,7 @@ from benchmarking_tools import Measurer
 
 
 class Neo4jSIGNSampler(BaseSampler):
-    """Calls ``custom.gcn.signAggregate`` for each mini-batch.
+    """Calls ``gnnProcedures.aggregation.sign.multiHop`` for each mini-batch.
 
     Parameters
     ----------
@@ -76,7 +76,7 @@ class Neo4jSIGNSampler(BaseSampler):
         self.pending_sign: Dict[int, List[np.ndarray]] = {}
 
         self._cypher = (
-            "CALL custom.gcn.signAggregate("
+            "CALL gnnProcedures.aggregation.sign.multiHop("
             "   $seed_ids,"
             "   $node_id_key,"
             "   $feature_key,"

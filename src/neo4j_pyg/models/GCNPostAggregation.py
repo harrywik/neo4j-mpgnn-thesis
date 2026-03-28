@@ -19,7 +19,7 @@ class GCNPostAggregation(nn.Module):
 
 class MLPPostAggregation(nn.Module):
     """GCN model for the Option-D hybrid: neighbour aggregation was already
-    performed server-side by the ``custom.gcn.aggregateNeighbors`` Java UDP.
+    performed server-side by the ``gnnProcedures.aggregation.neighbor.mean`` Java UDP.
 
     Input ``x`` is the *pre-aggregated* feature matrix (one row per seed node,
     already the mean of that node's 1-hop neighbours).  No ``GCNConv`` layers

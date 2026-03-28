@@ -10,8 +10,10 @@ Usage
 Each implementation is run ``nbr_runs`` times.  All results land under a shared
 ``experiment_results/results/run_N_YYYY-MM-DD/`` directory, with one sub-directory
 per implementation that contains ``run_0/``, ``run_1/``, … sub-dirs inside it.
-After all runs complete, comparison plots with every implementation on the same
-axes are written to the parent directory.
+After each implementation completes, its own averaged plots and summaries are
+generated in that implementation directory. After all runs complete,
+comparison plots with every implementation on the same axes are written to the
+parent directory.
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ if str(SRC_DIR) not in sys.path:
 from training.Main import (
     load_configs,
     _build_common_kwargs,
+    _aggregate_multi_run,
     _create_multi_run_parent_dir,
     _make_graph_store,
     _make_sampler,
@@ -160,6 +163,8 @@ def main() -> None:
             run_dir = impl_dir / f"run_{run_i}"
             run_dir.mkdir(parents=True, exist_ok=True)
             _run_one(dataset_cfg, impl_cfg, run_dir, driver, common_kwargs)
+
+        _aggregate_multi_run(impl_dir, args.nbr_runs, impl_name)
 
         if driver is not None:
             try:
