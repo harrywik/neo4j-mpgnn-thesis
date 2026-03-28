@@ -59,6 +59,7 @@ def _build_common_kwargs(dataset_cfg: dict, uri: str, user: str, password: str) 
         "feature_property":    dataset_cfg["feature_property"],
         "feature_property_type": dataset_cfg["feature_property_type"],
         "target_property":     dataset_cfg["target_property"],
+        "edge_type":           dataset_cfg.get("edge_type", ""),
         "nodeid_property":     dataset_cfg["nodeid_property"],
         "split_property_name": dataset_cfg["split_property_name"],
         "split_property_type": dataset_cfg["split_property_type"],

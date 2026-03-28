@@ -1,8 +1,10 @@
 {
-  "needs_sampler_in_fs": true,
   "feature_store": {
     "class_name": "Neo4jUDPFeatureStore",
-    "connection_mode": "driver"
+    "connection_mode": "driver",
+    "extra_kwargs": {
+      "max_neighbors": 10
+    }
   },
   "graph_store": {
     "class_name": "Neo4SingleGS",
