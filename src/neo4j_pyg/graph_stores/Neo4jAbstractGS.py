@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import torch
 from typing import Optional
 from torch_geometric.data.graph_store import GraphStore, EdgeAttr
@@ -159,8 +160,8 @@ class Neo4jAbstractGS(GraphStore, ABC):
 
         return records[0] if records else None
     
-    def fetch_aggregated_neighborhood(self, query: str, kwargs: dict) -> dict | None:
-        """Execute a neighborhood-aggregation query and return its single result record.
+    def fetch_aggregated_features(self, query: str, kwargs: dict) -> dict[int, np.ndarray]:
+        """Execute an aggregation query and return parsed features by node id.
 
         Used by :class:`Neo4jAggregationSampler`, whose Cypher query returns one
         record per seed node containing the seed's global ID and its aggregated
@@ -172,7 +173,8 @@ class Neo4jAbstractGS(GraphStore, ABC):
         :class:`~benchmarking_tools.QueryProfileAccumulator` is attached, the
         plan profile is accumulated for later averaging.
 
-        Returns the record dict, or ``None`` if the query produced no rows.
+        Returns a mapping ``{nodeId: aggregated_features}`` where each feature
+        vector is converted to ``np.float32``.
         """
         with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
             t_send = time.monotonic()
@@ -188,12 +190,28 @@ class Neo4jAbstractGS(GraphStore, ABC):
         total_fetch_ms = (t_all_records - t_send) * 1000
 
         if self.measurer is not None:
+            self.measurer.log_event("udp_agg_ms", total_fetch_ms)
+            self.measurer.log_event("udp_records", len(records))
             self.measurer.log_event("agg_fetch_ms", total_fetch_ms)
 
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
 
-        return records[0] if records else None
+        pending_agg: dict[int, np.ndarray] = {}
+        for rec in records:
+            nid = int(rec["nodeId"])
+            feats = rec["aggregatedFeatures"]
+            if feats:
+                pending_agg[nid] = np.array(feats, dtype=np.float32)
+
+        return pending_agg
+
+    def fetch_aggregated_neighborhood(self, query: str, kwargs: dict) -> dict[int, np.ndarray]:
+        """Backward-compatible wrapper for aggregation queries.
+
+        Prefer :meth:`fetch_aggregated_features` for new code.
+        """
+        return self.fetch_aggregated_features(query, kwargs)
 
     def build_topo_etl(
         self, record: dict | None, fallback_seeds: torch.Tensor
