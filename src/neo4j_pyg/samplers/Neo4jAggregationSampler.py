@@ -117,27 +117,7 @@ class Neo4jAggregationSampler(BaseSampler):
             "max_neighbors": self.max_neighbors,
         }
 
-        driver = self.graph_store._get_driver()
-        db = self.graph_store.database_name
-
-        with driver.session(database=db, fetch_size=-1) as session:
-            t_send = time.monotonic()
-            result = session.run(self._cypher, **params)
-            records = list(result)
-            t_recv = time.monotonic()
-            result.consume()
-
-        if self.measurer is not None:
-            self.measurer.log_event("udp_agg_ms", (t_recv - t_send) * 1000)
-            self.measurer.log_event("udp_records", len(records))
-
-        # Parse results and populate pending_agg cache.
-        self.pending_agg = {}
-        for rec in records:
-            nid = int(rec["nodeId"])
-            feats = rec["aggregatedFeatures"]
-            if feats:
-                self.pending_agg[nid] = np.array(feats, dtype=np.float32)
+        self.pending_agg = self.graph_store.fetch_aggregated_features(self._cypher, params)
 
         if self.measurer is not None:
             self.measurer.log_event("end_sampling", 1)
