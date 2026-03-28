@@ -162,6 +162,7 @@ def aggregate_runs(
 
         # Sub-phase micro-timer scalars (mean ms per batch/call)
         for key in (
+            "topo_fetch_ms",
             "topo_query_sent_ms", "topo_first_record_ms",
             "topo_transfer_ms", "topo_etl_ms",
             "feat_x_query_sent_ms", "feat_x_first_record_ms",

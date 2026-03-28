@@ -2,7 +2,7 @@
 
 Design (Option D hybrid)
 ------------------------
-A single Cypher call invokes ``custom.gcn.aggregateNeighbors`` which traverses
+A single Cypher call invokes ``gnnProcedures.aggregation.neighbor.mean`` which traverses
 the graph in the Neo4j JVM, computes the mean of incoming-neighbour feature
 vectors for each seed node, and streams back ``(nodeId, aggregatedFeatures)``.
 
@@ -30,7 +30,7 @@ from benchmarking_tools import Measurer
 
 
 class Neo4jAggregationSampler(BaseSampler):
-    """Calls the ``custom.gcn.aggregateNeighbors`` Java UDP for each mini-batch.
+    """Calls the ``gnnProcedures.aggregation.neighbor.mean`` Java UDP for each mini-batch.
 
     Parameters
     ----------
@@ -80,7 +80,7 @@ class Neo4jAggregationSampler(BaseSampler):
         self.pending_agg: Dict[int, np.ndarray] = {}
 
         self._cypher = (
-            "CALL custom.gcn.aggregateNeighbors("
+            "CALL gnnProcedures.aggregation.neighbor.mean("
             "   $seed_ids,"
             "   $node_id_key,"
             "   $feature_key,"
