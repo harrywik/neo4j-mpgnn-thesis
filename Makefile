@@ -5,7 +5,8 @@ GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp
-EXPERIMENTS := sampler_comparison
+NBR_RUNS ?= 3
+EXPERIMENTS := sampler_comparison compare_implementations
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
@@ -22,6 +23,9 @@ help:
 	@echo "Available datasets: cora arxiv products papers100M"
 	@echo "Available implementations: baseline_neo4j baseline_pyg cache_multsampler cache_neo4j"
 	@echo "                           multsampler neo4j_udp neo4j_udp_sign saint_neo4j saint_pyg distributed"
+	@echo ""
+	@echo "Compare multiple implementations:"
+	@echo "  make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler\" [DATASET=cora] [NBR_RUNS=3]"
 
 run:
 	@if [ -z "$(SCRIPT)" ]; then \
@@ -53,6 +57,16 @@ cache_neo4j_arxiv:
 
 sampler_comparison:
 	@DATASET=$(DATASET) PYTHONPATH=$(PYTHONPATH) $(PY) src/comparison_experiments/sampler_comparison/run_experiment.py
+
+compare_implementations:
+	@if [ -z "$(IMPLS_CMP)" ]; then \
+		echo "IMPLS_CMP is required, e.g. make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler baseline_pyg\" DATASET=cora NBR_RUNS=3"; \
+		exit 1; \
+	fi
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.compare_implementations \
+		--dataset $(DATASET) \
+		--implementations $(IMPLS_CMP) \
+		--nbr_runs $(NBR_RUNS)
 
 ingest_cora:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/cora/new_ingest.py
