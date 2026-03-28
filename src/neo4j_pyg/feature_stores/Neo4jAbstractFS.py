@@ -69,6 +69,22 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             f"RETURN nid AS id, n.{self.target_property} AS value"
         )
 
+    @cached_property
+    def _query_udp_agg_x(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        return (
+            f"{prefix}CALL gnnProcedures.aggregation.neighbor.mean("
+            f"$seed_ids,"
+            f"$node_id_key,"
+            f"$feature_key,"
+            f"$feature_type,"
+            f"$node_label,"
+            f"$edge_type,"
+            f"$max_neighbors"
+            f") YIELD nodeId, aggregatedFeatures "
+            f"RETURN nodeId, aggregatedFeatures"
+        )
+
     def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
         """Override the base-class default to fetch features and labels together.
 
@@ -244,6 +260,53 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             self.measurer.log_event("feat_x_etl_parse_ms", (time.monotonic() - t_etl) * 1000)
 
         return fetched_nids, feat_matrix, y_array
+
+    def _get_aggregated_x_from_db(
+        self,
+        nids: List[int],
+        *,
+        max_neighbors: int,
+        edge_type: str = "",
+    ) -> Dict[int, np.ndarray]:
+        """Fetch aggregated feature vectors for *nids* via the UDP procedure."""
+        with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
+            t_send = time.monotonic()
+            result = session.run(
+                self._query_udp_agg_x,
+                seed_ids=nids,
+                node_id_key=self.nodeid_property,
+                feature_key=self.feature_property,
+                feature_type=self.feature_property_type,
+                node_label=self.node_label or "",
+                edge_type=edge_type,
+                max_neighbors=max_neighbors,
+            )
+            records = list(result)
+            t_all_records = time.monotonic()
+            summary = result.consume()
+
+        total_feat_fetch_ms = (t_all_records - t_send) * 1000
+
+        if self.measurer is not None:
+            self.measurer.log_event("remote_feature_recieved", 1)
+            self.measurer.log_event("feat_fetch_ms", total_feat_fetch_ms)
+            self.measurer.log_event("udp_agg_ms", total_feat_fetch_ms)
+            self.measurer.log_event("udp_records", len(records))
+
+        if self.profile_accumulator is not None:
+            self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
+
+        result_map: Dict[int, np.ndarray] = {}
+        t_etl_start = time.monotonic()
+        for rec in records:
+            feats = rec["aggregatedFeatures"]
+            if feats:
+                result_map[int(rec["nodeId"])] = np.asarray(feats, dtype=np.float32)
+
+        if self.measurer is not None:
+            self.measurer.log_event("feat_x_etl_parse_ms", (time.monotonic() - t_etl_start) * 1000)
+
+        return result_map
 
 
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
