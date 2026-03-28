@@ -8,6 +8,7 @@ import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Random;
 import java.util.Set;
@@ -36,7 +37,7 @@ import java.util.stream.Stream;
  *
  * <h3>Usage (Cypher)</h3>
  * <pre>{@code
- * CALL custom.gcn.aggregateNeighbors(
+ * CALL gnnProcedures.aggregation.neighbor.mean(
  *     $seed_ids,                -- List<Long>  application node IDs
  *     "id",                     -- property key that holds the node ID
  *     "embedding_bytes",        -- feature property key
@@ -96,11 +97,125 @@ public class NeighborAggregation {
         }
     }
 
+    /**
+     * Result row for {@link #neighborSample}: one record containing full sampled
+     * topology for a mini-batch.
+     *
+     * <p>Field names intentionally match the existing Python ETL contract:
+     * {@code ordered_nodes} and {@code edge_pairs}.
+     */
+    public static class NeighborSampleResult {
+        /** Global node IDs in encounter order: seeds first, then hop-1 new nodes, ... */
+        public final List<Long> ordered_nodes;
+        /** Sampled edges as [src_global_id, dst_global_id] pairs. */
+        public final List<List<Long>> edge_pairs;
+
+        public NeighborSampleResult(List<Long> ordered_nodes, List<List<Long>> edge_pairs) {
+            this.ordered_nodes = ordered_nodes;
+            this.edge_pairs = edge_pairs;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Procedure
     // -------------------------------------------------------------------------
 
-    @Procedure(name = "custom.gcn.aggregateNeighbors", mode = Mode.READ)
+    @Procedure(name = "gnnProcedures.sampling.neighbor.sample", mode = Mode.READ)
+    @Description(
+        "PyG-like homogeneous multi-hop neighbor sampling over incoming edges. "
+        + "Returns one row with ordered_nodes and edge_pairs."
+    )
+    public Stream<NeighborSampleResult> neighborSample(
+            @Name("seedIds") List<Long> seedIds,
+            @Name("nodeIdKey") String nodeIdKey,
+            @Name("nodeLabel") String nodeLabel,
+            @Name("numNeighbors") List<Long> numNeighbors,
+            @Name(value = "edgeType", defaultValue = "") String edgeType,
+            @Name(value = "randomSeed", defaultValue = "42") Long randomSeed
+    ) {
+        if (seedIds == null || seedIds.isEmpty()) {
+            return Stream.of(new NeighborSampleResult(new ArrayList<>(), new ArrayList<>()));
+        }
+        if (nodeLabel == null || nodeLabel.isEmpty()) {
+            throw new IllegalArgumentException("nodeLabel must be non-empty");
+        }
+
+        Label label = Label.label(nodeLabel);
+        boolean hasEdgeType = edgeType != null && !edgeType.isEmpty();
+        RelationshipType relType = hasEdgeType ? RelationshipType.withName(edgeType) : null;
+        Random rng = new Random(randomSeed == null ? 42L : randomSeed);
+
+        // Encounter-order node set mirrors pyg-lib Mapper insertion order.
+        LinkedHashSet<Long> visited = new LinkedHashSet<>();
+        List<Node> frontier = new ArrayList<>();
+
+        // Seed initialization keeps user-provided order.
+        for (Long seedId : seedIds) {
+            Node seedNode = tx.findNode(label, nodeIdKey, seedId);
+            if (seedNode == null) {
+                continue;
+            }
+            Long globalSeedId = getNodeIdValue(seedNode, nodeIdKey);
+            if (globalSeedId == null) {
+                continue;
+            }
+            frontier.add(seedNode);
+            visited.add(globalSeedId);
+        }
+
+        List<List<Long>> edgePairs = new ArrayList<>();
+
+        // Hop-wise expansion with per-hop fanout list.
+        List<Long> fanouts = (numNeighbors == null) ? Collections.singletonList(-1L) : numNeighbors;
+        for (Long kObj : fanouts) {
+            long k = (kObj == null) ? -1L : kObj;
+            if (frontier.isEmpty()) {
+                break;
+            }
+
+            List<Node> nextFrontier = new ArrayList<>();
+            LinkedHashSet<Long> nextFrontierIds = new LinkedHashSet<>();
+
+            for (Node src : frontier) {
+                Iterable<Relationship> rels = hasEdgeType
+                        ? src.getRelationships(Direction.INCOMING, relType)
+                        : src.getRelationships(Direction.INCOMING);
+
+                List<Relationship> picked = sampleRelationships(rels, k, rng, label);
+
+                Long srcId = getNodeIdValue(src, nodeIdKey);
+                if (srcId == null) {
+                    continue;
+                }
+
+                for (Relationship rel : picked) {
+                    Node nbr = rel.getStartNode();
+                    Long nbrId = getNodeIdValue(nbr, nodeIdKey);
+                    if (nbrId == null) {
+                        continue;
+                    }
+
+                    // Same orientation used by current Python ETL: [neighbor, seed/src].
+                    List<Long> pair = new ArrayList<>(2);
+                    pair.add(nbrId);
+                    pair.add(srcId);
+                    edgePairs.add(pair);
+
+                    // New-node frontier dedup in first-encounter order.
+                    if (!visited.contains(nbrId) && nextFrontierIds.add(nbrId)) {
+                        nextFrontier.add(nbr);
+                    }
+                }
+            }
+
+            visited.addAll(nextFrontierIds);
+            frontier = nextFrontier;
+        }
+
+        return Stream.of(new NeighborSampleResult(new ArrayList<>(visited), edgePairs));
+    }
+
+    @Procedure(name = "gnnProcedures.aggregation.neighbor.mean", mode = Mode.READ)
     @Description(
         "Mean-aggregate incoming neighbour feature vectors for each seed node. "
         + "Returns one row per seed with the aggregated feature vector."
@@ -171,13 +286,13 @@ public class NeighborAggregation {
      *
      * <h3>Usage</h3>
      * <pre>{@code
-     * CALL custom.gcn.signAggregate(
+    * CALL gnnProcedures.aggregation.sign.multiHop(
      *     $seed_ids, "id", "embedding_bytes", "byte[]", "Paper", "CITES", 2, 10
      * ) YIELD nodeId, hop, aggregatedFeatures
      * RETURN nodeId, hop, aggregatedFeatures ORDER BY nodeId, hop
      * }</pre>
      */
-    @Procedure(name = "custom.gcn.signAggregate", mode = Mode.READ)
+    @Procedure(name = "gnnProcedures.aggregation.sign.multiHop", mode = Mode.READ)
     @Description(
         "SIGN multi-hop aggregation. Returns one row per (seed, hop) with the mean-aggregated "
         + "feature vector for nodes at that hop distance. hop=0 is the seed's own features."
@@ -256,6 +371,57 @@ public class NeighborAggregation {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /** Read a numeric node ID property as Long. */
+    private Long getNodeIdValue(Node node, String nodeIdKey) {
+        Object id = node.getProperty(nodeIdKey, null);
+        if (id instanceof Number) {
+            return ((Number) id).longValue();
+        }
+        return null;
+    }
+
+    /**
+     * Sample up to {@code k} relationships without replacement.
+     *
+     * <p>Applies optional neighbour label filtering before sampling so fanout is
+     * computed over the same candidate set as the Cypher sampler.
+     */
+    private List<Relationship> sampleRelationships(
+            Iterable<Relationship> rels,
+            long k,
+            Random rng,
+            Label requiredNeighborLabel
+    ) {
+        List<Relationship> reservoir = new ArrayList<>();
+        long seen = 0L;
+
+        for (Relationship rel : rels) {
+            Node nbr = rel.getStartNode();
+            if (requiredNeighborLabel != null && !nbr.hasLabel(requiredNeighborLabel)) {
+                continue;
+            }
+
+            seen++;
+
+            if (k < 0) {
+                reservoir.add(rel);
+                continue;
+            }
+
+            int kk = (int) Math.min(k, Integer.MAX_VALUE);
+            if (reservoir.size() < kk) {
+                reservoir.add(rel);
+            } else if (kk > 0) {
+                long slot = (long) (rng.nextDouble() * seen);
+                if (slot < kk) {
+                    reservoir.set((int) slot, rel);
+                }
+            }
+        }
+
+        return reservoir;
+    }
 
     /**
      * Reservoir-sample up to {@code k} neighbour nodes from a relationship iterable.

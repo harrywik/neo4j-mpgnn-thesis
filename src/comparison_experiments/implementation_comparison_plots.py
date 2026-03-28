@@ -18,12 +18,14 @@ Entry point:
 from __future__ import annotations
 
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.colors as mcolors
+from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
@@ -232,60 +234,169 @@ def plot_comparison_best_accuracy(
 # Sub-phase latency
 # ---------------------------------------------------------------------------
 
-_SUBPHASE_SEGMENTS = [
-    ("topo_fetch_ms",    "Topology: fetch (wall)"),
-    ("topo_etl_ms",      "Topology: Python ETL"),
-    ("feat_x_etl_ms",    "Features: Python ETL"),
-    ("feat_x_transfer_ms", "Features: transfer + driver"),
-]
+_C_DRIVER = "#D9D9D9"
+_C_ETL = "#F0F0F0"
+
+
+def _avg_query_profile_globals(impl_dir: Path, nbr_runs: int) -> tuple[dict[str, float], dict[str, float]]:
+    sampler_vals: dict[str, list[float]] = defaultdict(list)
+    feat_vals: dict[str, list[float]] = defaultdict(list)
+
+    for run_idx in range(nbr_runs):
+        run_dir = impl_dir / f"run_{run_idx}"
+        qp_path = run_dir / "query_profile.json"
+        if not qp_path.exists():
+            continue
+        try:
+            with open(qp_path) as f:
+                qp = json.load(f)
+        except Exception:
+            continue
+
+        for key, value in qp.get("sampler", {}).get("global", {}).items():
+            if isinstance(value, (int, float)):
+                sampler_vals[key].append(float(value))
+        for key, value in qp.get("feat_x", {}).get("global", {}).items():
+            if isinstance(value, (int, float)):
+                feat_vals[key].append(float(value))
+
+    sampler_avg = {k: float(np.mean(v)) for k, v in sampler_vals.items() if v}
+    feat_avg = {k: float(np.mean(v)) for k, v in feat_vals.items() if v}
+    return sampler_avg, feat_avg
+
+
+def _build_avg_end_to_end_slices(
+    impl_dir: Path,
+    agg: dict[str, Any],
+    nbr_runs: int,
+) -> list[tuple[str, list[tuple[str, float, str]]]]:
+    sampler_avg, feat_avg = _avg_query_profile_globals(impl_dir, nbr_runs)
+    metrics = agg["scalar_means"]
+
+    topo_slices: list[tuple[str, float, str]] = []
+    topo_server = sampler_avg.get("avg_result_consumed_after_ms")
+    topo_startup = sampler_avg.get("avg_query_startup_ms", 0.0)
+    topo_recv = sampler_avg.get("avg_client_recv_ms")
+    topo_etl = metrics.get("topo_etl_ms")
+    if topo_server and topo_server > 0:
+        t_first = float(topo_startup) if topo_startup else 0.0
+        t_rest = float(topo_server) - t_first
+        if t_first > 0:
+            topo_slices.append(("DB time-to-first-row", t_first, "#08519C"))
+        if t_rest > 0:
+            topo_slices.append(("DB server latency (topology)", t_rest, "#2171B5"))
+    if topo_recv and topo_recv > 0:
+        topo_slices.append(("Network + driver recv", float(topo_recv), _C_DRIVER))
+    if topo_etl and topo_etl > 0:
+        topo_slices.append(("Python ETL", float(topo_etl), _C_ETL))
+    if not topo_slices:
+        topo_wall = sampler_avg.get("avg_client_wall_time_ms") or metrics.get("topo_fetch_ms")
+        if topo_wall and topo_wall > 0:
+            topo_slices.append(("Total fetch (wall)", float(topo_wall), "#2171B5"))
+        if topo_etl and topo_etl > 0:
+            topo_slices.append(("Python ETL", float(topo_etl), _C_ETL))
+
+    feat_slices: list[tuple[str, float, str]] = []
+    feat_server = feat_avg.get("avg_result_consumed_after_ms")
+    feat_startup = feat_avg.get("avg_query_startup_ms", 0.0)
+    feat_recv = feat_avg.get("avg_client_recv_ms")
+    feat_etl = metrics.get("feat_x_etl_ms")
+    if feat_server and feat_server > 0:
+        t_first = float(feat_startup) if feat_startup else 0.0
+        t_rest = float(feat_server) - t_first
+        if t_first > 0:
+            feat_slices.append(("DB time-to-first-row", t_first, "#C44E00"))
+        if t_rest > 0:
+            feat_slices.append(("DB server latency (features)", t_rest, "#F58518"))
+    if feat_recv and feat_recv > 0:
+        feat_slices.append(("Network + driver recv", float(feat_recv), _C_DRIVER))
+    if feat_etl and feat_etl > 0:
+        feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
+    if not feat_slices:
+        feat_wall = feat_avg.get("avg_client_wall_time_ms")
+        if feat_wall and feat_wall > 0:
+            feat_slices.append(("Total fetch (wall)", float(feat_wall), "#F58518"))
+        if feat_etl and feat_etl > 0:
+            feat_slices.append(("Python ETL", float(feat_etl), _C_ETL))
+
+    rows: list[tuple[str, list[tuple[str, float, str]]]] = []
+    if topo_slices:
+        rows.append(("Topology", topo_slices))
+    if feat_slices:
+        rows.append(("Features", feat_slices))
+    return rows
 
 
 def plot_comparison_subphase_latency(
-    impl_data: dict[str, dict], output_dir: Path
+    impl_data: dict[str, dict],
+    impl_dirs: dict[str, Path],
+    nbr_runs: int,
+    output_dir: Path,
 ) -> None:
-    """Grouped horizontal bars: one colour per implementation, one group per sub-phase segment."""
-    impl_names = list(impl_data.keys())
+    """Averaged end-to-end-style latency breakdown for all implementations."""
+    grouped_rows: list[tuple[str, list[tuple[str, list[tuple[str, float, str]]]]]] = []
+    for impl_name, agg in impl_data.items():
+        impl_rows = _build_avg_end_to_end_slices(impl_dirs[impl_name], agg, nbr_runs)
+        if impl_rows:
+            grouped_rows.append((impl_name, impl_rows))
 
-    # Determine which segments have at least one non-null value
-    segments_with_data = []
-    for seg_key, seg_label in _SUBPHASE_SEGMENTS:
-        vals = [
-            (float(data["scalar_means"][seg_key])
-             if data["scalar_means"].get(seg_key) is not None else None)
-            for data in impl_data.values()
-        ]
-        if any(v is not None for v in vals):
-            segments_with_data.append((seg_key, seg_label, vals))
-
-    if not segments_with_data:
+    if not grouped_rows:
         return
 
-    n_segs = len(segments_with_data)
-    n_impls = len(impl_names)
-    bar_h = 0.8 / n_impls
-    y_base = np.arange(n_segs, dtype=float)
+    n_rows = sum(len(impl_rows) for _, impl_rows in grouped_rows)
+    bar_height = 0.52
+    group_gap = 0.58
 
-    fig, ax = plt.subplots(figsize=(8, max(3, n_segs * 1.1 + 1.5)))
-    for impl_idx, (name, data) in enumerate(impl_data.items()):
-        color = _color(impl_idx)
-        offset = (impl_idx - (n_impls - 1) / 2.0) * bar_h
-        vals = [row[2][impl_idx] for row in segments_with_data]
-        vals_plot = [v if v is not None else 0.0 for v in vals]
-        bars = ax.barh(y_base + offset, vals_plot, bar_h * 0.9, label=name, color=color)
-        for bar, v in zip(bars, vals):
-            if v is not None and v > 0:
-                ax.text(
-                    bar.get_width(), bar.get_y() + bar.get_height() / 2,
-                    f" {v:.2f}", va="center", ha="left", fontsize=7, color=color,
-                )
+    fig, ax = plt.subplots(figsize=(11, max(3.0, n_rows * 0.9 + len(grouped_rows) * 0.35)))
+    yticks: list[float] = []
+    ylabels: list[str] = []
+    legend_handles: dict[str, tuple[str, str]] = {}
+    max_total = 0.0
+    current_y = 0.0
 
-    ax.set_yticks(y_base)
-    ax.set_yticklabels([row[1] for row in segments_with_data], fontsize=9)
+    for impl_name, impl_rows in grouped_rows:
+        for stage_idx, (stage_name, slices) in enumerate(impl_rows):
+            row_y = current_y + stage_idx * bar_height
+            left = 0.0
+            total = sum(width for _, width, _ in slices)
+            max_total = max(max_total, total)
+            for seg_label, width, color in slices:
+                if width <= 0:
+                    continue
+                ax.barh(row_y, width, left=left, height=bar_height, color=color,
+                        edgecolor="white", linewidth=0.5)
+                if total > 0 and width / total > 0.08:
+                    ax.text(
+                        left + width / 2,
+                        row_y,
+                        f"{width:.1f}",
+                        ha="center",
+                        va="center",
+                        fontsize=7,
+                        color="white" if color not in (_C_DRIVER, _C_ETL) else "#333333",
+                        fontweight="bold",
+                    )
+                left += width
+                legend_handles[seg_label] = (seg_label, color)
+
+            ax.text(left, row_y, f" {left:.1f} ms", ha="left", va="center", fontsize=8)
+            yticks.append(row_y)
+            ylabels.append(f"{impl_name} | {stage_name}")
+
+        current_y += len(impl_rows) * bar_height + group_gap
+
+    ax.set_yticks(yticks)
+    ax.set_yticklabels(ylabels, fontsize=9)
     ax.invert_yaxis()
-    ax.set_xlabel("Mean ms per batch")
-    ax.set_title("Sub-phase latency comparison")
-    ax.legend(fontsize=9, loc="lower right")
+    ax.set_xlabel("mean ms per batch (avg across runs)")
+    ax.set_title("End-to-end latency breakdown by implementation")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
+    if max_total > 0:
+        ax.set_xlim(0, max_total * 1.22)
+
+    legend_patches = [Patch(facecolor=color, label=label, edgecolor="white")
+                      for label, color in legend_handles.values()]
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
     fig.tight_layout()
     fig.savefig(output_dir / "comparison_subphase_latency.png", dpi=150)
     plt.close(fig)
@@ -542,7 +653,7 @@ def plot_all_comparisons(
     plot_comparison_phase_summary(impl_data, output_dir)
     plot_comparison_throughput(impl_data, output_dir)
     plot_comparison_best_accuracy(impl_data, output_dir)
-    plot_comparison_subphase_latency(impl_data, output_dir)
+    plot_comparison_subphase_latency(impl_data, impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_bar(impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_timeline(impl_dirs, output_dir)
 

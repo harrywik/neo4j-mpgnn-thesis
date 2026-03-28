@@ -34,7 +34,7 @@ from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
 
 
 class Neo4jUDPFeatureStore(Neo4jAbstractFS):
-    """Feature store backed by the ``custom.gcn.aggregateNeighbors`` UDP.
+    """Feature store backed by the ``gnnProcedures.aggregation.neighbor.mean`` UDP.
 
     Parameters
     ----------

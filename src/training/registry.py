@@ -73,6 +73,7 @@ except ImportError:
 # ---------------------------------------------------------------------------
 from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
 from neo4j_pyg.samplers.Neo4jNeighborSampler import Neo4jNeighborSampler
+from neo4j_pyg.samplers.Neo4jJavaNeighborSampler import Neo4jJavaNeighborSampler
 from neo4j_pyg.samplers.Neo4jAggregationSampler import Neo4jAggregationSampler
 from neo4j_pyg.samplers.Neo4jSIGNSampler import Neo4jSIGNSampler
 from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import (
@@ -84,6 +85,7 @@ from neo4j_pyg.samplers.Neo4jEdgeModeSampler import Neo4jEdgeModeSampler
 SAMPLERS: Dict[str, Type] = {
     "Neo4jSampler": Neo4jSampler,
     "Neo4jNeighborSampler": Neo4jNeighborSampler,
+    "Neo4jJavaNeighborSampler": Neo4jJavaNeighborSampler,
     "Neo4jAggregationSampler": Neo4jAggregationSampler,
     "Neo4jSIGNSampler": Neo4jSIGNSampler,
     "Neo4jGraphSAINTSampler": Neo4jGraphSAINTSampler,
