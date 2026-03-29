@@ -31,7 +31,7 @@
         ]
     },
     "feature_store": "NoCacheFeatureStore",
-    "graph_store": "Neo4SingleGS",
+    "graph_store": "Neo4jSingleGS",
     "dataset": "cora",
     "nodeloader_args": {
         "pickle_safe": false,
