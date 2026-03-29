@@ -1,18 +1,17 @@
 {
-  "_comment": "DEPRECATED — uses PageRankCacheFeatureStore and BaseLineGS from neo4j_pyg/deprecated/",
   "feature_store": {
-    "class_name": "PageRankCacheFeatureStore",
+    "class_name": "Neo4jCachedFS",
     "connection_mode": "driver",
     "extra_kwargs": {
-      "cache_size": 3000
+      "cache_size_GB": 0.005
     }
   },
   "graph_store": {
-    "class_name": "BaseLineGS",
+    "class_name": "Neo4jSingleGS",
     "connection_mode": "driver"
   },
   "sampler": {
-    "class_name": "UniformSampler",
+    "class_name": "Neo4jJavaNeighborSampler",
     "num_neighbors": [10, 5]
   },
   "model": {

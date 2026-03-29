@@ -3,7 +3,7 @@
     "class_name": "Neo4jCachedFS",
     "connection_mode": "uri",
     "extra_kwargs": {
-      "cache_size": 3000
+      "cache_size_GB": 0.02
     }
   },
   "graph_store": {
