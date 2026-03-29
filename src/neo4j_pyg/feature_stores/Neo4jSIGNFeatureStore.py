@@ -27,7 +27,7 @@ from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
 
 
 class Neo4jSIGNFeatureStore(Neo4jAbstractFS):
-    """Feature store backed by the ``custom.gcn.signAggregate`` UDP.
+    """Feature store backed by the ``gnnProcedures.aggregation.sign.multiHop`` UDP.
 
     Parameters
     ----------

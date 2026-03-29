@@ -69,6 +69,33 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             f"RETURN nid AS id, n.{self.target_property} AS value"
         )
 
+    def _query_both_params(self, nids: List[int], x_attr: TensorAttr) -> Dict[str, object]:
+        return {"node_ids": nids}
+
+    def _query_value_params(self, nids: List[int], attr: TensorAttr) -> Dict[str, object]:
+        return {"node_ids": nids}
+
+    def _decode_feature_matrix(self, records: List[object], field_name: str) -> np.ndarray:
+        fpt = self.feature_property_type
+        if fpt == "byte[]":
+            return np.stack([
+                np.frombuffer(memoryview(rec[field_name]), dtype=np.float32)
+                for rec in records
+            ])
+        if fpt == "f64[]":
+            return np.asarray([rec[field_name] for rec in records], dtype=np.float32)
+        raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
+
+    def _log_extra_feature_fetch_metrics(
+        self,
+        records: List[object],
+        total_fetch_ms: float,
+        *,
+        is_label: bool,
+        paired: bool,
+    ) -> None:
+        return None
+
     def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
         """Override the base-class default to fetch features and labels together.
 
@@ -105,6 +132,8 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("cache_hit", len(cached_x) + len(cached_y))
             self.measurer.log_event("cache_miss", len(missing))
+
+        if missing and self.measurer is not None:
             self.measurer.log_event("remote_feature_fetch", 1)
 
         feat_dim = self._feature_dim
@@ -183,7 +212,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         """
         with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
-            result = session.run(self._query_both, node_ids=nids)
+            result = session.run(self._query_both, **self._query_both_params(nids, x_attr))
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
@@ -199,6 +228,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_ms)
+            self._log_extra_feature_fetch_metrics(records, total_ms, is_label=False, paired=True)
 
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
@@ -211,18 +241,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             empty_feats = np.empty((0, self._feature_dim or 0), dtype=np.float32)
             return [], empty_feats, np.empty(0, dtype=np.int64)
 
-        fpt = self.feature_property_type
-        if fpt == "byte[]":
-            feat_matrix = np.stack([
-                np.frombuffer(memoryview(rec["feature"]), dtype=np.float32)
-                for rec in records
-            ])
-        elif fpt == "f64[]":
-            feat_matrix = np.asarray(
-                [rec["feature"] for rec in records], dtype=np.float32
-            )
-        else:
-            raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
+        feat_matrix = self._decode_feature_matrix(records, "feature")
 
         fetched_nids: List[int] = []
         y_array = np.empty(len(records), dtype=np.int64)
@@ -245,7 +264,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         return fetched_nids, feat_matrix, y_array
 
-
     def _get_tensor(self, attr: TensorAttr) -> FeatureTensorType:
         self.t_feat_etl_start = time.monotonic()
         node_ids: list = attr.index.tolist()
@@ -263,6 +281,8 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("cache_hit", len(data_map))
             self.measurer.log_event("cache_miss", len(missing_indices))
+
+        if missing_indices and self.measurer is not None:
             self.measurer.log_event("remote_feature_fetch", 1)
 
         if missing_indices:
@@ -304,7 +324,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
-            result = session.run(query, node_ids=nids)
+            result = session.run(query, **self._query_value_params(nids, attr))
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
@@ -314,6 +334,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_feat_fetch_ms)
+            self._log_extra_feature_fetch_metrics(records, total_feat_fetch_ms, is_label=is_label, paired=False)
 
         if self.profile_accumulator is not None:
             source = "feat_y" if is_label else "feat_x"
@@ -338,18 +359,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 else:
                     result_map[nid] = int(val)
         else:
-            fpt = self.feature_property_type
-            if fpt == "byte[]":
-                feat_matrix = np.stack([
-                    np.frombuffer(memoryview(rec["value"]), dtype=np.float32)
-                    for rec in records
-                ])
-            elif fpt == "f64[]":
-                feat_matrix = np.asarray(
-                    [rec["value"] for rec in records], dtype=np.float32
-                )
-            else:
-                raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
+            feat_matrix = self._decode_feature_matrix(records, "value")
 
             for i, rec in enumerate(records):
                 result_map[rec["id"]] = feat_matrix[i]

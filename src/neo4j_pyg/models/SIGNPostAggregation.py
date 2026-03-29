@@ -11,7 +11,7 @@ class SIGNPostAggregation(nn.Module):
     """SIGN model for the UDP hybrid with k-hop neighbourhood aggregation.
 
     Input ``x`` is the concatenation of per-hop mean-aggregated feature vectors
-    produced by ``custom.gcn.signAggregate``:
+    produced by ``gnnProcedures.aggregation.sign.multiHop``:
 
         x = [x_0 || x_1 || ... || x_k]   shape: (N, feature_dim * (hops + 1))
 

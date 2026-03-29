@@ -162,6 +162,7 @@ def aggregate_runs(
 
         # Sub-phase micro-timer scalars (mean ms per batch/call)
         for key in (
+            "topo_fetch_ms",
             "topo_query_sent_ms", "topo_first_record_ms",
             "topo_transfer_ms", "topo_etl_ms",
             "feat_x_query_sent_ms", "feat_x_first_record_ms",
@@ -201,7 +202,8 @@ def aggregate_runs(
              for t, a in time_curves]
         )
         time_mean = np.nanmean(interp_curves, axis=0)
-        time_std = np.nanstd(interp_curves, axis=0)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            time_std = np.nanstd(interp_curves, axis=0, ddof=min(1, len(time_curves) - 1))
     else:
         time_grid = np.array([])
         time_mean = time_std = np.array([])
@@ -278,7 +280,7 @@ def plot_accuracy_vs_epochs(
     ax.legend(fontsize=9)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(out_dir / "comparison_accuracy_vs_epochs.png", dpi=150)
+    fig.savefig(out_dir / "accuracy_epochs.png", dpi=150)
     plt.close(fig)
 
 
@@ -306,7 +308,7 @@ def plot_accuracy_vs_time(
     ax.legend(fontsize=9)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
-    fig.savefig(out_dir / "comparison_accuracy_vs_time.png", dpi=150)
+    fig.savefig(out_dir / "accuracy_time.png", dpi=150)
     plt.close(fig)
 
 
