@@ -68,10 +68,16 @@ public class NeighborAggregation {
         public final Long nodeId;
         /** Mean-aggregated feature vector across all sampled neighbours. */
         public final List<Double> aggregatedFeatures;
+        /** Optional raw node label property value. */
+        public final Object label;
+        /** Optional raw feature vector from the seed node itself. */
+        public final List<Double> nodeFeatures;
 
-        public AggResult(Long nodeId, List<Double> aggregatedFeatures) {
+        public AggResult(Long nodeId, List<Double> aggregatedFeatures, Object label, List<Double> nodeFeatures) {
             this.nodeId = nodeId;
             this.aggregatedFeatures = aggregatedFeatures;
+            this.label = label;
+            this.nodeFeatures = nodeFeatures;
         }
     }
 
@@ -218,7 +224,7 @@ public class NeighborAggregation {
     @Procedure(name = "gnnProcedures.aggregation.neighbor.mean", mode = Mode.READ)
     @Description(
         "Mean-aggregate incoming neighbour feature vectors for each seed node. "
-        + "Returns one row per seed with the aggregated feature vector."
+        + "Returns one row per seed with aggregated features and optional label/node features."
     )
     public Stream<AggResult> aggregateNeighbors(
             @Name("seedIds")                          List<Long> seedIds,
@@ -227,8 +233,17 @@ public class NeighborAggregation {
             @Name("featureType")                      String featureType,
             @Name("nodeLabel")                        String nodeLabel,
             @Name(value = "edgeType",       defaultValue = "") String edgeType,
-            @Name(value = "maxNeighbors",   defaultValue = "-1") Long maxNeighbors
+            @Name(value = "maxNeighbors",   defaultValue = "-1") Long maxNeighbors,
+            @Name(value = "targetKey",      defaultValue = "") String targetKey,
+            @Name(value = "returnNode",     defaultValue = "false") Boolean returnNode,
+            @Name(value = "returnLabel",    defaultValue = "false") Boolean returnLabel
     ) {
+        boolean includeNode = Boolean.TRUE.equals(returnNode);
+        boolean includeLabel = Boolean.TRUE.equals(returnLabel);
+        if (includeLabel && (targetKey == null || targetKey.isEmpty())) {
+            throw new IllegalArgumentException("targetKey must be non-empty when returnLabel=true");
+        }
+
         Label label = Label.label(nodeLabel);
         boolean hasEdgeType = edgeType != null && !edgeType.isEmpty();
         RelationshipType relType = hasEdgeType ? RelationshipType.withName(edgeType) : null;
@@ -243,7 +258,7 @@ public class NeighborAggregation {
             Node seedNode = tx.findNode(label, nodeIdKey, seedId);
             if (seedNode == null) {
                 // Emit a zero-length vector so downstream code detects the miss.
-                results.add(new AggResult(seedId, new ArrayList<>()));
+                results.add(new AggResult(seedId, new ArrayList<>(), null, null));
                 continue;
             }
 
@@ -261,7 +276,12 @@ public class NeighborAggregation {
                 agg = extractFeatures(seedNode, featureKey, featureType);
             }
 
-            results.add(new AggResult(seedId, toDoubleList(agg)));
+            Object outLabel = includeLabel ? seedNode.getProperty(targetKey, null) : null;
+            List<Double> outNodeFeatures = includeNode
+                    ? toDoubleList(extractFeatures(seedNode, featureKey, featureType))
+                    : null;
+
+            results.add(new AggResult(seedId, toDoubleList(agg), outLabel, outNodeFeatures));
         }
 
         return results.stream();

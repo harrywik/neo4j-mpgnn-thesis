@@ -3,7 +3,7 @@
     "class_name": "Neo4jUDPFeatureStore",
     "connection_mode": "driver",
     "extra_kwargs": {
-      "max_neighbors": 10
+      "max_neighbors": 5
     }
   },
   "graph_store": {
