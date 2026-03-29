@@ -7,7 +7,7 @@
     }
   },
   "graph_store": {
-    "class_name": "Neo4SingleGS",
+    "class_name": "Neo4jSingleGS",
     "connection_mode": "driver"
   },
   "sampler": {
