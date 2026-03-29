@@ -18,7 +18,7 @@ class Neo4jMultiGS(Neo4jAbstractGS):
 
     Safe to use with multiple DataLoader workers (``num_workers > 0``):
     each spawned process reconnects independently via ``uri``/``user``/``pwd``.
-    Use :class:`Neo4SingleGS` instead when no worker parallelism is needed.
+    Use :class:`Neo4jSingleGS` instead when no worker parallelism is needed.
     """
 
     def __init__(self, uri: str, user: str, pwd: str, measurer: Optional[Measurer] = None, database_name: str = None, dataset_name: str = "neo4j", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", profile_accumulator: Optional[QueryProfileAccumulator] = None):

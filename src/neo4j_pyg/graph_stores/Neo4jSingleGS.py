@@ -5,7 +5,7 @@ from benchmarking_tools.QueryProfileAccumulator import QueryProfileAccumulator
 from neo4j_pyg.graph_stores.Neo4jAbstractGS import Neo4jAbstractGS
 
 
-class Neo4SingleGS(Neo4jAbstractGS):
+class Neo4jSingleGS(Neo4jAbstractGS):
     """Graph store backed by a pre-existing Neo4j driver.
 
     Intended for single-process use; the injected driver is returned

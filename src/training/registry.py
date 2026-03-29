@@ -48,11 +48,11 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # Graph stores
 # ---------------------------------------------------------------------------
-from neo4j_pyg.graph_stores.Neo4SingleGS import Neo4SingleGS
+from neo4j_pyg.graph_stores.Neo4jSingleGS import Neo4jSingleGS
 from neo4j_pyg.graph_stores.Neo4jMultiGS import Neo4jMultiGS
 
 GRAPH_STORES: Dict[str, Type] = {
-    "Neo4SingleGS": Neo4SingleGS,
+    "Neo4jSingleGS": Neo4jSingleGS,
     "Neo4jMultiGS": Neo4jMultiGS,
 }
 
