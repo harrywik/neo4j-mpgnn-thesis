@@ -30,23 +30,29 @@ class Measurer:
         profile_accumulator: Optional[QueryProfileAccumulator] = None,
         coarse_cpu_interval: float = 5,
         intensive_cpu_epochs: int = 3,
+        output_dir: Optional[Path] = None,
     ):
-        # Handles all results path logic internally
-        results_path = Path(__file__).parent.parent.parent / "experiment_results" / "results"
-        results_path.mkdir(parents=True, exist_ok=True)
+        if output_dir is not None:
+            # Use the caller-supplied directory (e.g. a per-run sub-dir in a multi-run experiment)
+            run_results_path = Path(output_dir)
+            run_results_path.mkdir(parents=True, exist_ok=True)
+        else:
+            # Handles all results path logic internally
+            results_path = Path(__file__).parent.parent.parent / "experiment_results" / "results"
+            results_path.mkdir(parents=True, exist_ok=True)
 
-        # Find next available run_N
-        existing = []
-        for p in results_path.iterdir():
-            if p.is_dir() and p.name.startswith("run_"):
-                try:
-                    existing.append(int(p.name.split("_")[1]))
-                except (ValueError, IndexError):
-                    pass
-        next_id = (max(existing) + 1) if existing else 0
-        date_str = date.today().isoformat()
-        run_results_path = results_path / f"run_{next_id}_{date_str}"
-        run_results_path.mkdir(parents=True, exist_ok=False)
+            # Find next available run_N
+            existing = []
+            for p in results_path.iterdir():
+                if p.is_dir() and p.name.startswith("run_"):
+                    try:
+                        existing.append(int(p.name.split("_")[1]))
+                    except (ValueError, IndexError):
+                        pass
+            next_id = (max(existing) + 1) if existing else 0
+            date_str = date.today().isoformat()
+            run_results_path = results_path / f"run_{next_id}_{date_str}"
+            run_results_path.mkdir(parents=True, exist_ok=False)
 
         # Save config
         self.config_writer = ConfigWriter(run_results_path, config)

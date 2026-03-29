@@ -2,7 +2,7 @@
 
 Design (Option D hybrid)
 ------------------------
-A single Cypher call invokes ``custom.gcn.aggregateNeighbors`` which traverses
+A single Cypher call invokes ``gnnProcedures.aggregation.neighbor.mean`` which traverses
 the graph in the Neo4j JVM, computes the mean of incoming-neighbour feature
 vectors for each seed node, and streams back ``(nodeId, aggregatedFeatures)``.
 
@@ -30,7 +30,7 @@ from benchmarking_tools import Measurer
 
 
 class Neo4jAggregationSampler(BaseSampler):
-    """Calls the ``custom.gcn.aggregateNeighbors`` Java UDP for each mini-batch.
+    """Calls the ``gnnProcedures.aggregation.neighbor.mean`` Java UDP for each mini-batch.
 
     Parameters
     ----------
@@ -80,7 +80,7 @@ class Neo4jAggregationSampler(BaseSampler):
         self.pending_agg: Dict[int, np.ndarray] = {}
 
         self._cypher = (
-            "CALL custom.gcn.aggregateNeighbors("
+            "CALL gnnProcedures.aggregation.neighbor.mean("
             "   $seed_ids,"
             "   $node_id_key,"
             "   $feature_key,"
@@ -117,27 +117,7 @@ class Neo4jAggregationSampler(BaseSampler):
             "max_neighbors": self.max_neighbors,
         }
 
-        driver = self.graph_store._get_driver()
-        db = self.graph_store.database_name
-
-        with driver.session(database=db, fetch_size=-1) as session:
-            t_send = time.monotonic()
-            result = session.run(self._cypher, **params)
-            records = list(result)
-            t_recv = time.monotonic()
-            result.consume()
-
-        if self.measurer is not None:
-            self.measurer.log_event("udp_agg_ms", (t_recv - t_send) * 1000)
-            self.measurer.log_event("udp_records", len(records))
-
-        # Parse results and populate pending_agg cache.
-        self.pending_agg = {}
-        for rec in records:
-            nid = int(rec["nodeId"])
-            feats = rec["aggregatedFeatures"]
-            if feats:
-                self.pending_agg[nid] = np.array(feats, dtype=np.float32)
+        self.pending_agg = self.graph_store.fetch_aggregated_features(self._cypher, params)
 
         if self.measurer is not None:
             self.measurer.log_event("end_sampling", 1)

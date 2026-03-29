@@ -1,30 +1,28 @@
-"""Neo4jUDPFeatureStore — feature store that reads pre-aggregated vectors
-from a companion Neo4jAggregationSampler instead of hitting Neo4j a second time.
+"""Neo4jUDPFeatureStore — feature store that serves UDP-aggregated features.
 
 Usage
 -----
-Wire the sampler and the feature store together by passing the same sampler
-instance to both the ``NodeLoader`` and this class::
+Use a regular topology sampler to produce the sampled node IDs and edge_index,
+and let this feature store aggregate the requested node features on demand::
 
-    sampler = Neo4jAggregationSampler(graph_store, ...)
-    feature_store = Neo4jUDPFeatureStore(graph_store, sampler=sampler, ...)
+    sampler = Neo4jJavaNeighborSampler(graph_store, ...)
+    feature_store = Neo4jUDPFeatureStore(graph_store, max_neighbors=10, ...)
 
-For the ``x`` attribute, ``_multi_get_tensor`` reads directly from
-``sampler.pending_agg`` — a ``{nodeId: np.ndarray}`` dict that the sampler
-populates on every call to ``sample_from_nodes``.
+For the ``x`` attribute, ``_multi_get_tensor`` uses the requested node IDs from
+PyG and calls ``gnnProcedures.aggregation.neighbor.mean`` to return one-hop
+aggregated features for those nodes.
 
-For the ``y`` attribute, the standard DB round-trip is used (labels are tiny
-compared with feature vectors so fetching them separately is insignificant).
+For paired ``x``/``y`` requests, the same UDP call also returns labels so the
+feature store can avoid a second DB round-trip.
 """
 
+from functools import cached_property
 from pathlib import Path
 import sys
-from typing import Dict, List, Optional
+from typing import List, Optional
 
 import numpy as np
-import torch
 from torch_geometric.data.feature_store import TensorAttr
-from torch_geometric.typing import FeatureTensorType
 
 FS_DIR = Path(__file__).resolve().parent.parent
 if str(FS_DIR) not in sys.path:
@@ -34,20 +32,23 @@ from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
 
 
 class Neo4jUDPFeatureStore(Neo4jAbstractFS):
-    """Feature store backed by the ``custom.gcn.aggregateNeighbors`` UDP.
+    """Feature store backed by the ``gnnProcedures.aggregation.neighbor.mean`` UDP.
 
     Parameters
     ----------
-    sampler:
-        The ``Neo4jAggregationSampler`` instance whose ``pending_agg`` dict
-        will be consumed for each mini-batch.
+    max_neighbors:
+        Maximum number of neighbours to aggregate per requested node.
+    edge_type:
+        Relationship type to aggregate across. Empty string means any type.
     All remaining keyword arguments are forwarded verbatim to
     :class:`Neo4jAbstractFS`.
     """
 
-    def __init__(self, sampler, **kwargs):
+    def __init__(self, sampler=None, max_neighbors: int = 10, edge_type: str = "", **kwargs):
         super().__init__(**kwargs)
         self.sampler = sampler
+        self.max_neighbors = int(max_neighbors)
+        self.edge_type = edge_type or ""
 
     # ------------------------------------------------------------------
     # Neo4jAbstractFS abstract methods (no-op cache)
@@ -63,50 +64,51 @@ class Neo4jUDPFeatureStore(Neo4jAbstractFS):
         pass
 
     # ------------------------------------------------------------------
-    # Core override: serve x from UDP, y from DB
+    # Query/decode overrides so the base feature-store flow can be reused.
     # ------------------------------------------------------------------
 
-    def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
-        """Serve ``x`` from the sampler's pre-aggregated cache; fetch ``y`` from DB."""
-        x_attr = next((a for a in attrs if a.attr_name == "x"), None)
-        y_attr = next((a for a in attrs if a.attr_name == "y"), None)
+    @staticmethod
+    def _cypher_str(value: str) -> str:
+        escaped = value.replace("\\", "\\\\").replace("'", "\\'")
+        return f"'{escaped}'"
 
-        if x_attr is None or y_attr is None:
-            # Unexpected attr combination — fall back to the parent implementation.
-            return [self._get_tensor(attr) for attr in attrs]
+    def _udp_call(self, *, return_label: bool) -> str:
+        node_label = self.node_label or ""
+        edge_type = self.edge_type or ""
+        target_key = self.target_property if return_label else ""
+        return (
+            "CALL gnnProcedures.aggregation.neighbor.mean("
+            "$node_ids,"
+            f"{self._cypher_str(self.nodeid_property)},"
+            f"{self._cypher_str(self.feature_property)},"
+            f"{self._cypher_str(self.feature_property_type)},"
+            f"{self._cypher_str(node_label)},"
+            f"{self._cypher_str(edge_type)},"
+            f"{self.max_neighbors},"
+            f"{self._cypher_str(target_key)},"
+            "false,"
+            f"{'true' if return_label else 'false'}"
+            ")"
+        )
 
-        node_ids: List[int] = x_attr.index.tolist()
-        pending = self.sampler.pending_agg
+    @cached_property
+    def _query_both(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        return (
+            f"{prefix}{self._udp_call(return_label=True)} "
+            "YIELD nodeId, aggregatedFeatures, label "
+            "RETURN nodeId AS id, aggregatedFeatures AS feature, label"
+        )
 
-        # Build x tensor from the UDP results buffered by the sampler.
-        x_rows: List[np.ndarray] = []
-        feat_dim: Optional[int] = self._feature_dim
-        for nid in node_ids:
-            vec = pending.get(nid)
-            if vec is not None:
-                if feat_dim is None:
-                    feat_dim = vec.shape[0]
-                    self._feature_dim = feat_dim
-                x_rows.append(vec)
-            else:
-                # Node missing from UDP result — fill with zeros so downstream
-                # code doesn't crash.  This should not happen in practice.
-                x_rows.append(np.zeros(feat_dim or 1, dtype=np.float32))
+    @cached_property
+    def _query_x(self) -> str:
+        prefix = "PROFILE " if self.profile else ""
+        return (
+            f"{prefix}{self._udp_call(return_label=False)} "
+            "YIELD nodeId, aggregatedFeatures "
+            "RETURN nodeId AS id, aggregatedFeatures AS value"
+        )
 
-        x_tensor = torch.from_numpy(np.stack(x_rows))
+    def _decode_feature_matrix(self, records: List[object], field_name: str) -> np.ndarray:
+        return np.asarray([rec[field_name] for rec in records], dtype=np.float32)
 
-        # Fetch labels (y) via the normal DB path.
-        label_map: Dict[int, int] = self._get_value_from_db(node_ids, y_attr)
-        y_array = np.array([label_map.get(nid, 0) for nid in node_ids], dtype=np.int64)
-        y_tensor = torch.from_numpy(y_array)
-
-        # Return in the same order as `attrs` was received.
-        result: List[Optional[FeatureTensorType]] = []
-        for attr in attrs:
-            if attr.attr_name == "x":
-                result.append(x_tensor)
-            elif attr.attr_name == "y":
-                result.append(y_tensor)
-            else:
-                result.append(self._get_tensor(attr))
-        return result

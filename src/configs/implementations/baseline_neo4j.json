@@ -1,0 +1,26 @@
+{
+  "feature_store": {
+    "class_name": "Neo4jNoCacheFS",
+    "connection_mode": "driver"
+  },
+  "graph_store": {
+    "class_name": "Neo4jSingleGS",
+    "connection_mode": "driver"
+  },
+  "sampler": {
+    "class_name": "Neo4jNeighborSampler",
+    "num_neighbors": [10, 5]
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "Trainer",
+  "nodeloader_args": {
+    "pickle_safe": false,
+    "num_workers": 0,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": false,
+    "pin_memory": false
+  }
+}

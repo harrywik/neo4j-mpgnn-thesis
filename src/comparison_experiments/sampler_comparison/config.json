@@ -1,7 +1,7 @@
 {
   "profile": false,
-  "num_runs": 5,
-  "max_epochs": 90,
+  "num_runs": 1,
+  "max_epochs": 10,
   "batch_size": 30,
   "num_neighbors": [10, 5],
   "lr": 1e-3,
@@ -19,6 +19,6 @@
   "sample_coverage": 200,
   "samplers": [
     "Neo4jGraphSAINTRandomWalkSampler",
-    "Neo4jSampler"
+    "Neo4jSampler" 
   ]
 }
