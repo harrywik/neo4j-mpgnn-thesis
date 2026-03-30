@@ -153,5 +153,9 @@ class Neo4jAbstractCache(ABC):
         self.set(key, value)
 
     @abstractmethod
+    def delete(self, key) -> None:
+        pass
+
+    @abstractmethod
     def clear(self):
         pass
