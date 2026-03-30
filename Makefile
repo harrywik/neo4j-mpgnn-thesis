@@ -128,7 +128,8 @@ build-plugin:
 	@if [ -n "$(NEO4J_PLUGINS_DIR)" ]; then \
 		cp neo4j-gcn-plugin/target/neo4j-gcn-plugin-1.0.0.jar "$(NEO4J_PLUGINS_DIR)/"; \
 		echo "Deployed to $(NEO4J_PLUGINS_DIR)"; \
-		echo "Restart Neo4j and run: SHOW PROCEDURES YIELD name WHERE name STARTS WITH 'gnnProcedures.' RETURN name ORDER BY name"; \
+		echo "Restart Neo4j: sudo systemctl restart neo4j"; \
+		echo "Then run: SHOW PROCEDURES YIELD name WHERE name STARTS WITH 'gnnProcedures.' RETURN name ORDER BY name"; \
 	else \
 		echo "Built plugin jar. Set NEO4J_PLUGINS_DIR in .env or pass it on the command line to auto-deploy."; \
 	fi
