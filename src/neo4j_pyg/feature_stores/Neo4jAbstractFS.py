@@ -49,6 +49,9 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self._feature_dim: Optional[int] = None
         self.t_feat_etl_start: Optional[float] = None
         self._cache: Optional[Neo4jAbstractCache] = cache
+        self._current_sampled_nodes: Optional[List[int]] = None
+        self._current_sampled_edge_pairs: Optional[List[List[int]]] = None
+        self._current_frontier_nodes: Optional[List[int]] = None
         if self._cache is not None:
             self._labels = self._cache._labels
             self.cache_size = self._cache.cache_size
@@ -59,6 +62,17 @@ class Neo4jAbstractFS(FeatureStore, ABC):
                 graph_name="hot_cache_projection",
                 k=self._cache.cache_size // 3,
             )
+
+    def set_sampled_subgraph_context(
+        self,
+        *,
+        sampled_nodes: List[int] | None,
+        edge_pairs: List[List[int]] | None,
+        frontier_nodes: List[int] | None,
+    ) -> None:
+        self._current_sampled_nodes = sampled_nodes
+        self._current_sampled_edge_pairs = edge_pairs
+        self._current_frontier_nodes = frontier_nodes
 
     def _prefill_hot_cache(
         self,
@@ -177,7 +191,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         if missing:
             fetched_nids, feat_matrix, y_array = self._get_both_from_db(missing, x_attr)
-
+            self.t_feat_etl_start = time.monotonic()
             if feat_dim is None and len(feat_matrix):
                 feat_dim = feat_matrix.shape[1]
                 self._feature_dim = feat_dim
@@ -262,7 +276,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_ms)
-            self._log_extra_feature_fetch_metrics(records, total_ms, is_label=False, paired=True)
 
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
