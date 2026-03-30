@@ -1,3 +1,4 @@
+from neo4j_pyg.feature_caches.Neo4jAbstractCache import Neo4jAbstractCache
 from torch_geometric.data.feature_store import FeatureStore
 from torch_geometric.data.feature_store import TensorAttr
 from torch_geometric.typing import FeatureTensorType
@@ -14,7 +15,7 @@ from neo4j import GraphDatabase
 from abc import abstractmethod, ABC
 
 class Neo4jAbstractFS(FeatureStore, ABC):
-    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None, node_label: str = None):
+    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, cache: Neo4jAbstractCache = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None, node_label: str = None):
         super().__init__()
         self.driver = driver
         self.uri = uri
@@ -36,6 +37,35 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self._labels: Dict[str, int] = {}
         self._feature_dim: Optional[int] = None
         self.t_feat_etl_start: Optional[float] = None
+        self._cache: Optional[Neo4jAbstractCache] = cache
+        if self._cache is not None:
+            self._labels = self._cache._labels
+            self.cache_size = self._cache.cache_size
+            for attr in ("hot_cache", "hot_label_cache", "cache", "label_cache"):
+                if hasattr(self._cache, attr):
+                    setattr(self, attr, getattr(self._cache, attr))
+            self._prefill_hot_cache(
+                graph_name="hot_cache_projection",
+                k=self._cache.cache_size // 3,
+            )
+
+    def _prefill_hot_cache(
+        self,
+        graph_name: str,
+        k: int = 500,
+        undirected: bool = True,
+        drop_graph: bool = True,
+    ) -> None:
+        """Fill the static hot cache with the top-K nodes ranked by PageRank."""
+        if self._cache is None:
+            return
+        if undirected is not True:
+            raise ValueError("Neo4jTwoLevelCache currently only supports undirected hot-cache prefill")
+        if drop_graph is not True:
+            raise ValueError("Neo4jTwoLevelCache currently always drops temporary hot-cache projections")
+        self._cache.prefill_hot_cache(graph_name=graph_name, k=k)
+        hot_cache = getattr(self._cache, "hot_cache", {})
+        print(f"Hot cache prefilled with {len(hot_cache)} nodes.")
 
     @cached_property
     def _query_both(self) -> str:
@@ -85,16 +115,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         if fpt == "f64[]":
             return np.asarray([rec[field_name] for rec in records], dtype=np.float32)
         raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
-
-    def _log_extra_feature_fetch_metrics(
-        self,
-        records: List[object],
-        total_fetch_ms: float,
-        *,
-        is_label: bool,
-        paired: bool,
-    ) -> None:
-        return None
 
     def _multi_get_tensor(self, attrs: List[TensorAttr]) -> List[Optional[FeatureTensorType]]:
         """Override the base-class default to fetch features and labels together.
@@ -303,12 +323,11 @@ class Neo4jAbstractFS(FeatureStore, ABC):
 
         return result
 
-    @abstractmethod
-    def _get_cached_value(self, nid: int, attr: TensorAttr, **kwargs) -> FeatureTensorType:
-        """
-        Implement this method to get a cached value for a given node ID.
-        """
-        return None
+    def _get_cached_value(self, nid: int, attr: TensorAttr, **kwargs) -> Optional[object]:
+        """Return the cached value for *nid*, or ``None`` if not cached."""
+        if self._cache is None:
+            return None
+        return self._cache.get((attr.attr_name, nid))
 
     def _get_value_from_db(self, nids: list, attr: TensorAttr, **kwargs) -> Dict[int, object]:
 
@@ -368,19 +387,17 @@ class Neo4jAbstractFS(FeatureStore, ABC):
             self.measurer.log_event(f"{phase}etl_parse_ms", (time.monotonic() - t_etl_start) * 1000)
         return result_map
 
-    @abstractmethod
-    def _update_cached_value(self, nid: int, value: FeatureTensorType, attr: TensorAttr, **kwargs) -> None:
-        """
-        abstract method to update a cached value for a given node ID. Must be implemented by the subclass.
-        """
-        pass
+    def _update_cached_value(self, nid: int, value: object, attr: TensorAttr, **kwargs) -> None:
+        """Insert *value* for *nid* into the cache, evicting the oldest if full."""
+        if self._cache is None:
+            return
+        self._cache[(attr.attr_name, nid)] = value
 
-    @abstractmethod
     def _remove_cached_value(self, nid: int, attr: TensorAttr, **kwargs) -> None:
-        """
-        abstract method to remove a cached value for a given node ID. Must be implemented by the subclass.
-        """
-        pass
+        """Remove *nid* from the cache (no-op if absent or no cache configured)."""
+        if self._cache is None:
+            return
+        self._cache.delete((attr.attr_name, nid))
 
     def __getstate__(self):
         state = self.__dict__.copy()
