@@ -7,9 +7,11 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Random;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -287,6 +289,171 @@ public class NeighborAggregation {
         return results.stream();
     }
 
+    @Procedure(name = "gnnProcedures.aggregation.neighbor.gcnNorm", mode = Mode.READ)
+    @Description(
+        "GCN-normalized 1-hop incoming aggregation for each seed node. "
+        + "Adds a self-loop and applies symmetric degree normalization before returning one row per seed."
+    )
+    public Stream<AggResult> aggregateNeighborsGCNNorm(
+            @Name("seedIds")                          List<Long> seedIds,
+            @Name("nodeIdKey")                        String nodeIdKey,
+            @Name("featureKey")                       String featureKey,
+            @Name("featureType")                      String featureType,
+            @Name("nodeLabel")                        String nodeLabel,
+            @Name(value = "edgeType",       defaultValue = "") String edgeType,
+            @Name(value = "maxNeighbors",   defaultValue = "-1") Long maxNeighbors,
+            @Name(value = "targetKey",      defaultValue = "") String targetKey,
+            @Name(value = "returnNode",     defaultValue = "false") Boolean returnNode,
+            @Name(value = "returnLabel",    defaultValue = "false") Boolean returnLabel,
+            @Name(value = "improved",       defaultValue = "false") Boolean improved
+    ) {
+        boolean includeNode = Boolean.TRUE.equals(returnNode);
+        boolean includeLabel = Boolean.TRUE.equals(returnLabel);
+        boolean useImproved = Boolean.TRUE.equals(improved);
+        if (includeLabel && (targetKey == null || targetKey.isEmpty())) {
+            throw new IllegalArgumentException("targetKey must be non-empty when returnLabel=true");
+        }
+
+        Label label = Label.label(nodeLabel);
+        boolean hasEdgeType = edgeType != null && !edgeType.isEmpty();
+        RelationshipType relType = hasEdgeType ? RelationshipType.withName(edgeType) : null;
+        Random rng = new Random(42L);
+        double selfLoopWeight = useImproved ? 2.0 : 1.0;
+
+        List<AggResult> results = new ArrayList<>(seedIds.size());
+
+        for (Long seedId : seedIds) {
+            Node seedNode = tx.findNode(label, nodeIdKey, seedId);
+            if (seedNode == null) {
+                results.add(new AggResult(seedId, new ArrayList<>(), null, null));
+                continue;
+            }
+
+            Iterable<Relationship> rels = hasEdgeType
+                    ? seedNode.getRelationships(Direction.INCOMING, relType)
+                    : seedNode.getRelationships(Direction.INCOMING);
+
+            List<Node> neighbours = reservoirSample(rels, maxNeighbors, rng);
+            double[] seedFeatures = extractFeatures(seedNode, featureKey, featureType);
+            long seedDegree = countIncomingNeighbors(seedNode, relType, hasEdgeType, label);
+            double seedDegreeHat = seedDegree + selfLoopWeight;
+
+            double[] agg = null;
+
+            if (seedFeatures != null) {
+                agg = new double[seedFeatures.length];
+                double selfWeight = selfLoopWeight / seedDegreeHat;
+                accumulateScaled(agg, seedFeatures, selfWeight);
+            }
+
+            for (Node neighbour : neighbours) {
+                double[] feat = extractFeatures(neighbour, featureKey, featureType);
+                if (feat == null) {
+                    continue;
+                }
+
+                if (agg == null) {
+                    agg = new double[feat.length];
+                }
+
+                long neighborDegree = countIncomingNeighbors(neighbour, relType, hasEdgeType, label);
+                double neighborDegreeHat = neighborDegree + selfLoopWeight;
+                double weight = 1.0 / Math.sqrt(seedDegreeHat * neighborDegreeHat);
+                accumulateScaled(agg, feat, weight);
+            }
+
+            Object outLabel = includeLabel ? seedNode.getProperty(targetKey, null) : null;
+            List<Double> outNodeFeatures = includeNode
+                    ? toDoubleList(seedFeatures)
+                    : null;
+
+            results.add(new AggResult(seedId, toDoubleList(agg), outLabel, outNodeFeatures));
+        }
+
+        return results.stream();
+    }
+
+    @Procedure(name = "gnnProcedures.aggregation.neighbor.sampledGcnNorm", mode = Mode.READ)
+    @Description(
+        "GCN-normalized aggregation over an already-sampled subgraph. "
+        + "Uses the provided sampled edge pairs instead of traversing the graph again, and returns one row per target node."
+    )
+    public Stream<AggResult> aggregateSampledNeighborsGCNNorm(
+            @Name("targetIds")                          List<Long> targetIds,
+            @Name("edgePairs")                          List<List<Long>> edgePairs,
+            @Name("nodeIdKey")                          String nodeIdKey,
+            @Name("featureKey")                         String featureKey,
+            @Name("featureType")                        String featureType,
+            @Name("nodeLabel")                          String nodeLabel,
+            @Name(value = "improved", defaultValue = "false") Boolean improved
+    ) {
+        Label label = Label.label(nodeLabel);
+        double selfLoopWeight = Boolean.TRUE.equals(improved) ? 2.0 : 1.0;
+
+        Map<Long, List<Long>> incoming = new HashMap<>();
+        Map<Long, Long> sampledInDegree = new HashMap<>();
+
+        if (edgePairs != null) {
+            for (List<Long> pair : edgePairs) {
+                if (pair == null || pair.size() < 2) {
+                    continue;
+                }
+                Long srcId = pair.get(0);
+                Long dstId = pair.get(1);
+                if (srcId == null || dstId == null) {
+                    continue;
+                }
+                incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
+                sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
+                sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
+            }
+        }
+
+        List<AggResult> results = new ArrayList<>(targetIds.size());
+
+        for (Long targetId : targetIds) {
+            Node targetNode = tx.findNode(label, nodeIdKey, targetId);
+            if (targetNode == null) {
+                results.add(new AggResult(targetId, new ArrayList<>(), null, null));
+                continue;
+            }
+
+            double[] targetFeatures = extractFeatures(targetNode, featureKey, featureType);
+            double targetDegreeHat = sampledInDegree.getOrDefault(targetId, 0L) + selfLoopWeight;
+            double[] agg = null;
+
+            if (targetFeatures != null) {
+                agg = new double[targetFeatures.length];
+                double selfWeight = selfLoopWeight / targetDegreeHat;
+                accumulateScaled(agg, targetFeatures, selfWeight);
+            }
+
+            for (Long srcId : incoming.getOrDefault(targetId, Collections.emptyList())) {
+                Node srcNode = tx.findNode(label, nodeIdKey, srcId);
+                if (srcNode == null) {
+                    continue;
+                }
+
+                double[] srcFeatures = extractFeatures(srcNode, featureKey, featureType);
+                if (srcFeatures == null) {
+                    continue;
+                }
+
+                if (agg == null) {
+                    agg = new double[srcFeatures.length];
+                }
+
+                double srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeight;
+                double weight = 1.0 / Math.sqrt(targetDegreeHat * srcDegreeHat);
+                accumulateScaled(agg, srcFeatures, weight);
+            }
+
+            results.add(new AggResult(targetId, toDoubleList(agg), null, null));
+        }
+
+        return results.stream();
+    }
+
     // -------------------------------------------------------------------------
     // SIGN procedure
     // -------------------------------------------------------------------------
@@ -468,6 +635,36 @@ public class NeighborAggregation {
         }
 
         return reservoir;
+    }
+
+    /** Count incoming neighbours that match the same candidate set used by sampling. */
+    private long countIncomingNeighbors(
+            Node node,
+            RelationshipType relType,
+            boolean hasEdgeType,
+            Label requiredNeighborLabel
+    ) {
+        long count = 0L;
+        Iterable<Relationship> rels = hasEdgeType
+                ? node.getRelationships(Direction.INCOMING, relType)
+                : node.getRelationships(Direction.INCOMING);
+
+        for (Relationship rel : rels) {
+            Node nbr = rel.getStartNode();
+            if (requiredNeighborLabel != null && !nbr.hasLabel(requiredNeighborLabel)) {
+                continue;
+            }
+            count++;
+        }
+
+        return count;
+    }
+
+    /** Add a scaled feature vector into an accumulator in place. */
+    private void accumulateScaled(double[] acc, double[] feat, double scale) {
+        for (int i = 0; i < acc.length; i++) {
+            acc[i] += scale * feat[i];
+        }
     }
 
     /**

@@ -15,6 +15,17 @@ from neo4j import GraphDatabase
 from abc import abstractmethod, ABC
 
 class Neo4jAbstractFS(FeatureStore, ABC):
+    """Abstract PyG FeatureStore backed by Neo4j.
+
+    Handles feature/label fetching via Cypher and optional caching through a
+    :class:`~neo4j_pyg.feature_caches.Neo4jAbstractCache`.  Pass a cache
+    instance to ``cache`` to enable caching; omit it (or pass ``None``) for
+    no-cache behaviour.
+
+    Subclasses must not override ``_get_cached_value``, ``_update_cached_value``,
+    or ``_remove_cached_value`` unless they need non-standard cache routing.
+    """
+
     def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, cache: Neo4jAbstractCache = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None, node_label: str = None):
         super().__init__()
         self.driver = driver
@@ -100,12 +111,15 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         )
 
     def _query_both_params(self, nids: List[int], x_attr: TensorAttr) -> Dict[str, object]:
+        """Query parameters for ``_query_both``. Override to add extra params."""
         return {"node_ids": nids}
 
     def _query_value_params(self, nids: List[int], attr: TensorAttr) -> Dict[str, object]:
+        """Query parameters for ``_query_x`` / ``_query_y``. Override to add extra params."""
         return {"node_ids": nids}
 
     def _decode_feature_matrix(self, records: List[object], field_name: str) -> np.ndarray:
+        """Convert raw DB records to a float32 ndarray. Supports ``byte[]`` and ``f64[]``."""
         fpt = self.feature_property_type
         if fpt == "byte[]":
             return np.stack([
@@ -388,13 +402,13 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         return result_map
 
     def _update_cached_value(self, nid: int, value: object, attr: TensorAttr, **kwargs) -> None:
-        """Insert *value* for *nid* into the cache, evicting the oldest if full."""
+        """Write *value* for *nid* into the cache. No-op when no cache is configured."""
         if self._cache is None:
             return
         self._cache[(attr.attr_name, nid)] = value
 
     def _remove_cached_value(self, nid: int, attr: TensorAttr, **kwargs) -> None:
-        """Remove *nid* from the cache (no-op if absent or no cache configured)."""
+        """Evict *nid* from the cache. No-op when no cache is configured or key absent."""
         if self._cache is None:
             return
         self._cache.delete((attr.attr_name, nid))

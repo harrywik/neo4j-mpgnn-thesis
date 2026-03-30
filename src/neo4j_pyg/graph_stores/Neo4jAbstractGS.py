@@ -49,6 +49,10 @@ class Neo4jAbstractGS(GraphStore, ABC):
         self.nodeid_property = nodeid_property
         self.measurer = measurer
         self.profile_accumulator = profile_accumulator
+        self.last_sampled_subgraph: dict | None = None
+        self.last_sampled_hop_depths: dict[int, int] = {}
+        self.last_sampled_max_depth: int = 0
+        self.last_hybrid_preagg: dict[int, np.ndarray] = {}
     
     @abstractmethod
     def _get_driver(self):
@@ -158,7 +162,56 @@ class Neo4jAbstractGS(GraphStore, ABC):
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
 
-        return records[0] if records else None
+        record = records[0] if records else None
+        self._store_last_sampled_subgraph(record)
+        return record
+
+    def _store_last_sampled_subgraph(self, record: dict | None) -> None:
+        if record is None:
+            self.last_sampled_subgraph = None
+            self.last_sampled_hop_depths = {}
+            self.last_sampled_max_depth = 0
+            self.last_hybrid_preagg = {}
+            return
+
+        stored = dict(record)
+        self.last_sampled_subgraph = stored
+        edge_pairs = stored.get("edge_pairs") or []
+        ordered_nodes = stored.get("ordered_nodes") or []
+        self.last_sampled_hop_depths = self._infer_hop_depths(edge_pairs, ordered_nodes)
+        self.last_sampled_max_depth = max(self.last_sampled_hop_depths.values(), default=0)
+        self.last_hybrid_preagg = {}
+
+    @staticmethod
+    def _infer_hop_depths(edge_pairs: list, ordered_nodes: list) -> dict[int, int]:
+        depths: dict[int, int] = {}
+        changed = True
+
+        if ordered_nodes:
+            candidate_destinations = {int(pair[1]) for pair in edge_pairs if pair is not None and len(pair) >= 2}
+            seed_nodes = [int(nid) for nid in ordered_nodes if int(nid) not in {int(pair[0]) for pair in edge_pairs if pair is not None and len(pair) >= 2}]
+            if not seed_nodes and ordered_nodes:
+                seed_nodes = [int(ordered_nodes[0])]
+            depths = {nid: 0 for nid in seed_nodes}
+
+        while changed:
+            changed = False
+            for pair in edge_pairs:
+                if pair is None or len(pair) < 2:
+                    continue
+                src = int(pair[0])
+                dst = int(pair[1])
+                if dst in depths and src not in depths:
+                    depths[src] = depths[dst] + 1
+                    changed = True
+
+        for nid in ordered_nodes:
+            depths.setdefault(int(nid), 0)
+
+        return depths
+
+    def get_last_sampled_subgraph(self) -> dict | None:
+        return self.last_sampled_subgraph
     
     def fetch_aggregated_features(self, query: str, kwargs: dict) -> dict[int, np.ndarray]:
         """Execute an aggregation query and return parsed features by node id.

@@ -6,6 +6,33 @@ from torch import nn
 from torch_geometric.data import GraphStore, FeatureStore, HeteroData, Data
 from torch_geometric.sampler import BaseSampler
 
+
+def _get_model_kwargs(model: nn.Module, batch, graph_store) -> dict:
+    if not getattr(model, "_uses_hybrid_last_hop_preaggregation", False):
+        return {}
+    if graph_store is None or not hasattr(batch, "n_id"):
+        return {}
+
+    hop_depths_map = getattr(graph_store, "last_sampled_hop_depths", {})
+    preagg_map = getattr(graph_store, "last_hybrid_preagg", {})
+    node_ids = batch.n_id.detach().cpu().tolist()
+
+    hop_depths = torch.tensor(
+        [int(hop_depths_map.get(int(nid), 0)) for nid in node_ids],
+        dtype=torch.long,
+        device=batch.x.device,
+    )
+    last_hop_preagg = torch.zeros_like(batch.x)
+    for i, nid in enumerate(node_ids):
+        preagg = preagg_map.get(int(nid))
+        if preagg is not None:
+            last_hop_preagg[i] = torch.as_tensor(preagg, device=batch.x.device, dtype=batch.x.dtype)
+
+    return {
+        "hop_depths": hop_depths,
+        "last_hop_preagg": last_hop_preagg,
+    }
+
 def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore, GraphStore]], sampler: BaseSampler = None, split: str = "val", num_neighbors: List[int] = None, iteration: int = None, limit: int | None = None) -> float:
     """Evaluate a GNN model on a dataset split using neighbor sampling.
 
@@ -48,6 +75,7 @@ def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore,
                     )
     model.eval()
     device = next(model.parameters()).device
+    graph_store = data[1] if isinstance(data, tuple) else None
     with torch.no_grad():
         criterion = nn.CrossEntropyLoss()
         counts = []
@@ -55,7 +83,7 @@ def evaluate(model: nn.Module, data: Union[Data, HeteroData, Tuple[FeatureStore,
         losses = []
         for data in val_loader:
             data = data.to(device)
-            out: torch.Tensor = model(data.x, data.edge_index)
+            out: torch.Tensor = model(data.x, data.edge_index, **_get_model_kwargs(model, data, graph_store))
             seed_mask = torch.isin(data.n_id, data.input_id)
             targets = data.y[seed_mask]
             preds = out[seed_mask].argmax(dim=1)

@@ -107,7 +107,7 @@ def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
 
 
 def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
-                        profile_accumulator, sampler):
+                        profile_accumulator, sampler, graph_store):
     from training.registry import FEATURE_STORES, filter_kwargs
     fs_cfg = impl_cfg["feature_store"]
     cls = FEATURE_STORES[fs_cfg["class_name"]]
@@ -119,6 +119,7 @@ def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
         kwargs["driver"] = driver
     if impl_cfg.get("needs_sampler_in_fs"):
         kwargs["sampler"] = sampler
+    kwargs["graph_store"] = graph_store
     return cls(**filter_kwargs(cls, kwargs))
 
 
@@ -136,7 +137,14 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
     kwargs.update(m_cfg.get("extra_kwargs", {}))
     if "hops" in m_cfg.get("extra_kwargs", {}):
         kwargs["hops"] = m_cfg["extra_kwargs"]["hops"]
-    return cls(**filter_kwargs(cls, kwargs))
+    model = cls(**filter_kwargs(cls, kwargs))
+    if m_cfg.get("to_preaggregated_first_layer", False):
+        from neo4j_pyg.models.preagg_adapters import to_preaggregated_first_layer
+        model = to_preaggregated_first_layer(model).model
+    if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
+        from neo4j_pyg.models.preagg_adapters import to_hybrid_last_hop_gcn
+        model = to_hybrid_last_hop_gcn(model)
+    return model
 
 
 # ---------------------------------------------------------------------------
@@ -436,7 +444,7 @@ def main():
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler, graph_store
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
@@ -498,7 +506,7 @@ def main():
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler, graph_store
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
