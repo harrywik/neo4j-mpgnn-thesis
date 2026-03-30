@@ -221,33 +221,31 @@ class HybridLastHopGCNWrapper(nn.Module):
         self,
         x: Tensor,
         edge_index: Tensor,
-        hop_depths: Optional[Tensor] = None,
-        last_hop_preagg: Optional[Tensor] = None,
+        frontier_mask: Optional[Tensor] = None,
+        aggregated_neighbors: Optional[Tensor] = None,
     ) -> Tensor:
-        if hop_depths is None or last_hop_preagg is None or hop_depths.numel() == 0:
+        if frontier_mask is None or aggregated_neighbors is None or frontier_mask.numel() == 0:
             hidden = self.inner.GCN1(x, edge_index).relu_()
             hidden = self.inner.GCN2(hidden, edge_index).relu_()
             return self.inner.classifier(hidden)
 
-        max_depth = int(hop_depths.max().item())
-        if max_depth <= 0:
+        if not frontier_mask.any():
             hidden = self.inner.GCN1(x, edge_index).relu_()
             hidden = self.inner.GCN2(hidden, edge_index).relu_()
             return self.inner.classifier(hidden)
 
-        deepest_mask = hop_depths == max_depth
-        frontier_mask = hop_depths == (max_depth - 1)
+        target_mask = aggregated_neighbors.abs().sum(dim=1) > 0
 
         raw_x = x.clone()
-        raw_x[deepest_mask] = 0
+        raw_x[frontier_mask] = 0
 
         hidden = self.inner.GCN1(raw_x, edge_index)
-        if frontier_mask.any():
-            replaced = self.inner.GCN1.lin(last_hop_preagg[frontier_mask])
+        if target_mask.any():
+            replaced = self.inner.GCN1.lin(aggregated_neighbors[target_mask])
             if self.inner.GCN1.bias is not None:
                 replaced = replaced + self.inner.GCN1.bias
             hidden = hidden.clone()
-            hidden[frontier_mask] = replaced
+            hidden[target_mask] = replaced
 
         hidden = hidden.relu_()
         hidden = self.inner.GCN2(hidden, edge_index).relu_()

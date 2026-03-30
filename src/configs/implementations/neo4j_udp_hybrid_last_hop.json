@@ -1,4 +1,5 @@
 {
+  "needs_sampler_in_fs": true,
   "feature_store": {
     "class_name": "Neo4jUDPFeatureStore",
     "connection_mode": "driver",

@@ -58,6 +58,8 @@ import java.util.stream.Stream;
  */
 public class NeighborAggregation {
 
+    private static final String IN_DEGREE_PROPERTY = "in_degree";
+
     @Context
     public Transaction tx;
 
@@ -117,10 +119,45 @@ public class NeighborAggregation {
         public final List<Long> ordered_nodes;
         /** Sampled edges as [src_global_id, dst_global_id] pairs. */
         public final List<List<Long>> edge_pairs;
+        /** Optional deepest-hop frontier node IDs in encounter order. */
+        public final List<Long> frontier_nodes;
 
-        public NeighborSampleResult(List<Long> ordered_nodes, List<List<Long>> edge_pairs) {
+        public NeighborSampleResult(List<Long> ordered_nodes, List<List<Long>> edge_pairs, List<Long> frontier_nodes) {
             this.ordered_nodes = ordered_nodes;
             this.edge_pairs = edge_pairs;
+            this.frontier_nodes = frontier_nodes;
+        }
+    }
+
+    /**
+     * Single-row batch result for sampled hybrid feature fetch.
+     *
+     * <p>Groups raw feature rows, label rows, and aggregated target rows so the
+     * Python client receives one procedure row per mini-batch instead of one
+     * row per node.
+     */
+    public static class SampledFetchBatchResult {
+        public final List<Long> rawNodeIds;
+        public final List<byte[]> rawNodeFeatures;
+        public final List<Long> labelNodeIds;
+        public final List<Object> labels;
+        public final List<Long> targetNodeIds;
+        public final List<byte[]> aggregatedFeatures;
+
+        public SampledFetchBatchResult(
+                List<Long> rawNodeIds,
+            List<byte[]> rawNodeFeatures,
+                List<Long> labelNodeIds,
+                List<Object> labels,
+                List<Long> targetNodeIds,
+            List<byte[]> aggregatedFeatures
+        ) {
+            this.rawNodeIds = rawNodeIds;
+            this.rawNodeFeatures = rawNodeFeatures;
+            this.labelNodeIds = labelNodeIds;
+            this.labels = labels;
+            this.targetNodeIds = targetNodeIds;
+            this.aggregatedFeatures = aggregatedFeatures;
         }
     }
 
@@ -139,10 +176,11 @@ public class NeighborAggregation {
             @Name("nodeLabel") String nodeLabel,
             @Name("numNeighbors") List<Long> numNeighbors,
             @Name(value = "edgeType", defaultValue = "") String edgeType,
-            @Name(value = "randomSeed", defaultValue = "42") Long randomSeed
+            @Name(value = "randomSeed", defaultValue = "42") Long randomSeed,
+            @Name(value = "returnFrontier", defaultValue = "false") Boolean returnFrontier
     ) {
         if (seedIds == null || seedIds.isEmpty()) {
-            return Stream.of(new NeighborSampleResult(new ArrayList<>(), new ArrayList<>()));
+            return Stream.of(new NeighborSampleResult(new ArrayList<>(), new ArrayList<>(), new ArrayList<>()));
         }
         if (nodeLabel == null || nodeLabel.isEmpty()) {
             throw new IllegalArgumentException("nodeLabel must be non-empty");
@@ -172,6 +210,7 @@ public class NeighborAggregation {
         }
 
         List<List<Long>> edgePairs = new ArrayList<>();
+        List<Long> frontierNodeIds = new ArrayList<>();
 
         // Hop-wise expansion with per-hop fanout list.
         List<Long> fanouts = (numNeighbors == null) ? Collections.singletonList(-1L) : numNeighbors;
@@ -218,9 +257,16 @@ public class NeighborAggregation {
 
             visited.addAll(nextFrontierIds);
             frontier = nextFrontier;
+            frontierNodeIds = new ArrayList<>(nextFrontierIds);
         }
 
-        return Stream.of(new NeighborSampleResult(new ArrayList<>(visited), edgePairs));
+        return Stream.of(
+                new NeighborSampleResult(
+                        new ArrayList<>(visited),
+                        edgePairs,
+                        Boolean.TRUE.equals(returnFrontier) ? frontierNodeIds : new ArrayList<>()
+                )
+        );
     }
 
     @Procedure(name = "gnnProcedures.aggregation.neighbor.mean", mode = Mode.READ)
@@ -335,7 +381,7 @@ public class NeighborAggregation {
 
             List<Node> neighbours = reservoirSample(rels, maxNeighbors, rng);
             double[] seedFeatures = extractFeatures(seedNode, featureKey, featureType);
-            long seedDegree = countIncomingNeighbors(seedNode, relType, hasEdgeType, label);
+            long seedDegree = getStoredIncomingDegreeOrCount(seedNode, relType, hasEdgeType, label);
             double seedDegreeHat = seedDegree + selfLoopWeight;
 
             double[] agg = null;
@@ -356,7 +402,7 @@ public class NeighborAggregation {
                     agg = new double[feat.length];
                 }
 
-                long neighborDegree = countIncomingNeighbors(neighbour, relType, hasEdgeType, label);
+                long neighborDegree = getStoredIncomingDegreeOrCount(neighbour, relType, hasEdgeType, label);
                 double neighborDegreeHat = neighborDegree + selfLoopWeight;
                 double weight = 1.0 / Math.sqrt(seedDegreeHat * neighborDegreeHat);
                 accumulateScaled(agg, feat, weight);
@@ -381,6 +427,7 @@ public class NeighborAggregation {
     public Stream<AggResult> aggregateSampledNeighborsGCNNorm(
             @Name("targetIds")                          List<Long> targetIds,
             @Name("edgePairs")                          List<List<Long>> edgePairs,
+            @Name("frontierIds")                        List<Long> frontierIds,
             @Name("nodeIdKey")                          String nodeIdKey,
             @Name("featureKey")                         String featureKey,
             @Name("featureType")                        String featureType,
@@ -389,9 +436,14 @@ public class NeighborAggregation {
     ) {
         Label label = Label.label(nodeLabel);
         double selfLoopWeight = Boolean.TRUE.equals(improved) ? 2.0 : 1.0;
+        Set<Long> frontierSet = frontierIds == null ? Collections.emptySet() : new HashSet<>(frontierIds);
 
         Map<Long, List<Long>> incoming = new HashMap<>();
         Map<Long, Long> sampledInDegree = new HashMap<>();
+        Set<Long> requiredNodeIds = new HashSet<>();
+        if (targetIds != null) {
+            requiredNodeIds.addAll(targetIds);
+        }
 
         if (edgePairs != null) {
             for (List<Long> pair : edgePairs) {
@@ -403,16 +455,22 @@ public class NeighborAggregation {
                 if (srcId == null || dstId == null) {
                     continue;
                 }
+                if (!frontierSet.isEmpty() && !frontierSet.contains(srcId)) {
+                    continue;
+                }
                 incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
                 sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
                 sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
+                requiredNodeIds.add(srcId);
             }
         }
+
+        Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
 
         List<AggResult> results = new ArrayList<>(targetIds.size());
 
         for (Long targetId : targetIds) {
-            Node targetNode = tx.findNode(label, nodeIdKey, targetId);
+            Node targetNode = nodesById.get(targetId);
             if (targetNode == null) {
                 results.add(new AggResult(targetId, new ArrayList<>(), null, null));
                 continue;
@@ -429,7 +487,7 @@ public class NeighborAggregation {
             }
 
             for (Long srcId : incoming.getOrDefault(targetId, Collections.emptyList())) {
-                Node srcNode = tx.findNode(label, nodeIdKey, srcId);
+                Node srcNode = nodesById.get(srcId);
                 if (srcNode == null) {
                     continue;
                 }
@@ -452,6 +510,239 @@ public class NeighborAggregation {
         }
 
         return results.stream();
+    }
+
+    @Procedure(name = "gnnProcedures.aggregation.neighbor.sampledGcnNormFetch", mode = Mode.READ)
+    @Description(
+        "Fetch raw features/labels for requested sampled nodes and GCN-normalized aggregation over the sampled frontier "
+        + "in one call. Returns one row per requested node with optional raw nodeFeatures, label, and aggregatedFeatures."
+    )
+    public Stream<AggResult> aggregateSampledNeighborsGCNNormFetch(
+            @Name("nodeIds")                            List<Long> nodeIds,
+            @Name("rawNodeIds")                         List<Long> rawNodeIds,
+            @Name("targetIds")                          List<Long> targetIds,
+            @Name("edgePairs")                          List<List<Long>> edgePairs,
+            @Name("frontierIds")                        List<Long> frontierIds,
+            @Name("nodeIdKey")                          String nodeIdKey,
+            @Name("featureKey")                         String featureKey,
+            @Name("featureType")                        String featureType,
+            @Name("nodeLabel")                          String nodeLabel,
+            @Name(value = "targetKey", defaultValue = "") String targetKey,
+            @Name(value = "returnLabel", defaultValue = "false") Boolean returnLabel,
+            @Name(value = "improved", defaultValue = "false") Boolean improved
+    ) {
+        Label label = Label.label(nodeLabel);
+        boolean includeLabel = Boolean.TRUE.equals(returnLabel) && targetKey != null && !targetKey.isEmpty();
+        double selfLoopWeight = Boolean.TRUE.equals(improved) ? 2.0 : 1.0;
+        Set<Long> requestedSet = nodeIds == null ? Collections.emptySet() : new LinkedHashSet<>(nodeIds);
+        Set<Long> rawNodeSet = rawNodeIds == null ? Collections.emptySet() : new HashSet<>(rawNodeIds);
+        Set<Long> targetSet = targetIds == null ? Collections.emptySet() : new HashSet<>(targetIds);
+        Set<Long> frontierSet = frontierIds == null ? Collections.emptySet() : new HashSet<>(frontierIds);
+
+        Map<Long, List<Long>> incoming = new HashMap<>();
+        Map<Long, Long> sampledInDegree = new HashMap<>();
+        Set<Long> requiredNodeIds = new HashSet<>(requestedSet);
+
+        if (edgePairs != null) {
+            for (List<Long> pair : edgePairs) {
+                if (pair == null || pair.size() < 2) {
+                    continue;
+                }
+                Long srcId = pair.get(0);
+                Long dstId = pair.get(1);
+                if (srcId == null || dstId == null) {
+                    continue;
+                }
+                if (!frontierSet.isEmpty() && !frontierSet.contains(srcId)) {
+                    continue;
+                }
+                incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
+                sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
+                sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
+                requiredNodeIds.add(srcId);
+            }
+        }
+
+        Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
+
+        List<AggResult> results = new ArrayList<>(requestedSet.size());
+
+        for (Long nodeId : requestedSet) {
+            Node node = nodesById.get(nodeId);
+            if (node == null) {
+                results.add(new AggResult(nodeId, null, null, null));
+                continue;
+            }
+
+            double[] nodeFeatures = extractFeatures(node, featureKey, featureType);
+            List<Double> outNodeFeatures = rawNodeSet.contains(nodeId)
+                    ? toDoubleList(nodeFeatures)
+                    : null;
+            Object outLabel = includeLabel ? node.getProperty(targetKey, null) : null;
+            List<Double> outAggregated = null;
+
+            if (targetSet.contains(nodeId)) {
+                double targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + selfLoopWeight;
+                double[] agg = null;
+
+                if (nodeFeatures != null) {
+                    agg = new double[nodeFeatures.length];
+                    double selfWeight = selfLoopWeight / targetDegreeHat;
+                    accumulateScaled(agg, nodeFeatures, selfWeight);
+                }
+
+                for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
+                    Node srcNode = nodesById.get(srcId);
+                    if (srcNode == null) {
+                        continue;
+                    }
+
+                    double[] srcFeatures = extractFeatures(srcNode, featureKey, featureType);
+                    if (srcFeatures == null) {
+                        continue;
+                    }
+
+                    if (agg == null) {
+                        agg = new double[srcFeatures.length];
+                    }
+
+                    double srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeight;
+                    double weight = 1.0 / Math.sqrt(targetDegreeHat * srcDegreeHat);
+                    accumulateScaled(agg, srcFeatures, weight);
+                }
+
+                outAggregated = toDoubleList(agg);
+            }
+
+            results.add(new AggResult(nodeId, outAggregated, outLabel, outNodeFeatures));
+        }
+
+        return results.stream();
+    }
+
+    @Procedure(name = "gnnProcedures.aggregation.neighbor.sampledGcnNormFetchBatch", mode = Mode.READ)
+    @Description(
+        "Fetch raw sampled-node features, labels, and sampled GCN-normalized frontier aggregation in one batch row. "
+        + "Returns grouped id/value payloads instead of one row per node."
+    )
+    public Stream<SampledFetchBatchResult> aggregateSampledNeighborsGCNNormFetchBatch(
+            @Name("nodeIds")                            List<Long> nodeIds,
+            @Name("rawNodeIds")                         List<Long> rawNodeIds,
+            @Name("targetIds")                          List<Long> targetIds,
+            @Name("edgePairs")                          List<List<Long>> edgePairs,
+            @Name("frontierIds")                        List<Long> frontierIds,
+            @Name("nodeIdKey")                          String nodeIdKey,
+            @Name("featureKey")                         String featureKey,
+            @Name("featureType")                        String featureType,
+            @Name("nodeLabel")                          String nodeLabel,
+            @Name(value = "targetKey", defaultValue = "") String targetKey,
+            @Name(value = "returnLabel", defaultValue = "false") Boolean returnLabel,
+            @Name(value = "improved", defaultValue = "false") Boolean improved
+    ) {
+        Label label = Label.label(nodeLabel);
+        boolean includeLabel = Boolean.TRUE.equals(returnLabel) && targetKey != null && !targetKey.isEmpty();
+        double selfLoopWeight = Boolean.TRUE.equals(improved) ? 2.0 : 1.0;
+        List<Long> requestedIds = nodeIds == null ? Collections.emptyList() : nodeIds;
+        List<Long> rawIds = rawNodeIds == null ? Collections.emptyList() : rawNodeIds;
+        List<Long> targetIdsOrdered = targetIds == null ? Collections.emptyList() : targetIds;
+        Set<Long> rawNodeSet = new HashSet<>(rawIds);
+        Set<Long> targetSet = new HashSet<>(targetIdsOrdered);
+        Set<Long> frontierSet = frontierIds == null ? Collections.emptySet() : new HashSet<>(frontierIds);
+
+        Map<Long, List<Long>> incoming = new HashMap<>();
+        Map<Long, Long> sampledInDegree = new HashMap<>();
+        Set<Long> requiredNodeIds = new HashSet<>(requestedIds);
+        if (edgePairs != null) {
+            for (List<Long> pair : edgePairs) {
+                if (pair == null || pair.size() < 2) {
+                    continue;
+                }
+                Long srcId = pair.get(0);
+                Long dstId = pair.get(1);
+                if (srcId == null || dstId == null) {
+                    continue;
+                }
+                if (!frontierSet.isEmpty() && !frontierSet.contains(srcId)) {
+                    continue;
+                }
+                incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
+                sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
+                sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
+                requiredNodeIds.add(srcId);
+            }
+        }
+
+        Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
+
+        List<Long> outRawIds = new ArrayList<>();
+    List<byte[]> outRawFeatures = new ArrayList<>();
+        List<Long> outLabelIds = new ArrayList<>();
+        List<Object> outLabels = new ArrayList<>();
+        List<Long> outTargetIds = new ArrayList<>();
+    List<byte[]> outAggregated = new ArrayList<>();
+
+        for (Long nodeId : requestedIds) {
+            Node node = nodesById.get(nodeId);
+            if (node == null) {
+                continue;
+            }
+
+            double[] nodeFeatures = extractFeatures(node, featureKey, featureType);
+            if (rawNodeSet.contains(nodeId) && nodeFeatures != null) {
+                outRawIds.add(nodeId);
+                outRawFeatures.add(extractFeaturesAsFloat32Bytes(node, featureKey, featureType));
+            }
+
+            if (includeLabel) {
+                outLabelIds.add(nodeId);
+                outLabels.add(node.getProperty(targetKey, null));
+            }
+
+            if (!targetSet.contains(nodeId)) {
+                continue;
+            }
+
+            double targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + selfLoopWeight;
+            double[] agg = null;
+
+            if (nodeFeatures != null) {
+                agg = new double[nodeFeatures.length];
+                double selfWeight = selfLoopWeight / targetDegreeHat;
+                accumulateScaled(agg, nodeFeatures, selfWeight);
+            }
+
+            for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
+                Node srcNode = nodesById.get(srcId);
+                if (srcNode == null) {
+                    continue;
+                }
+
+                double[] srcFeatures = extractFeatures(srcNode, featureKey, featureType);
+                if (srcFeatures == null) {
+                    continue;
+                }
+
+                if (agg == null) {
+                    agg = new double[srcFeatures.length];
+                }
+
+                double srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeight;
+                double weight = 1.0 / Math.sqrt(targetDegreeHat * srcDegreeHat);
+                accumulateScaled(agg, srcFeatures, weight);
+            }
+
+            outTargetIds.add(nodeId);
+            outAggregated.add(packFloat32Bytes(agg));
+        }
+
+        return Stream.of(new SampledFetchBatchResult(
+                outRawIds,
+                outRawFeatures,
+                outLabelIds,
+                outLabels,
+                outTargetIds,
+                outAggregated
+        ));
     }
 
     // -------------------------------------------------------------------------
@@ -660,6 +951,45 @@ public class NeighborAggregation {
         return count;
     }
 
+    /**
+     * Use a persisted incoming degree when present, otherwise fall back to a live
+     * traversal so the procedure remains backwards compatible.
+     *
+     * Assumes the stored property was computed over the same incoming edge set as
+     * this procedure uses.
+     */
+    private long getStoredIncomingDegreeOrCount(
+            Node node,
+            RelationshipType relType,
+            boolean hasEdgeType,
+            Label requiredNeighborLabel
+    ) {
+        Object value = node.getProperty(IN_DEGREE_PROPERTY, null);
+        if (value instanceof Number) {
+            return ((Number) value).longValue();
+        }
+        return countIncomingNeighbors(node, relType, hasEdgeType, requiredNeighborLabel);
+    }
+
+    /** Preload all referenced nodes into a lookup map to avoid repeated indexed lookups in inner loops. */
+    private Map<Long, Node> preloadNodesById(Label label, String nodeIdKey, Iterable<Long> nodeIds) {
+        Map<Long, Node> nodesById = new HashMap<>();
+        if (nodeIds == null) {
+            return nodesById;
+        }
+
+        for (Long nodeId : nodeIds) {
+            if (nodeId == null || nodesById.containsKey(nodeId)) {
+                continue;
+            }
+            Node node = tx.findNode(label, nodeIdKey, nodeId);
+            if (node != null) {
+                nodesById.put(nodeId, node);
+            }
+        }
+        return nodesById;
+    }
+
     /** Add a scaled feature vector into an accumulator in place. */
     private void accumulateScaled(double[] acc, double[] feat, double scale) {
         for (int i = 0; i < acc.length; i++) {
@@ -724,6 +1054,27 @@ public class NeighborAggregation {
             double[] d = (double[]) prop;
             return d;
         }
+    }
+
+    /** Return node features as packed little-endian float32 bytes for transport efficiency. */
+    private byte[] extractFeaturesAsFloat32Bytes(Node node, String featureKey, String featureType) {
+        Object prop = node.getProperty(featureKey, null);
+        if (prop == null) return null;
+
+        if ("byte[]".equals(featureType)) {
+            return (byte[]) prop;
+        }
+        return packFloat32Bytes((double[]) prop);
+    }
+
+    /** Pack a feature vector as little-endian float32 bytes for Bolt transport. */
+    private byte[] packFloat32Bytes(double[] arr) {
+        if (arr == null) return null;
+        ByteBuffer buf = ByteBuffer.allocate(arr.length * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        for (double v : arr) {
+            buf.putFloat((float) v);
+        }
+        return buf.array();
     }
 
     /** Box a primitive {@code double[]} to {@code List<Double>}. */

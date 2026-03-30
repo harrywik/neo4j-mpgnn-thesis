@@ -107,7 +107,7 @@ def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
 
 
 def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
-                        profile_accumulator, sampler, graph_store):
+                        profile_accumulator, sampler):
     from training.registry import FEATURE_STORES, filter_kwargs
     fs_cfg = impl_cfg["feature_store"]
     cls = FEATURE_STORES[fs_cfg["class_name"]]
@@ -119,7 +119,6 @@ def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
         kwargs["driver"] = driver
     if impl_cfg.get("needs_sampler_in_fs"):
         kwargs["sampler"] = sampler
-    kwargs["graph_store"] = graph_store
     return cls(**filter_kwargs(cls, kwargs))
 
 
@@ -444,7 +443,7 @@ def main():
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler, graph_store
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
@@ -506,7 +505,7 @@ def main():
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler, graph_store
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
