@@ -17,13 +17,14 @@ from typing import Any, Dict, Type
 # ---------------------------------------------------------------------------
 from neo4j_pyg.feature_stores.Neo4jNoCacheFS import Neo4jNoCacheFS
 from neo4j_pyg.feature_stores.Neo4jCachedFS import Neo4jCachedFS
-from neo4j_pyg.feature_stores.Neo4jUDPFeatureStore import Neo4jUDPFeatureStore
+from neo4j_pyg.feature_stores.Neo4jPreAggFeatureStore import Neo4jPreAggFeatureStore
 from neo4j_pyg.feature_stores.Neo4jSIGNFeatureStore import Neo4jSIGNFeatureStore
 
 FEATURE_STORES: Dict[str, Type] = {
     "Neo4jNoCacheFS": Neo4jNoCacheFS,
     "Neo4jCachedFS": Neo4jCachedFS,
-    "Neo4jUDPFeatureStore": Neo4jUDPFeatureStore,
+    "Neo4jPreAggFeatureStore": Neo4jPreAggFeatureStore,
+    "Neo4jUDPFeatureStore": Neo4jPreAggFeatureStore,  # backward-compat alias
     "Neo4jSIGNFeatureStore": Neo4jSIGNFeatureStore,
 }
 
@@ -72,25 +73,21 @@ except ImportError:
 # Samplers
 # ---------------------------------------------------------------------------
 from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
-from neo4j_pyg.samplers.Neo4jNeighborSampler import Neo4jNeighborSampler
 from neo4j_pyg.samplers.Neo4jJavaNeighborSampler import Neo4jJavaNeighborSampler
-from neo4j_pyg.samplers.Neo4jAggregationSampler import Neo4jAggregationSampler
+from neo4j_pyg.deprecated.Neo4jAggregationSampler import Neo4jAggregationSampler
 from neo4j_pyg.samplers.Neo4jSIGNSampler import Neo4jSIGNSampler
 from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import (
     Neo4jGraphSAINTSampler,
     Neo4jGraphSAINTRandomWalkSampler,
 )
-from neo4j_pyg.samplers.Neo4jEdgeModeSampler import Neo4jEdgeModeSampler
 
 SAMPLERS: Dict[str, Type] = {
     "Neo4jSampler": Neo4jSampler,
-    "Neo4jNeighborSampler": Neo4jNeighborSampler,
     "Neo4jJavaNeighborSampler": Neo4jJavaNeighborSampler,
     "Neo4jAggregationSampler": Neo4jAggregationSampler,
     "Neo4jSIGNSampler": Neo4jSIGNSampler,
     "Neo4jGraphSAINTSampler": Neo4jGraphSAINTSampler,
     "Neo4jGraphSAINTRandomWalkSampler": Neo4jGraphSAINTRandomWalkSampler,
-    "Neo4jEdgeModeSampler": Neo4jEdgeModeSampler,
 }
 
 try:

@@ -136,7 +136,16 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
     kwargs.update(m_cfg.get("extra_kwargs", {}))
     if "hops" in m_cfg.get("extra_kwargs", {}):
         kwargs["hops"] = m_cfg["extra_kwargs"]["hops"]
-    return cls(**filter_kwargs(cls, kwargs))
+    model = cls(**filter_kwargs(cls, kwargs))
+    if m_cfg.get("to_preaggregated_first_layer", False):
+        from neo4j_pyg.models.preagg_adapters import to_preaggregated_first_layer
+        result = to_preaggregated_first_layer(model)
+        model = result.model
+        print(result.preagg_spec)
+    if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
+        from neo4j_pyg.models.preagg_adapters import to_hybrid_last_hop_gcn
+        model = to_hybrid_last_hop_gcn(model)
+    return model
 
 
 # ---------------------------------------------------------------------------

@@ -206,10 +206,36 @@ class Trainer:
         ).to(torch.long)
         return indices
 
+    def _get_model_kwargs(self, batch) -> dict:
+        if not getattr(self.model, "_uses_hybrid_last_hop_preaggregation", False):
+            return {}
+        if self.feature_store is None or not hasattr(batch, "n_id"):
+            return {}
+
+        frontier_nodes = set(getattr(self.feature_store, "_current_frontier_nodes", []) or [])
+        preagg_map = getattr(self.feature_store, "_last_hybrid_preagg", {})
+        node_ids = batch.n_id.detach().cpu().tolist()
+
+        frontier_mask = torch.tensor(
+            [int(nid) in frontier_nodes for nid in node_ids],
+            dtype=torch.bool,
+            device=batch.x.device,
+        )
+        aggregated_neighbors = torch.zeros_like(batch.x)
+        for i, nid in enumerate(node_ids):
+            preagg = preagg_map.get(int(nid))
+            if preagg is not None:
+                aggregated_neighbors[i] = torch.as_tensor(preagg, device=batch.x.device, dtype=batch.x.dtype)
+
+        return {
+            "frontier_mask": frontier_mask,
+            "aggregated_neighbors": aggregated_neighbors,
+        }
+
     def _run_batch(self, batch) -> None:
         batch = batch.to(self.device)
         self.optimizer.zero_grad()
-        out = self.model(batch.x, batch.edge_index)
+        out = self.model(batch.x, batch.edge_index, **self._get_model_kwargs(batch))
         
         # Filter for seed nodes (Graph GCN specific)
         seed_mask = torch.isin(batch.n_id, batch.input_id)

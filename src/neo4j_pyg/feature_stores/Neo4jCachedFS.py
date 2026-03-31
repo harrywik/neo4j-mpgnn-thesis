@@ -3,7 +3,6 @@ from typing import Dict, Optional
 import sys
 
 from neo4j import Driver
-from torch_geometric.data.feature_store import TensorAttr
 
 FS_DIR = Path(__file__).resolve().parent.parent
 if str(FS_DIR) not in sys.path:
@@ -46,6 +45,21 @@ class Neo4jCachedFS(Neo4jAbstractFS):
         label_map: Optional[Dict[str, int]] = None,
         cache_size_GB: float = 0.00001,
     ) -> None:
+        cache_db = database_name if database_name else dataset_name
+        cache = Neo4jTwoLevelCache(
+            driver=driver,
+            uri=uri,
+            user=user,
+            pwd=pwd,
+            database_name=cache_db,
+            nodeid_property=nodeid_property,
+            feature_property=feature_property,
+            target_property=target_property,
+            feature_property_type=feature_property_type,
+            label_map=label_map,
+            cache_size_GB=cache_size_GB,
+            prefill=False,
+        )
         super().__init__(
             driver=driver,
             uri=uri,
@@ -60,70 +74,6 @@ class Neo4jCachedFS(Neo4jAbstractFS):
             split_property_type=split_property_type,
             nodeid_property=nodeid_property,
             feature_property_type=feature_property_type,
+            cache=cache,
         )
-
-        self._cache = Neo4jTwoLevelCache(
-            driver=driver,
-            uri=uri,
-            user=user,
-            pwd=pwd,
-            database_name=self.database_name,
-            nodeid_property=self.nodeid_property,
-            feature_property=self.feature_property,
-            target_property=self.target_property,
-            feature_property_type=self.feature_property_type,
-            label_map=label_map,
-            cache_size_GB=cache_size_GB,
-            prefill=False,
-        )
-        self.cache_size = self._cache.cache_size
-        self._labels = self._cache._labels
-        self.hot_cache = self._cache.hot_cache
-        self.hot_label_cache = self._cache.hot_label_cache
-        self.cache = self._cache.cache
-        self.label_cache = self._cache.label_cache
-
-        self._prefill_hot_cache(graph_name="hot_cache_projection", k=self._cache.cache_size // 3)
-
-    # ------------------------------------------------------------------
-    # Hot-cache prefill (GDS PageRank)
-    # ------------------------------------------------------------------
-
-    def _prefill_hot_cache(
-        self,
-        graph_name: str,
-        k: int = 500,
-        undirected: bool = True,
-        drop_graph: bool = True,
-    ) -> None:
-        """Fill the static hot cache with the top-K nodes ranked by PageRank."""
-        if undirected is not True:
-            raise ValueError("Neo4jTwoLevelCache currently only supports undirected hot-cache prefill")
-        if drop_graph is not True:
-            raise ValueError("Neo4jTwoLevelCache currently always drops temporary hot-cache projections")
-
-        self._cache.prefill_hot_cache(graph_name=graph_name, k=k)
-        print(f"Hot cache prefilled with {len(self.hot_cache)} nodes.")
-
-    # ------------------------------------------------------------------
-    # Neo4jAbstractFS abstract method implementations
-    # ------------------------------------------------------------------
-
-    def _get_cached_value(
-        self, nid: int, attr: TensorAttr, **kwargs
-    ) -> Optional[object]:
-        """Return the cached value for *nid*, or ``None`` if not cached."""
-        return self._cache.get((attr.attr_name, nid))
-
-    def _update_cached_value(
-        self, nid: int, value: object, attr: TensorAttr, **kwargs
-    ) -> None:
-        """Insert *value* for *nid* into the LRU cache, evicting the oldest if full."""
-        self._cache[(attr.attr_name, nid)] = value
-
-    def _remove_cached_value(
-        self, nid: int, attr: TensorAttr, **kwargs
-    ) -> None:
-        """Remove *nid* from both hot and LRU caches (no-op if absent)."""
-        self._cache.delete((attr.attr_name, nid))
 
