@@ -35,6 +35,7 @@ class Neo4jJavaNeighborSampler(BaseSampler):
         self.last_sampled_nodes: List[int] = []
         self.last_sampled_edge_pairs: List[List[int]] = []
         self.last_frontier_nodes: List[int] = []
+        self.last_nodes_by_hop: List[List[int]] = []
 
         self.query = (
             "CALL gnnProcedures.sampling.neighbor.sample("
@@ -45,8 +46,8 @@ class Neo4jJavaNeighborSampler(BaseSampler):
             "   $edge_type,"
             "   $random_seed,"
             "   $return_frontier"
-            ") YIELD ordered_nodes, edge_pairs, frontier_nodes "
-            "RETURN ordered_nodes, edge_pairs, frontier_nodes"
+            ") YIELD ordered_nodes, edge_pairs, frontier_nodes, nodes_by_hop "
+            "RETURN ordered_nodes, edge_pairs, frontier_nodes, nodes_by_hop"
         )
 
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
@@ -71,6 +72,7 @@ class Neo4jJavaNeighborSampler(BaseSampler):
         self.last_sampled_nodes = list(record.get("ordered_nodes") or []) if record else []
         self.last_sampled_edge_pairs = list(record.get("edge_pairs") or []) if record else []
         self.last_frontier_nodes = frontier_nodes
+        self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
 
         return SamplerOutput(
             node=node,
