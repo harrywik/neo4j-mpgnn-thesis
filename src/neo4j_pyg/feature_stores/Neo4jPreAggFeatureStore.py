@@ -1,19 +1,19 @@
-"""Neo4jUDPFeatureStore — feature store that serves UDP-aggregated features.
+"""Neo4jPreAggFeatureStore — feature store that returns server-side pre-aggregated features.
 
 Usage
 -----
 Use a regular topology sampler to produce the sampled node IDs and edge_index,
-and let this feature store aggregate the requested node features on demand::
+and let this feature store retrieve pre-aggregated features on demand::
 
     sampler = Neo4jJavaNeighborSampler(graph_store, ...)
-    feature_store = Neo4jUDPFeatureStore(graph_store, max_neighbors=10, ...)
+    feature_store = Neo4jPreAggFeatureStore(graph_store, max_neighbors=10, ...)
 
 For the ``x`` attribute, ``_multi_get_tensor`` uses the requested node IDs from
-PyG and calls ``gnnProcedures.aggregation.neighbor.mean`` to return one-hop
-aggregated features for those nodes.
+PyG and calls a ``gnnProcedures.aggregation.neighbor.*`` stored procedure to
+return server-side pre-aggregated features for those nodes.
 
-For paired ``x``/``y`` requests, the same UDP call also returns labels so the
-feature store can avoid a second DB round-trip.
+For paired ``x``/``y`` requests, the same procedure call also returns labels so
+the feature store can avoid a second DB round-trip.
 """
 
 from functools import cached_property
@@ -32,18 +32,24 @@ if str(FS_DIR) not in sys.path:
 from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
 
 
-class Neo4jUDPFeatureStore(Neo4jAbstractFS):
-    """Feature store backed by the ``gnnProcedures.aggregation.neighbor.*`` UDPs.
+class Neo4jPreAggFeatureStore(Neo4jAbstractFS):
+    """Feature store that retrieves server-side pre-aggregated node features.
+
+    Instead of fetching raw features for every sampled node, this store
+    delegates aggregation to Neo4j stored procedures
+    (``gnnProcedures.aggregation.neighbor.*``), returning one pre-aggregated
+    feature vector per requested node ready for the GNN's linear transform.
 
     Parameters
     ----------
     max_neighbors:
-        Maximum number of neighbours to aggregate per requested node.
+        Maximum number of neighbours to sample per requested node during
+        server-side aggregation.
     edge_type:
         Relationship type to aggregate across. Empty string means any type.
     aggregation_mode:
-        Server-side aggregation to use. Supported values are ``"mean"`` and
-        ``"gcnNorm"`` and ``"sampledGcnNorm"``.
+        Server-side aggregation to use. Supported values are ``"mean"``,
+        ``"gcnNorm"``, and ``"sampledGcnNorm"``.
     improved:
         When ``aggregation_mode="gcnNorm"``, use the improved GCN self-loop
         weight of ``2`` instead of ``1``.
@@ -97,7 +103,7 @@ class Neo4jUDPFeatureStore(Neo4jAbstractFS):
             )
         else:
             raise ValueError(
-                "Unsupported Neo4jUDPFeatureStore aggregation_mode "
+                "Unsupported Neo4jPreAggFeatureStore aggregation_mode "
                 f"'{self.aggregation_mode}'. Expected 'mean', 'gcnNorm', or 'sampledGcnNorm'."
             )
         return (

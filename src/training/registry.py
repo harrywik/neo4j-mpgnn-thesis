@@ -17,13 +17,14 @@ from typing import Any, Dict, Type
 # ---------------------------------------------------------------------------
 from neo4j_pyg.feature_stores.Neo4jNoCacheFS import Neo4jNoCacheFS
 from neo4j_pyg.feature_stores.Neo4jCachedFS import Neo4jCachedFS
-from neo4j_pyg.feature_stores.Neo4jUDPFeatureStore import Neo4jUDPFeatureStore
+from neo4j_pyg.feature_stores.Neo4jPreAggFeatureStore import Neo4jPreAggFeatureStore
 from neo4j_pyg.feature_stores.Neo4jSIGNFeatureStore import Neo4jSIGNFeatureStore
 
 FEATURE_STORES: Dict[str, Type] = {
     "Neo4jNoCacheFS": Neo4jNoCacheFS,
     "Neo4jCachedFS": Neo4jCachedFS,
-    "Neo4jUDPFeatureStore": Neo4jUDPFeatureStore,
+    "Neo4jPreAggFeatureStore": Neo4jPreAggFeatureStore,
+    "Neo4jUDPFeatureStore": Neo4jPreAggFeatureStore,  # backward-compat alias
     "Neo4jSIGNFeatureStore": Neo4jSIGNFeatureStore,
 }
 
