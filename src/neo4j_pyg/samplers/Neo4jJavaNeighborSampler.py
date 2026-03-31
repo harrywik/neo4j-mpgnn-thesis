@@ -46,8 +46,8 @@ class Neo4jJavaNeighborSampler(BaseSampler):
             "   $edge_type,"
             "   $random_seed,"
             "   $return_frontier"
-            ") YIELD ordered_nodes, edge_pairs, frontier_nodes, nodes_by_hop "
-            "RETURN ordered_nodes, edge_pairs, frontier_nodes, nodes_by_hop"
+            ") YIELD edge_pairs, frontier_nodes, nodes_by_hop "
+            "RETURN edge_pairs, frontier_nodes, nodes_by_hop"
         )
 
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
@@ -68,11 +68,11 @@ class Neo4jJavaNeighborSampler(BaseSampler):
         )
 
         node, row, col = self.graph_store.build_topo_etl(record, seeds)
+        self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
         frontier_nodes = list(record.get("frontier_nodes") or []) if record else []
-        self.last_sampled_nodes = list(record.get("ordered_nodes") or []) if record else []
+        self.last_sampled_nodes = [nid for hop in self.last_nodes_by_hop for nid in hop]
         self.last_sampled_edge_pairs = list(record.get("edge_pairs") or []) if record else []
         self.last_frontier_nodes = frontier_nodes
-        self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
 
         return SamplerOutput(
             node=node,

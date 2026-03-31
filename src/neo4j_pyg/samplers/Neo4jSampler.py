@@ -27,6 +27,7 @@ class Neo4jSampler(BaseSampler):
         self.node_label = node_label
         self.profile = profile
 
+        self.last_nodes_by_hop: List[List[int]] = []
         self.query = self._build_fanout_query()
 
     def _build_fanout_query(self) -> str:
@@ -77,11 +78,12 @@ class Neo4jSampler(BaseSampler):
         WITH i, s
         //ORDER BY i
         WITH collect(s) AS frontier, collect(s) AS visited, [] AS edges
+        WITH frontier, visited, edges, [frontier] AS nodes_by_hop
         """)
 
         for k in self.num_neighbors:
             q.append(f"""
-            CALL (frontier, visited, edges) {{
+            CALL (frontier, visited, edges, nodes_by_hop) {{
 
             // 2. process frontier nodes in stable index order.
             UNWIND range(0, size(frontier)-1) AS i
@@ -124,18 +126,20 @@ class Neo4jSampler(BaseSampler):
             RETURN
                 next_frontier,
                 visited + next_frontier AS next_visited,
-                edges + new_edges AS next_edges
+                edges + new_edges AS next_edges,
+                nodes_by_hop + [next_frontier] AS next_nodes_by_hop
             }}
             WITH next_frontier AS frontier,
                 next_visited AS visited,
-                next_edges AS edges
+                next_edges AS edges,
+                next_nodes_by_hop AS nodes_by_hop
             """)
 
         q.append(f"""
-        // 11. return the ordered nodes and edge pairs
+        // 11. return edge pairs and nodes grouped by hop distance from seeds
         RETURN
-            [n IN visited | n.{self.nodeid_property}] AS ordered_nodes,
-            edges AS edge_pairs
+            edges AS edge_pairs,
+            [hop IN nodes_by_hop | [n IN hop | n.{self.nodeid_property}]] AS nodes_by_hop
         """)
 
         return "\n".join(q)
@@ -151,6 +155,8 @@ class Neo4jSampler(BaseSampler):
 
         # ETL (tensor building) delegated to graph store so all ETL
         # instrumentation lives in one place.
+        self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
+
         node, row, col = self.graph_store.build_topo_etl(record, seeds)
 
         return SamplerOutput(
