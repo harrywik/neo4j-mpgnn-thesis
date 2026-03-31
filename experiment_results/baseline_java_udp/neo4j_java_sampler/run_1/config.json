@@ -1,0 +1,50 @@
+{
+    "name": "cora",
+    "database_name": "neo4j",
+    "node_label": "Paper",
+    "edge_type": "CITES",
+    "feature_property": "embedding_bytes",
+    "feature_property_type": "byte[]",
+    "target_property": "subject",
+    "nodeid_property": "id",
+    "split_property_name": "split",
+    "split_property_type": "str",
+    "feature_dim": 1433,
+    "nbr_classes": 7,
+    "default_hidden_dim1": 12,
+    "default_hidden_dim2": 12,
+    "planetoid_root": "data/Planetoid",
+    "planetoid_name": "Cora",
+    "lr": 0.001,
+    "batch_size": 30,
+    "max_epochs": 90,
+    "patience": 200,
+    "min_delta": 0.01,
+    "shuffle": true,
+    "initialise_weights": true,
+    "drop_last": true,
+    "profile": true,
+    "logg_cpu_utilization": true,
+    "cpu_burst_batches": 5,
+    "max_training_size": 30000,
+    "max_validation_size": 100,
+    "max_test_size": 1000,
+    "nbr_runs": 3,
+    "dataset": "cora",
+    "implementation": "neo4j_java_sampler",
+    "feature_store": "Neo4jNoCacheFS",
+    "graph_store": "Neo4jSingleGS",
+    "sampler": {
+        "name": "Neo4jJavaNeighborSampler",
+        "num_neighbors": [
+            10,
+            5
+        ],
+        "extra_kwargs": {
+            "random_seed": 42
+        }
+    },
+    "model": {
+        "class": "GCN"
+    }
+}
