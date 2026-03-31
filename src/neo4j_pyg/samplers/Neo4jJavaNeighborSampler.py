@@ -31,6 +31,11 @@ class Neo4jJavaNeighborSampler(BaseSampler):
         self.nodeid_property = node_id_key or graph_store.nodeid_property
         self.random_seed = int(random_seed)
         self.profile = profile
+        self.return_frontier = False
+        self.last_sampled_nodes: List[int] = []
+        self.last_sampled_edge_pairs: List[List[int]] = []
+        self.last_frontier_nodes: List[int] = []
+        self.last_nodes_by_hop: List[List[int]] = []
 
         self.query = (
             "CALL gnnProcedures.sampling.neighbor.sample("
@@ -39,9 +44,10 @@ class Neo4jJavaNeighborSampler(BaseSampler):
             "   $node_label,"
             "   $num_neighbors,"
             "   $edge_type,"
-            "   $random_seed"
-            ") YIELD ordered_nodes, edge_pairs "
-            "RETURN ordered_nodes, edge_pairs"
+            "   $random_seed,"
+            "   $return_frontier"
+            ") YIELD edge_pairs, frontier_nodes, nodes_by_hop "
+            "RETURN edge_pairs, frontier_nodes, nodes_by_hop"
         )
 
     def sample_from_nodes(self, ns_input: NodeSamplerInput) -> SamplerOutput:
@@ -57,10 +63,16 @@ class Neo4jJavaNeighborSampler(BaseSampler):
                 "edge_type": self.rel_type,
                 "num_neighbors": self.num_neighbors,
                 "random_seed": self.random_seed,
+                "return_frontier": self.return_frontier,
             },
         )
 
         node, row, col = self.graph_store.build_topo_etl(record, seeds)
+        self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
+        frontier_nodes = list(record.get("frontier_nodes") or []) if record else []
+        self.last_sampled_nodes = [nid for hop in self.last_nodes_by_hop for nid in hop]
+        self.last_sampled_edge_pairs = list(record.get("edge_pairs") or []) if record else []
+        self.last_frontier_nodes = frontier_nodes
 
         return SamplerOutput(
             node=node,
@@ -68,7 +80,7 @@ class Neo4jJavaNeighborSampler(BaseSampler):
             col=col,
             edge=None,
             batch=None,
-            metadata=(seeds, seed_time),
+            metadata=(seeds, seed_time, frontier_nodes),
         )
 
     def sample_from_edges(self, index, neg_sampling=None):

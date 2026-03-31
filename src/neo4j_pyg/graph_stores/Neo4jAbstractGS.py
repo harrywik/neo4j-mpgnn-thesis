@@ -232,7 +232,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
             self.measurer.log_event("start_etl", 1)
             self.measurer.set_phase("etl")
 
-        if record is None or not record.get("ordered_nodes"):
+        if record is None or (not record.get("ordered_nodes") and not record.get("nodes_by_hop")):
             if self.measurer is not None:
                 self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
                 self.measurer.log_event("end_etl", 1)
@@ -240,7 +240,11 @@ class Neo4jAbstractGS(GraphStore, ABC):
             empty = torch.zeros(0, dtype=torch.long)
             return fallback_seeds, empty, empty
 
-        ordered_global_ids = torch.tensor(record["ordered_nodes"], dtype=torch.long)
+        if record.get("ordered_nodes"):
+            ordered_global_ids = torch.tensor(record["ordered_nodes"], dtype=torch.long)
+        else:
+            flat = [nid for hop in record["nodes_by_hop"] for nid in hop]
+            ordered_global_ids = torch.tensor(flat, dtype=torch.long)
         global_to_local = {
             int(gid): i for i, gid in enumerate(ordered_global_ids.tolist())
         }

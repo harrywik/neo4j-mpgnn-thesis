@@ -6,6 +6,7 @@ __pycache__/
 .DS_Store
 # Build/dist folders
 build/
+target/
 develop-eggs/
 dist/
 downloads/
@@ -18,6 +19,13 @@ sdist/
 var/
 wheels/
 *.egg-info/
+
+# Java/Maven build artifacts
+*.class
+*.jar
+*.war
+*.ear
+neo4j-gcn-plugin/target/
 
 # Virtual Env
 .venv/
