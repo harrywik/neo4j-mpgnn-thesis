@@ -139,7 +139,9 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
     model = cls(**filter_kwargs(cls, kwargs))
     if m_cfg.get("to_preaggregated_first_layer", False):
         from neo4j_pyg.models.preagg_adapters import to_preaggregated_first_layer
-        model = to_preaggregated_first_layer(model).model
+        result = to_preaggregated_first_layer(model)
+        model = result.model
+        print(result.preagg_spec)
     if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
         from neo4j_pyg.models.preagg_adapters import to_hybrid_last_hop_gcn
         model = to_hybrid_last_hop_gcn(model)
