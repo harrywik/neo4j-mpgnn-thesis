@@ -1,9 +1,10 @@
 {
+  "needs_sampler_in_fs": true,
   "feature_store": {
-    "class_name": "Neo4jUDPFeatureStore",
+    "class_name": "Neo4jPreAggFeatureStore",
     "connection_mode": "driver",
     "extra_kwargs": {
-      "max_neighbors": 10
+      "aggregation_mode": "sampledGcnNorm"
     }
   },
   "graph_store": {
@@ -11,11 +12,12 @@
     "connection_mode": "driver"
   },
   "sampler": {
-    "class_name": "Neo4jAggregationSampler",
-    "max_neighbors": 10
+    "class_name": "Neo4jJavaNeighborSampler",
+    "num_neighbors": [10, 5]
   },
   "model": {
-    "class_name": "MLPPostAggregation"
+    "class_name": "GCN",
+    "to_hybrid_last_hop_preaggregation": true
   },
   "trainer": "Trainer",
   "nodeloader_args": {
