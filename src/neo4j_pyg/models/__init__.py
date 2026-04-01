@@ -14,7 +14,7 @@ from .preagg_adapters import (
     PreAggResult,
     PreAggGCNConvAdapter,
     PreAggModelWrapper,
-    HybridLastHopGCNWrapper,
+    HybridLastHopWrapper,
 )
 
 __all__ = [
@@ -31,5 +31,5 @@ __all__ = [
     "PreAggResult",
     "PreAggGCNConvAdapter",
     "PreAggModelWrapper",
-    "HybridLastHopGCNWrapper",
+    "HybridLastHopWrapper",
 ]

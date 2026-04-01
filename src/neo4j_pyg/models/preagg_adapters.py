@@ -17,10 +17,12 @@ Usage
 
 Notes
 -----
-Only GCNConv is supported in the current implementation.  Other supported
-candidates (SAGEConv, GINConv) raise NotImplementedError for now.  Attention-
-based layers (GATConv, TransformerConv) raise ValueError because their message
-function cannot be separated from aggregation.
+Currently supported layers: GCNConv.  Any other MessagePassing layer raises
+``ValueError`` with a message listing what is supported.  To add a new layer,
+implement a :class:`PreAggAdapter` subclass and register it in
+``_ADAPTER_REGISTRY``.  Attention-based layers (GATConv, TransformerConv) are
+explicitly blocked because their message function cannot be separated from
+aggregation.
 """
 
 import copy
@@ -46,6 +48,11 @@ try:
     _UNSUPPORTED_MP_LAYERS += (TransformerConv,)
 except ImportError:
     pass
+
+# Registry mapping MessagePassing layer class → PreAggAdapter class.
+# To add support for a new layer type, add an entry here and implement
+# the corresponding PreAggAdapter subclass.
+_ADAPTER_REGISTRY: Dict[type, type] = {}  # populated after class definitions
 
 
 # ---------------------------------------------------------------------------
@@ -98,6 +105,14 @@ class PreAggAdapter(nn.Module, ABC):
         """
 
     @abstractmethod
+    def apply_preagg(self, preagg: Tensor) -> Tensor:
+        """Apply the layer's learnable transform to a pre-aggregated tensor.
+
+        Unlike ``forward``, this method does not trigger hooks and is safe to
+        call from within a forward hook on the same adapter.
+        """
+
+    @abstractmethod
     def preagg_spec(self) -> Dict[str, Any]:
         """Describe what the server-side aggregation must compute.
 
@@ -134,13 +149,16 @@ class PreAggGCNConvAdapter(PreAggAdapter):
         super().__init__()
         self.conv = conv
 
+    def apply_preagg(self, preagg: Tensor) -> Tensor:
+        out = self.conv.lin(preagg)
+        if self.conv.bias is not None:
+            out = out + self.conv.bias
+        return out
+
     def forward(self, x: Tensor, edge_index: Optional[Tensor] = None,
                 preagg: Optional[Tensor] = None, **kwargs) -> Tensor:
         if preagg is not None:
-            out = self.conv.lin(preagg)
-            if self.conv.bias is not None:
-                out = out + self.conv.bias
-            return out
+            return self.apply_preagg(preagg)
         if edge_index is None:
             raise ValueError(
                 "PreAggGCNConvAdapter requires either 'preagg' or 'edge_index'."
@@ -180,7 +198,7 @@ class PreAggModelWrapper(nn.Module):
 
     def forward(self, x: Tensor, edge_index: Tensor,
                 preagg: Optional[Tensor] = None, **kwargs) -> Tensor:
-        if preagg is not None:
+        if preagg:
             # Install a one-shot pre-hook that intercepts the adapter's next
             # forward call and injects preagg into its arguments.
             def _inject(module, args, kw):
@@ -197,24 +215,28 @@ class PreAggModelWrapper(nn.Module):
         return out
 
 
-class HybridLastHopGCNWrapper(nn.Module):
-    """Wrapper for a 2-layer GCN that replaces only the deepest-hop raw
-    features with pre-aggregated inputs for the K-1 frontier.
+class HybridLastHopWrapper(nn.Module):
+    """Wrapper that replaces only the deepest-hop raw features with
+    pre-aggregated inputs for the K-1 frontier, for any model whose first
+    MessagePassing layer has a registered :class:`PreAggAdapter`.
 
-    The sampled topology remains unchanged.  The wrapper assumes a standard
-    2-layer ``GCN``-style model with attributes ``GCN1``, ``GCN2``, and
-    ``classifier``.
+    The sampled topology remains unchanged.  The first MP layer is found
+    automatically via ``_replace_first_mp_layer``; no specific model
+    attribute names are assumed.
     """
 
     def __init__(self, inner: nn.Module) -> None:
         super().__init__()
-        for attr in ("GCN1", "GCN2", "classifier"):
-            if not hasattr(inner, attr):
-                raise ValueError(
-                    "HybridLastHopGCNWrapper expects a model with attributes "
-                    "GCN1, GCN2, and classifier."
-                )
+        inner = copy.deepcopy(inner)
+        adapter = _replace_first_mp_layer(inner)
+        if adapter is None:
+            supported = ", ".join(c.__name__ for c in _ADAPTER_REGISTRY)
+            raise ValueError(
+                f"HybridLastHopWrapper requires a model with a supported first "
+                f"MessagePassing layer. Supported: {supported}."
+            )
         self.inner = inner
+        self._adapter = adapter
         self._uses_hybrid_last_hop_preaggregation = True
 
     def forward(
@@ -224,32 +246,39 @@ class HybridLastHopGCNWrapper(nn.Module):
         frontier_mask: Optional[Tensor] = None,
         aggregated_neighbors: Optional[Tensor] = None,
     ) -> Tensor:
-        if frontier_mask is None or aggregated_neighbors is None or frontier_mask.numel() == 0:
-            hidden = self.inner.GCN1(x, edge_index).relu_()
-            hidden = self.inner.GCN2(hidden, edge_index).relu_()
-            return self.inner.classifier(hidden)
-
-        if not frontier_mask.any():
-            hidden = self.inner.GCN1(x, edge_index).relu_()
-            hidden = self.inner.GCN2(hidden, edge_index).relu_()
-            return self.inner.classifier(hidden)
+        use_hybrid = (
+            frontier_mask is not None
+            and aggregated_neighbors is not None
+            and frontier_mask.numel() > 0
+            and frontier_mask.any()
+        )
+        if not use_hybrid:
+            return self.inner(x, edge_index)
 
         target_mask = aggregated_neighbors.abs().sum(dim=1) > 0
 
-        raw_x = x.clone()
-        raw_x[frontier_mask] = 0
+        def _zero_frontier(module, args, kw):
+            x_in = args[0].clone()
+            x_in[frontier_mask] = 0
+            return (x_in,) + args[1:], kw
 
-        hidden = self.inner.GCN1(raw_x, edge_index)
-        if target_mask.any():
-            replaced = self.inner.GCN1.lin(aggregated_neighbors[target_mask])
-            if self.inner.GCN1.bias is not None:
-                replaced = replaced + self.inner.GCN1.bias
-            hidden = hidden.clone()
-            hidden[target_mask] = replaced
+        def _patch_targets(module, args, output):
+            if target_mask.any():
+                patched = output.clone()
+                patched[target_mask] = self._adapter.apply_preagg(
+                    aggregated_neighbors[target_mask]
+                )
+                return patched
+            return output
 
-        hidden = hidden.relu_()
-        hidden = self.inner.GCN2(hidden, edge_index).relu_()
-        return self.inner.classifier(hidden)
+        h_pre = self._adapter.register_forward_pre_hook(_zero_frontier, with_kwargs=True)
+        h_post = self._adapter.register_forward_hook(_patch_targets)
+        try:
+            out = self.inner(x, edge_index)
+        finally:
+            h_pre.remove()
+            h_post.remove()
+        return out
 
 
 # ---------------------------------------------------------------------------
@@ -257,27 +286,32 @@ class HybridLastHopGCNWrapper(nn.Module):
 # ---------------------------------------------------------------------------
 
 def _replace_first_mp_layer(module: nn.Module) -> Optional[PreAggAdapter]:
-    """Walk *module*'s direct children and replace the first supported MP layer.
+    """Walk *module*'s children and replace the first MessagePassing layer.
 
-    Returns the installed adapter on success, or ``None`` if no supported
-    layer was found at this level.  Raises ``ValueError`` for unsupported MP
-    layers encountered before any supported one.
+    Raises ``ValueError`` for any MessagePassing layer that is not in
+    ``_ADAPTER_REGISTRY`` (including attention-based layers).  Returns the
+    installed adapter on success, or ``None`` if no MP layer was found.
     """
     for name, child in module.named_children():
-        if isinstance(child, GCNConv):
-            adapter = PreAggGCNConvAdapter(child)
+        if isinstance(child, MessagePassing):
+            if _UNSUPPORTED_MP_LAYERS and isinstance(child, _UNSUPPORTED_MP_LAYERS):
+                raise ValueError(
+                    f"Layer '{name}' ({type(child).__name__}) is attention-based "
+                    f"and cannot separate aggregation from its message function."
+                )
+            adapter_cls = _ADAPTER_REGISTRY.get(type(child))
+            if adapter_cls is None:
+                supported = ", ".join(c.__name__ for c in _ADAPTER_REGISTRY)
+                raise ValueError(
+                    f"Layer '{name}' ({type(child).__name__}) is a MessagePassing "
+                    f"layer with no pre-aggregation adapter. "
+                    f"Supported: {supported}."
+                )
+            adapter = adapter_cls(child)
             setattr(module, name, adapter)
             return adapter
 
-        if _UNSUPPORTED_MP_LAYERS and isinstance(child, _UNSUPPORTED_MP_LAYERS):
-            raise ValueError(
-                f"Layer '{name}' ({type(child).__name__}) is a MessagePassing "
-                f"layer whose aggregation cannot be separated from its message "
-                f"function (e.g. attention-based).  "
-                f"to_preaggregated_first_layer does not support this layer type."
-            )
-
-        # Not a direct MP layer — recurse one level deeper.
+        # Not an MP layer — recurse one level deeper.
         if isinstance(child, nn.Module):
             adapter = _replace_first_mp_layer(child)
             if adapter is not None:
@@ -303,30 +337,39 @@ def to_preaggregated_first_layer(model: nn.Module) -> PreAggResult:
     Parameters
     ----------
     model:
-        Any ``nn.Module`` that contains at least one ``GCNConv`` layer.
-        The original model is not modified; a deep copy is used.
+        Any ``nn.Module`` containing at least one MessagePassing layer
+        registered in ``_ADAPTER_REGISTRY``.  The original model is not
+        modified; a deep copy is used.
 
     Raises
     ------
     ValueError
-        If no supported first MessagePassing layer is found, or if an
-        unsupported attention-based layer is encountered first.
+        If the first MessagePassing layer found has no adapter (listing
+        supported layer types), or if no MessagePassing layer is found at all.
     """
     inner = copy.deepcopy(model)
     adapter = _replace_first_mp_layer(inner)
 
     if adapter is None:
+        supported = ", ".join(c.__name__ for c in _ADAPTER_REGISTRY)
         raise ValueError(
-            "to_preaggregated_first_layer: no supported MessagePassing layer "
-            "found in the model.  Currently supported: GCNConv."
+            "to_preaggregated_first_layer: no MessagePassing layer found in the "
+            f"model. Supported layer types: {supported}."
         )
 
     wrapped = PreAggModelWrapper(inner, adapter)
     return PreAggResult(model=wrapped, preagg_spec=adapter.preagg_spec())
 
 
+# Populate registry once all adapter classes are defined.
+_ADAPTER_REGISTRY[GCNConv] = PreAggGCNConvAdapter
+
+
 def to_hybrid_last_hop_gcn(model: nn.Module) -> nn.Module:
-    """Wrap a 2-layer GCN so deepest-hop raw features can be replaced by
+    """Wrap *model* so deepest-hop raw features can be replaced by
     pre-aggregated inputs for the K-1 frontier while keeping full topology.
+
+    Works with any model whose first MessagePassing layer has a registered
+    adapter in ``_ADAPTER_REGISTRY``.  The original model is not modified.
     """
-    return HybridLastHopGCNWrapper(copy.deepcopy(model))
+    return HybridLastHopWrapper(model)
