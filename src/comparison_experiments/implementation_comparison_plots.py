@@ -348,13 +348,14 @@ def plot_comparison_subphase_latency(
     group_gap = 0.58
 
     fig, ax = plt.subplots(figsize=(11, max(3.0, n_rows * 0.9 + len(grouped_rows) * 0.35)))
-    yticks: list[float] = []
-    ylabels: list[str] = []
+    group_ticks: list[float] = []
+    group_labels: list[str] = []
     legend_handles: dict[str, tuple[str, str]] = {}
     max_total = 0.0
     current_y = 0.0
 
     for impl_name, impl_rows in grouped_rows:
+        n = len(impl_rows)
         for stage_idx, (stage_name, slices) in enumerate(impl_rows):
             row_y = current_y + stage_idx * bar_height
             left = 0.0
@@ -380,13 +381,16 @@ def plot_comparison_subphase_latency(
                 legend_handles[seg_label] = (seg_label, color)
 
             ax.text(left, row_y, f" {left:.1f} ms", ha="left", va="center", fontsize=8)
-            yticks.append(row_y)
-            ylabels.append(f"{impl_name} | {stage_name}")
 
-        current_y += len(impl_rows) * bar_height + group_gap
+        # One centered tick per implementation group
+        group_center = current_y + (n - 1) * bar_height / 2
+        group_ticks.append(group_center)
+        group_labels.append(impl_name)
 
-    ax.set_yticks(yticks)
-    ax.set_yticklabels(ylabels, fontsize=9)
+        current_y += n * bar_height + group_gap
+
+    ax.set_yticks(group_ticks)
+    ax.set_yticklabels(group_labels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("mean ms per batch (avg across runs)")
     ax.set_title("End-to-end latency breakdown by implementation")
