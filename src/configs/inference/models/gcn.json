@@ -1,0 +1,8 @@
+{
+  "model_class": "GCN",
+  "hidden_dim1": 64,
+  "hidden_dim2": 64,
+  "checkpoint_path": null,
+  "model_name": "experiment_gcn",
+  "strategies": ["full_graph", "neighborhood_sampling", "in_db_java"]
+}

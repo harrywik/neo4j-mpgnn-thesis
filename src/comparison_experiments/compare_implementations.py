@@ -115,13 +115,13 @@ def main() -> None:
     )
     parser.add_argument(
         "--dataset", required=True,
-        help="Dataset name (must match a file in src/configs/datasets/)",
+        help="Dataset name (must match a file in src/configs/training/datasets/)",
     )
     parser.add_argument(
         "--implementations", nargs="+", required=True,
         metavar="IMPL",
         help="One or more implementation names (must each match a file in "
-             "src/configs/implementations/), e.g. baseline_neo4j multsampler baseline_pyg",
+             "src/configs/training/implementations/), e.g. baseline_neo4j multsampler baseline_pyg",
     )
     parser.add_argument(
         "--nbr_runs", type=int, default=3,

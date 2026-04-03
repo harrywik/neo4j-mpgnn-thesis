@@ -1,0 +1,19 @@
+{
+  "dataset_name": "cora",
+  "training_dataset_config": "cora",
+  "training_implementation_config": "baseline_neo4j",
+  "node_label": "Paper",
+  "edge_type": "CITES",
+  "feature_property": "embedding_bytes",
+  "feature_property_type": "byte[]",
+  "target_property": "subject",
+  "nodeid_property": "id",
+  "split_property_name": "split",
+  "split_property_type": "str",
+  "feature_dim": 1433,
+  "nbr_classes": 7,
+  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048],
+  "nbr_runs": 5,
+  "inference_batch_size": 256,
+  "max_neighbors": 10
+}
