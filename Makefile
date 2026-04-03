@@ -6,7 +6,10 @@ DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp neo4j_java_sampler preagg_neo4j
 NBR_RUNS ?= 3
-EXPERIMENTS := sampler_comparison compare_implementations compare_datasets
+EXPERIMENTS := sampler_comparison compare_implementations compare_datasets inference_experiment
+INFERENCE_DATASET ?= cora
+INFERENCE_MODEL ?= gcn
+INFERENCE_OUTPUT ?= results/inference_comparison
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
@@ -14,7 +17,7 @@ DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 #   make build-plugin NEO4J_PLUGINS_DIR=/var/lib/neo4j/plugins
 NEO4J_PLUGINS_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_PLUGINS_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin neo4j_udp_sign
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin neo4j_udp_sign inference_experiment
 
 help:
 	@echo "Usage: make <implementation> [DATASET=cora]"
@@ -28,6 +31,8 @@ help:
 	@echo "  make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler\" [DATASET=cora] [NBR_RUNS=3]"
 	@echo "Compare one implementation across datasets:"
 	@echo "  make compare_datasets IMPL_CMP=baseline_pyg DATASETS_CMP=\"cora arxiv\" [NBR_RUNS=3]"
+	@echo "Compare inference strategies:"
+	@echo "  make inference_experiment [INFERENCE_DATASET=cora] [INFERENCE_MODEL=gcn] [INFERENCE_OUTPUT=results/inference_comparison]"
 
 run:
 	@if [ -z "$(SCRIPT)" ]; then \
@@ -83,6 +88,12 @@ compare_datasets:
 		--implementation $(IMPL_CMP) \
 		--datasets $(DATASETS_CMP) \
 		--nbr_runs $(NBR_RUNS)
+
+inference_experiment:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.inference_experiment \
+		--dataset src/configs/inference/datasets/$(INFERENCE_DATASET).json \
+		--model   src/configs/inference/models/$(INFERENCE_MODEL).json \
+		--output_dir $(INFERENCE_OUTPUT)
 
 ingest_cora:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/cora/new_ingest.py
