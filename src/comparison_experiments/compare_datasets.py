@@ -103,14 +103,14 @@ def main() -> None:
     parser.add_argument(
         "--implementation",
         required=True,
-        help="Implementation name (must match src/configs/implementations/<name>.json)",
+        help="Implementation name (must match src/configs/training/implementations/<name>.json)",
     )
     parser.add_argument(
         "--datasets",
         nargs="+",
         required=True,
         metavar="DATASET",
-        help="One or more dataset names (must match src/configs/datasets/<name>.json)",
+        help="One or more dataset names (must match src/configs/training/datasets/<name>.json)",
     )
     parser.add_argument(
         "--nbr_runs",
