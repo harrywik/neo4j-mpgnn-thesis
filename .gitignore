@@ -47,3 +47,8 @@ data/ogbn-products/ogbn_products
 data/ogbn-papers100M/ogbn_papers100M
 data/ogbn-arxiv/ogbn_arxiv
 data/arxiv/
+
+
+/.claude
+/.cursor
+/.vscode
