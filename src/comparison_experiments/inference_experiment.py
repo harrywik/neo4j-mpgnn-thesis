@@ -630,7 +630,7 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, sampler, driver
 # Save results
 # ---------------------------------------------------------------------------
 
-def save_results(all_results: dict, cfg: dict, output_dir: str) -> None:
+def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str) -> None:
     ds_name = cfg["dataset"].get("dataset_name", "dataset")
     mdl_name = cfg["model"].get("model_class", "model")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -644,6 +644,9 @@ def save_results(all_results: dict, cfg: dict, output_dir: str) -> None:
     with open(out_path, "w") as f:
         json.dump({"config": cfg["dataset"], "model": cfg["model"], "results": serialisable}, f, indent=2)
     print(f"\nResults saved → {out_path}")
+
+    from comparison_experiments.inference_experiment_plots import plot_all
+    plot_all(out_path)
 
 
 # ---------------------------------------------------------------------------
@@ -674,7 +677,7 @@ def main() -> None:
     model.eval()
 
     all_results = run_experiment(cfg, model, graph_store, feature_store, sampler, driver)
-    save_results(all_results, cfg, args.output_dir)
+    save_results_and_plot(all_results, cfg, args.output_dir)
 
     try:
         driver.close()
