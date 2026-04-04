@@ -3,12 +3,15 @@
 Trains (or loads) a model, then benchmarks three inference strategies for each
 value of N (number of seed nodes to run inference on):
 
-  full_graph          — load entire graph into RAM; single PyTorch forward pass
-  neighborhood_sampling — Cypher-fetch k-hop subgraphs per batch; Python forward pass
+  full_graph          — load entire graph via PyG Planetoid once; NeighborLoader subgraph sampling
+  neighborhood_sampling — Neo4j Cypher-fetch k-hop subgraphs per batch; Python forward pass
   in_db_java          — export spec/weights; call gnnProcedures.inference.run inside Neo4j
 
-Each (strategy, N) cell is repeated ``nbr_runs`` times with different random
-seed-node samples; results are averaged and reported as mean ± 95 % CI.
+All three strategies use the same fanout ([num_neighbors]*num_hops from inference config).
+full_graph includes the one-time dataset load time in every per-N timing.
+
+Each (strategy, N) cell is repeated ``nbr_runs`` times; results are averaged and
+reported as mean ± 95 % CI.
 
 Usage
 -----
@@ -43,6 +46,7 @@ if str(SRC_DIR) not in sys.path:
 
 CONFIGS_DIR = SRC_DIR / "configs"
 
+
 # ---------------------------------------------------------------------------
 # Config loading
 # ---------------------------------------------------------------------------
@@ -66,14 +70,13 @@ def load_all_configs(dataset_path: str, model_path: str) -> dict:
         CONFIGS_DIR / "training" / "implementations" / f"{ds['training_implementation_config']}.json"
     )
 
-    # Allow inference dataset config to override training dataset fields
-    merged_train_ds = {**train_ds, **{
-        k: v for k, v in ds.items()
-        if k not in ("training_dataset_config", "training_implementation_config",
-                     "node_counts", "nbr_runs", "inference_batch_size", "max_neighbors")
-    }}
+    _INFERENCE_ONLY_KEYS = {
+        "training_dataset_config", "training_implementation_config",
+        "node_counts", "nbr_runs", "inference_batch_size", "max_neighbors",
+        "num_neighbors", "num_hops", "planetoid_root", "planetoid_name",
+    }
+    merged_train_ds = {**train_ds, **{k: v for k, v in ds.items() if k not in _INFERENCE_ONLY_KEYS}}
 
-    # Apply model config overrides for training dims
     if "hidden_dim1" in mdl:
         merged_train_ds["default_hidden_dim1"] = mdl["hidden_dim1"]
     if "hidden_dim2" in mdl:
@@ -154,7 +157,7 @@ def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None
 
 
 # ---------------------------------------------------------------------------
-# Ground-truth label fetching
+# Ground-truth label fetching (Neo4j)
 # ---------------------------------------------------------------------------
 
 def fetch_labels(node_ids: list[int], cfg: dict, driver) -> dict[int, int]:
@@ -171,140 +174,120 @@ def fetch_labels(node_ids: list[int], cfg: dict, driver) -> dict[int, int]:
 
 
 # ---------------------------------------------------------------------------
-# Full-graph cache
+# PyG full-graph loader (Planetoid)
 # ---------------------------------------------------------------------------
 
-class FullGraphCache:
-    """Loads the entire graph into memory once and reuses it for all N values."""
+class PyGGraphLoader:
+    """Loads a Planetoid dataset once and exposes test-node indices."""
 
-    def __init__(self, cfg: dict, driver):
-        self.cfg = cfg
-        self.driver = driver
-        self._x: torch.Tensor | None = None
-        self._edge_index: torch.Tensor | None = None
-        self._labels: dict[int, int] = {}
-        self._id_to_local: dict[int, int] = {}
-        self._local_to_id: list[int] = []
+    def __init__(self, root: str, name: str):
+        self.root = root
+        self.name = name
+        self._data = None
         self.load_time_s: float = 0.0
 
     def load(self) -> None:
-        ds = self.cfg["train_ds"]
-        fp = ds["feature_property"]
-        fp_type = ds["feature_property_type"]
-        label_prop = ds["target_property"]
-        nid_prop = ds["nodeid_property"]
-        node_label = ds["node_label"]
-        edge_type = ds.get("edge_type", "")
-        db = ds["database_name"]
-
+        from torch_geometric.datasets import Planetoid
         t0 = time.monotonic()
-
-        # --- nodes ---
-        node_query = (
-            f"MATCH (n:{node_label}) "
-            f"RETURN n.{nid_prop} AS id, n.{fp} AS feat, n.{label_prop} AS label "
-            f"ORDER BY n.{nid_prop}"
-        )
-        rows = []
-        with self.driver.session(database=db, fetch_size=-1) as session:
-            for r in session.run(node_query):
-                rows.append((r["id"], r["feat"], r["label"]))
-
-        self._local_to_id = [r[0] for r in rows]
-        self._id_to_local = {nid: i for i, nid in enumerate(self._local_to_id)}
-
-        feat_list = []
-        for _, feat_raw, label in rows:
-            feat_list.append(_decode_feature(feat_raw, fp_type))
-            nid = rows[len(feat_list) - 1][0]
-            self._labels[nid] = int(label)
-
-        self._x = torch.tensor(np.stack(feat_list), dtype=torch.float32)
-
-        # --- edges ---
-        rel = f"[:{edge_type}]" if edge_type else "[]"
-        edge_query = (
-            f"MATCH (a:{node_label})-{rel}->(b:{node_label}) "
-            f"RETURN a.{nid_prop} AS src, b.{nid_prop} AS dst"
-        )
-        srcs, dsts = [], []
-        with self.driver.session(database=db, fetch_size=-1) as session:
-            for r in session.run(edge_query):
-                ls, ld = self._id_to_local.get(r["src"]), self._id_to_local.get(r["dst"])
-                if ls is not None and ld is not None:
-                    srcs.append(ls)
-                    dsts.append(ld)
-
-        self._edge_index = torch.tensor([srcs, dsts], dtype=torch.long)
+        dataset = Planetoid(root=self.root, name=self.name)
+        self._data = dataset[0]
         self.load_time_s = time.monotonic() - t0
-        print(f"  [full_graph] Loaded {len(self._local_to_id)} nodes, "
-              f"{len(srcs)} edges in {self.load_time_s:.2f}s")
+        print(
+            f"  [full_graph] Loaded {self._data.num_nodes} nodes, "
+            f"{self._data.num_edges} edges in {self.load_time_s:.2f}s"
+        )
 
     @property
-    def x(self) -> torch.Tensor:
-        return self._x
+    def data(self):
+        return self._data
 
-    @property
-    def edge_index(self) -> torch.Tensor:
-        return self._edge_index
-
-    def local_idx(self, node_id: int) -> int | None:
-        return self._id_to_local.get(node_id)
-
-    def label(self, node_id: int) -> int | None:
-        return self._labels.get(node_id)
-
-
-def _decode_feature(feat_raw, fp_type: str) -> np.ndarray:
-    if fp_type == "byte[]":
-        return np.frombuffer(bytes(feat_raw), dtype=np.float32)
-    else:
-        return np.asarray(feat_raw, dtype=np.float32)
+    def test_node_indices(self) -> list[int]:
+        mask = self._data.test_mask
+        return mask.nonzero(as_tuple=False).squeeze(1).tolist()
 
 
 # ---------------------------------------------------------------------------
-# Strategy: full_graph
+# Strategy: full_graph  (PyG Planetoid + NeighborLoader)
 # ---------------------------------------------------------------------------
 
-def run_full_graph(
+def run_full_graph_pyg(
     model: torch.nn.Module,
-    test_ids: list[int],
-    cache: FullGraphCache,
-) -> tuple[dict[int, int], dict[str, Any]]:
+    N: int,
+    run_i: int,
+    pyg_loader: PyGGraphLoader,
+    num_neighbors: list[int],
+    batch_size: int,
+) -> tuple[dict[int, int], dict[int, int], dict[str, Any]]:
+    """Run inference via PyG NeighborLoader on Planetoid data.
+
+    Returns
+    -------
+    preds   : {local_node_idx → predicted_class}
+    labels  : {local_node_idx → true_class}  (from Planetoid)
+    metrics : timing / memory / batch-latency metrics
+              (load_time_s is NOT included here; caller adds it)
+    """
+    from torch_geometric.loader import NeighborLoader
+
+    data = pyg_loader.data
+    test_indices = pyg_loader.test_node_indices()
+    sample_size = min(N, len(test_indices))
+    rng = random.Random(run_i * 10007 + N)
+    seed_ids = rng.sample(test_indices, sample_size)
+
+    input_nodes = torch.tensor(seed_ids, dtype=torch.long)
+
     tracemalloc.start()
     t0 = time.monotonic()
 
+    loader = NeighborLoader(
+        data,
+        num_neighbors=num_neighbors,
+        input_nodes=input_nodes,
+        batch_size=batch_size,
+        shuffle=False,
+    )
+
     device = next(model.parameters()).device
-    x = cache.x.to(device)
-    edge_index = cache.edge_index.to(device)
+    model.eval()
+    preds: dict[int, int] = {}
+    labels_out: dict[int, int] = {}
+    batch_latencies: list[float] = []
 
     with torch.no_grad():
-        logits = model(x, edge_index)
-
-    preds: dict[int, int] = {}
-    for nid in test_ids:
-        local = cache.local_idx(nid)
-        if local is not None:
-            preds[nid] = int(logits[local].argmax().item())
+        for batch in loader:
+            t_batch = time.monotonic()
+            batch = batch.to(device)
+            out = model(batch.x, batch.edge_index)
+            # Seed nodes are the first batch.batch_size entries
+            n = batch.batch_size
+            seed_global_ids = batch.n_id[:n].cpu().tolist()
+            seed_preds = out[:n].argmax(dim=1).cpu().tolist()
+            seed_labels = batch.y[:n].cpu().tolist()
+            for nid, pred, label in zip(seed_global_ids, seed_preds, seed_labels):
+                preds[nid] = pred
+                labels_out[nid] = label
+            batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
     elapsed = time.monotonic() - t0
     _, peak = tracemalloc.get_traced_memory()
     tracemalloc.stop()
 
+    lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
-        "ms_per_node": elapsed * 1000 / max(len(test_ids), 1),
-        "throughput_nodes_per_s": len(test_ids) / max(elapsed, 1e-9),
+        "ms_per_node": elapsed * 1000 / max(len(preds), 1),
+        "throughput_nodes_per_s": len(preds) / max(elapsed, 1e-9),
         "peak_memory_mb": peak / 1024 / 1024,
-        "p50_batch_ms": None,
-        "p95_batch_ms": None,
-        "n_batches": 1,
+        "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
+        "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
+        "n_batches": len(batch_latencies),
     }
-    return preds, metrics
+    return preds, labels_out, metrics
 
 
 # ---------------------------------------------------------------------------
-# Strategy: neighborhood_sampling
+# Strategy: neighborhood_sampling  (Neo4j + PyG NodeLoader)
 # ---------------------------------------------------------------------------
 
 def run_neighborhood_sampling(
@@ -313,7 +296,7 @@ def run_neighborhood_sampling(
     cfg: dict,
     feature_store,
     graph_store,
-    sampler,
+    inference_sampler,
 ) -> tuple[dict[int, int], dict[str, Any]]:
     batch_size = cfg["dataset"].get("inference_batch_size", 256)
     tracemalloc.start()
@@ -327,7 +310,7 @@ def run_neighborhood_sampling(
     input_nodes = torch.tensor(test_ids, dtype=torch.int64)
     loader = NodeLoader(
         data=(feature_store, graph_store),
-        node_sampler=sampler,
+        node_sampler=inference_sampler,
         input_nodes=input_nodes,
         batch_size=batch_size,
         shuffle=False,
@@ -386,11 +369,13 @@ def run_in_db_java(
                 "NEO4J_GNN_MODEL_DIR must be set to use the in_db_java strategy."
             )
         from create_inference_spec import create_inference_spec
+        # Use num_neighbors from inference config for Java procedure max_neighbors
+        num_neighbors = ds.get("num_neighbors", ds.get("max_neighbors", 10))
         create_inference_spec(
             model,
             model_name,
             base_dir=gnn_model_dir,
-            max_neighbors=ds.get("max_neighbors", 10),
+            max_neighbors=num_neighbors,
         )
         spec_exported = True
 
@@ -401,7 +386,7 @@ def run_in_db_java(
     feature_type = ds["feature_property_type"]
     nodeid_prop = ds["nodeid_property"]
     db = cfg["train_ds"]["database_name"]
-    max_neighbors = ds.get("max_neighbors", 10)
+    max_neighbors = ds.get("num_neighbors", ds.get("max_neighbors", 10))
 
     tracemalloc.start()
     t_total_start = time.monotonic()
@@ -551,66 +536,132 @@ def print_scaling_summary(all_results: dict[int, dict[str, dict]]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Build inference-specific Neo4j sampler
+# ---------------------------------------------------------------------------
+
+def _build_inference_sampler(cfg: dict, graph_store):
+    """Create a Neo4jSampler with the inference fanout from config."""
+    from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
+    ds = cfg["dataset"]
+    num_neighbors_val = ds.get("num_neighbors", ds.get("max_neighbors", 10))
+    num_hops = ds.get("num_hops", 2)
+    num_neighbors = [num_neighbors_val] * num_hops
+    node_label = ds.get("node_label", cfg["train_ds"].get("node_label", ""))
+    edge_type = ds.get("edge_type", cfg["train_ds"].get("edge_type", ""))
+    return Neo4jSampler(
+        graph_store=graph_store,
+        num_neighbors=num_neighbors,
+        node_label=node_label,
+        rel_type=edge_type if edge_type else None,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Main experiment loop
 # ---------------------------------------------------------------------------
 
-def run_experiment(cfg: dict, model, graph_store, feature_store, sampler, driver) -> dict:
+def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict:
     ds = cfg["dataset"]
     mdl = cfg["model"]
     node_counts: list[int] = ds["node_counts"]
     nbr_runs: int = ds.get("nbr_runs", 5)
     strategies: list[str] = mdl.get("strategies", ["full_graph", "neighborhood_sampling", "in_db_java"])
+    batch_size: int = ds.get("inference_batch_size", 256)
+    num_neighbors_val: int = ds.get("num_neighbors", ds.get("max_neighbors", 10))
+    num_hops: int = ds.get("num_hops", 2)
+    num_neighbors: list[int] = [num_neighbors_val] * num_hops
 
-    # Pre-load full graph once if needed
-    full_graph_cache: FullGraphCache | None = None
+    # --- Build inference sampler for neighborhood_sampling ---
+    inference_sampler = None
+    if "neighborhood_sampling" in strategies:
+        inference_sampler = _build_inference_sampler(cfg, graph_store)
+        print(f"Inference sampler fanout: {num_neighbors}")
+
+    # --- Load PyG Planetoid dataset once if needed ---
+    pyg_loader: PyGGraphLoader | None = None
     if "full_graph" in strategies:
-        print("\nLoading full graph into memory (one-time cost)...")
-        full_graph_cache = FullGraphCache(cfg, driver)
-        full_graph_cache.load()
+        planetoid_root = ds.get("planetoid_root", "data/Planetoid")
+        planetoid_name = ds.get("planetoid_name", "Cora")
+        print(f"\nLoading {planetoid_name} via PyG Planetoid (one-time cost)...")
+        pyg_loader = PyGGraphLoader(root=planetoid_root, name=planetoid_name)
+        pyg_loader.load()
+        print(f"  Load time ({pyg_loader.load_time_s:.2f}s) will be added to all full_graph timings")
 
     spec_exported = False
     all_results: dict[int, dict] = {}
 
-    # Fetch all test node IDs upfront (we'll sample from this pool)
-    test_pool = graph_store.get_split(split="test").tolist()
-    print(f"\nTest pool: {len(test_pool)} nodes")
+    # Fetch Neo4j test node IDs (used by neighborhood_sampling and in_db_java)
+    neo4j_test_pool: list[int] = []
+    if "neighborhood_sampling" in strategies or "in_db_java" in strategies:
+        neo4j_test_pool = graph_store.get_split(split="test").tolist()
+        print(f"\nNeo4j test pool: {len(neo4j_test_pool)} nodes")
+
+    pyg_test_pool_size = len(pyg_loader.test_node_indices()) if pyg_loader else 0
+    if pyg_loader:
+        print(f"PyG test pool: {pyg_test_pool_size} nodes")
+
     print(f"Node counts to test: {node_counts}")
-    print(f"Strategies: {strategies}\n")
+    print(f"Strategies: {strategies}")
+    print(f"Fanout per hop: {num_neighbors}  ({num_hops} hops × {num_neighbors_val} neighbors)\n")
 
     for N in node_counts:
-        if N > len(test_pool):
-            print(f"Skipping N={N}: not enough test nodes (pool={len(test_pool)})")
+        # Check if strategies have enough test nodes
+        neo4j_skip = (
+            any(s in strategies for s in ("neighborhood_sampling", "in_db_java"))
+            and N > len(neo4j_test_pool)
+        )
+        pyg_skip = "full_graph" in strategies and pyg_loader and N > pyg_test_pool_size
+        if neo4j_skip or pyg_skip:
+            print(f"Skipping N={N}: not enough test nodes")
             continue
 
         run_data: dict[str, list] = {s: [] for s in strategies}
 
         for run_i in range(nbr_runs):
-            rng = random.Random(run_i * 10007 + N)
-            test_ids = rng.sample(test_pool, N)
-            labels = fetch_labels(test_ids, cfg, driver)
+            # Sample N Neo4j test nodes (same for neighborhood_sampling and in_db_java)
+            neo4j_test_ids: list[int] = []
+            neo4j_labels: dict[int, int] = {}
+            if "neighborhood_sampling" in strategies or "in_db_java" in strategies:
+                rng = random.Random(run_i * 10007 + N)
+                neo4j_test_ids = rng.sample(neo4j_test_pool, N)
+                neo4j_labels = fetch_labels(neo4j_test_ids, cfg, driver)
 
             for strategy in strategies:
                 try:
                     if strategy == "full_graph":
-                        preds, metrics = run_full_graph(model, test_ids, full_graph_cache)
+                        preds, pyg_labels, metrics = run_full_graph_pyg(
+                            model, N, run_i, pyg_loader, num_neighbors, batch_size
+                        )
+                        # Add one-time load cost to inference time for fair comparison
+                        metrics["total_time_s"] += pyg_loader.load_time_s
+                        metrics["ms_per_node"] = metrics["total_time_s"] * 1000 / max(len(preds), 1)
+                        metrics["throughput_nodes_per_s"] = len(preds) / max(metrics["total_time_s"], 1e-9)
+                        acc = compute_accuracy(preds, pyg_labels)
+
                     elif strategy == "neighborhood_sampling":
                         preds, metrics = run_neighborhood_sampling(
-                            model, test_ids, cfg, feature_store, graph_store, sampler
+                            model, neo4j_test_ids, cfg, feature_store, graph_store,
+                            inference_sampler,
                         )
+                        acc = compute_accuracy(preds, neo4j_labels)
+
                     elif strategy == "in_db_java":
                         preds, metrics, spec_exported = run_in_db_java(
-                            model, test_ids, cfg, driver, spec_exported=spec_exported
+                            model, neo4j_test_ids, cfg, driver, spec_exported=spec_exported
                         )
+                        acc = compute_accuracy(preds, neo4j_labels)
+
                     else:
                         print(f"  Unknown strategy '{strategy}', skipping.")
                         continue
 
-                    acc = compute_accuracy(preds, labels)
                     entry = {"accuracy": acc, **metrics}
                     run_data[strategy].append(entry)
 
                 except Exception as exc:
+                    import traceback
                     print(f"  [{strategy}] N={N} run {run_i+1} FAILED: {exc}")
+                    traceback.print_exc()
 
         agg_by_strategy = {s: _agg(run_data[s]) for s in strategies if run_data[s]}
         all_results[N] = agg_by_strategy
@@ -618,10 +669,9 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, sampler, driver
 
     print_scaling_summary(all_results)
 
-    # Report full-graph load overhead
-    if full_graph_cache is not None:
-        print(f"\n[full_graph] One-time graph load: {full_graph_cache.load_time_s:.2f}s "
-              f"(not included in per-N timings above)")
+    if pyg_loader is not None:
+        print(f"\n[full_graph] One-time graph load: {pyg_loader.load_time_s:.2f}s "
+              f"(included in all per-N timings above)")
 
     return all_results
 
@@ -672,11 +722,11 @@ def main() -> None:
     from Neo4jConnection import Neo4jConnection
     driver = Neo4jConnection(uri, user, password).get_driver()
 
-    model, graph_store, feature_store, sampler = build_components(cfg, driver)
-    train_or_load(model, cfg, graph_store, feature_store, sampler)
+    model, graph_store, feature_store, training_sampler = build_components(cfg, driver)
+    train_or_load(model, cfg, graph_store, feature_store, training_sampler)
     model.eval()
 
-    all_results = run_experiment(cfg, model, graph_store, feature_store, sampler, driver)
+    all_results = run_experiment(cfg, model, graph_store, feature_store, driver)
     save_results_and_plot(all_results, cfg, args.output_dir)
 
     try:
