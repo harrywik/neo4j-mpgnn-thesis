@@ -1,15 +1,15 @@
 {
-  "_comment": "DEPRECATED — Distributed Data Parallel training. Requires torchrun + NCCL + GPU.",
+  "_comment": "Distributed Data Parallel training. Works on CPU (gloo) and GPU (nccl).",
   "feature_store": {
-    "class_name": "PickleSafeFeatureStore",
+    "class_name": "Neo4jNoCacheFS",
     "connection_mode": "uri"
   },
   "graph_store": {
-    "class_name": "PickleSafeGS",
+    "class_name": "Neo4jMultiGS",
     "connection_mode": "uri"
   },
   "sampler": {
-    "class_name": "UniformSampler",
+    "class_name": "Neo4jSampler",
     "num_neighbors": [10, 5]
   },
   "model": {
@@ -18,7 +18,7 @@
   "trainer": "DistributedTrainer",
   "nodeloader_args": {
     "pickle_safe": true,
-    "num_workers": 4,
+    "num_workers": 2,
     "prefetch_factor": 2,
     "filter_per_worker": false,
     "persistent_workers": true,

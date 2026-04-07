@@ -292,8 +292,11 @@ def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
         import torch
         import torch.distributed as dist
         local_rank = int(os.environ["LOCAL_RANK"])
-        torch.cuda.set_device(local_rank)
-        dist.init_process_group(backend="nccl", init_method="env://")
+        cuda_available = torch.cuda.is_available()
+        if cuda_available:
+            torch.cuda.set_device(local_rank)
+        backend = "nccl" if cuda_available else "gloo"
+        dist.init_process_group(backend=backend, init_method="env://")
         dist.barrier()
 
     nla = impl_cfg["nodeloader_args"]
@@ -305,8 +308,9 @@ def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
         feature_store=feature_store,
         graph_store=graph_store,
         sampler=sampler,
-        batch_size=dataset_cfg["batch_size"],
         measurer=measurer,
+        batch_size=dataset_cfg["batch_size"],
+        nodeloader_args=nodeloader_args,
     )
     trainer.train(max_epochs=dataset_cfg["max_epochs"])
 
@@ -316,6 +320,8 @@ def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
 # ---------------------------------------------------------------------------
 
 def _log_config(measurer, impl_cfg, dataset_cfg, sampler, model):
+    if measurer is None:
+        return
     measurer.write_to_configresult("dataset", dataset_cfg["name"])
     measurer.write_to_configresult("implementation", impl_cfg.get("_name", ""))
     if impl_cfg.get("feature_store"):
@@ -415,13 +421,26 @@ def main():
     profile      = dataset_cfg.get("profile", False)
     nbr_runs     = int(dataset_cfg.get("nbr_runs", 1))
 
+    # DDP: torchrun spawns each process into main() independently, so the
+    # multi-run loop and directory creation would race across ranks and
+    # dist.init_process_group() cannot be called more than once per process.
+    if "RANK" in os.environ:
+        nbr_runs = 1
+
     # -----------------------------------------------------------------------
     # Single run — original behaviour
     # -----------------------------------------------------------------------
     if nbr_runs <= 1:
         from benchmarking_tools import Measurer, QueryProfileAccumulator
-        profile_accumulator = QueryProfileAccumulator() if profile else None
-        measurer = Measurer(dataset_cfg, profile_accumulator=profile_accumulator)
+        # In distributed mode only rank 0 writes measurements to disk;
+        # other ranks get None to avoid racing on directory creation.
+        _rank = int(os.environ.get("RANK", "0"))
+        if _rank == 0:
+            profile_accumulator = QueryProfileAccumulator() if profile else None
+            measurer = Measurer(dataset_cfg, profile_accumulator=profile_accumulator)
+        else:
+            profile_accumulator = None
+            measurer = None
 
         model = _make_model(impl_cfg, dataset_cfg)
 
