@@ -28,6 +28,8 @@ import atexit
 import struct
 from typing import Dict, List, Optional
 
+import psutil
+
 import numpy as np
 
 try:
@@ -44,7 +46,7 @@ from neo4j_pyg.feature_caches.Neo4jAbstractCache import Neo4jAbstractCache
 
 
 # ---------------------------------------------------------------------------
-# Encoding helpers
+# Encoding helpers (module-level so they can be imported by tests)
 # ---------------------------------------------------------------------------
 
 def encode_feature(arr: np.ndarray) -> bytes:
@@ -87,6 +89,12 @@ class Neo4jRedisCache(Neo4jAbstractCache):
     l1_maxsize:
         Maximum number of entries in the per-worker LRU.
         Set to 0 to disable L1.
+    memory_GB:
+        Maximum RAM to use for cached feature vectors.  When ``None`` (default)
+        the limit is computed lazily on the first ``set_many`` call by measuring
+        available system RAM at that point (after the first training batch has
+        allocated its working set) and leaving a 1 GB safety margin.  When set
+        to a float the limit is computed immediately from the given value.
     """
 
     def __init__(
@@ -108,9 +116,11 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         feature_property_type: str = "f64[]",
         label_map: Optional[Dict] = None,
         cache_size_GB: float = 0.0,
+        memory_GB: Optional[float] = None,
     ) -> None:
-        # Bypass the parent's DB-querying compute_cache_size by calling
-        # object.__init__ directly and setting attributes manually.
+        # Do not call super().__init__() — the abstract base queries Neo4j to
+        # estimate cache size, which is not needed for Redis.  Set the required
+        # attributes manually instead.
         self.driver = driver
         self.uri = uri
         self.user = user
@@ -129,12 +139,38 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         self.key_prefix = key_prefix
         self.ttl_seconds = ttl_seconds
         self.l1_maxsize = l1_maxsize
+        self.memory_GB = memory_GB
+
+        # Capacity tracking: how many nodes (x+y pairs) may be written to Redis.
+        # None means unlimited; set via _init_capacity() on first set_many call.
+        self._node_limit: Optional[int] = None
+        self._capacity_initialized: bool = False
+        self._nodes_cached: int = 0
+
+        if memory_GB is not None:
+            self._init_capacity()
 
         # L1: per-process LRU — not shared across workers, but avoids Redis
         # round-trips for repeated accesses within the same worker.
         self._l1: Optional[_LRUCache] = _LRUCache(maxsize=l1_maxsize) if l1_maxsize > 0 else None
         # Lazy Redis client — created on first use, excluded from pickling.
         self._client: Optional[_redis_mod.Redis] = None
+
+    # ------------------------------------------------------------------
+    # Capacity management
+    # ------------------------------------------------------------------
+
+    def _init_capacity(self) -> None:
+        """Compute and store the node limit from memory_GB or available RAM."""
+        if self.memory_GB is not None:
+            bytes_available = int(self.memory_GB * (1024 ** 3))
+        else:
+            available = psutil.virtual_memory().available
+            # Leave a 1 GB safety margin so the OS and other processes stay healthy.
+            bytes_available = max(0, available - 1 * (1024 ** 3))
+        bytes_per_node = self.feature_dim * 4  # float32
+        self._node_limit = max(0, bytes_available // bytes_per_node)
+        self._capacity_initialized = True
 
     # ------------------------------------------------------------------
     # Redis client lifecycle
@@ -240,9 +276,48 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         return result
 
     def set_many(self, items: dict) -> None:
-        """Write all key→value pairs to Redis in a single pipeline."""
+        """Write all key→value pairs to Redis in a single pipeline.
+
+        Enforces the node capacity limit derived from ``memory_GB`` (or
+        available RAM when ``memory_GB`` is ``None``).  Initialises capacity
+        lazily on the first call so that the first training batch has already
+        allocated its working set before we measure free memory.
+        """
         if not items:
             return
+
+        if not self._capacity_initialized:
+            self._init_capacity()
+
+        if self._node_limit == 0:
+            return  # no memory allocated for cache
+
+        # Count how many new nodes (not yet counted) are in this batch.
+        # Each node contributes one "x" key; "y" keys ride along for free.
+        new_node_count = sum(1 for attr, _ in items if attr == "x")
+
+        if self._node_limit is not None and self._nodes_cached >= self._node_limit:
+            return  # cache full — skip write
+
+        # If writing this batch would exceed the limit, trim to what fits.
+        if self._node_limit is not None:
+            remaining = self._node_limit - self._nodes_cached
+            if new_node_count > remaining:
+                # Keep only the first `remaining` nodes (x + y pairs).
+                trimmed: dict = {}
+                kept = 0
+                seen_nids: set = set()
+                for k, value in items.items():
+                    attr, nid = k
+                    if nid not in seen_nids:
+                        if kept >= remaining:
+                            continue
+                        seen_nids.add(nid)
+                        kept += 1
+                    trimmed[k] = value
+                items = trimmed
+                new_node_count = remaining
+
         pipe = self._get_client().pipeline(transaction=False)
         for k, value in items.items():
             attr_name, _ = k
@@ -252,6 +327,8 @@ class Neo4jRedisCache(Neo4jAbstractCache):
             else:
                 pipe.set(self._redis_key(k), raw, ex=self.ttl_seconds)
         pipe.execute()
+        self._nodes_cached += new_node_count
+
         if self._l1 is not None:
             for k, value in items.items():
                 self._l1[k] = value
@@ -290,6 +367,10 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         state["_client"] = None
         # L1 is per-process; workers start with an empty L1 and warm it up.
         state["_l1"] = _LRUCache(maxsize=self.l1_maxsize) if self.l1_maxsize > 0 else None
+        # _node_limit and _nodes_cached are preserved so workers share the same
+        # capacity decision without re-measuring RAM.  Workers do NOT write back
+        # _nodes_cached to the main process, but that is acceptable — the limit
+        # is a soft bound, not a hard quota.
         return state
 
     def __setstate__(self, state):
