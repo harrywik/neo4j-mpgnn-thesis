@@ -202,7 +202,10 @@ class Neo4jAbstractGS(GraphStore, ABC):
             nid = int(rec["nodeId"])
             feats = rec["aggregatedFeatures"]
             if feats:
-                pending_agg[nid] = np.array(feats, dtype=np.float32)
+                if isinstance(feats, (bytes, bytearray, memoryview)):
+                    pending_agg[nid] = np.frombuffer(feats, dtype=np.float32).copy()
+                else:
+                    pending_agg[nid] = np.array(feats, dtype=np.float32)
 
         return pending_agg
 
