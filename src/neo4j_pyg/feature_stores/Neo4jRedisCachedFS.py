@@ -65,6 +65,7 @@ class Neo4jRedisCachedFS(Neo4jAbstractFS):
         redis_key_prefix: str = "fs",
         redis_ttl_seconds: Optional[int] = None,
         l1_maxsize: int = 10_000,
+        memory_GB: Optional[float] = None,
     ) -> None:
         cache = Neo4jRedisCache(
             feature_dim=feature_dim,
@@ -73,6 +74,7 @@ class Neo4jRedisCachedFS(Neo4jAbstractFS):
             ttl_seconds=redis_ttl_seconds,
             l1_maxsize=l1_maxsize,
             label_map=label_map,
+            memory_GB=memory_GB,
         )
         super().__init__(
             driver=driver,

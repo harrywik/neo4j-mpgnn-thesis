@@ -35,7 +35,7 @@ class Neo4jAbstractCache(ABC):
         self._labels: Dict[str, int] = dict(label_map) if label_map else {}
         self._driver: Optional[Driver] = None
         self.cache_size = self.compute_cache_size(cache_size_GB)
-    
+
     def compute_cache_size(self, cache_size_GB: float) -> int:
         bytes_per_entry = self._estimate_cached_entry_size_bytes()
         if bytes_per_entry <= 0:
@@ -98,13 +98,8 @@ class Neo4jAbstractCache(ABC):
         filled = OrderedDict((base_key + i, None) for i in range(sample_size))
         container_bytes = (sys.getsizeof(filled) - sys.getsizeof(empty)) / sample_size
         key_bytes = sys.getsizeof(base_key)
-        value_bytes = self._object_size_bytes(value)
+        value_bytes = sys.getsizeof(value)
         return int(round(container_bytes + key_bytes + value_bytes))
-
-    def _object_size_bytes(self, value: object) -> int:
-        if isinstance(value, np.ndarray):
-            return sys.getsizeof(value)
-        return sys.getsizeof(value)
 
     def _get_driver(self) -> Driver:
         if self.driver is not None:
@@ -129,12 +124,12 @@ class Neo4jAbstractCache(ABC):
     def __setstate__(self, state):
         self.__dict__.update(state)
         self._driver = None
-    
+
     @abstractmethod
     def prefill_hot_cache(self, graph_name: str, k: int) -> None:
         """Pre-fill the hot cache with the top-K most-connected nodes."""
         pass
-    
+
     @abstractmethod
     def get(self, key):
         pass
@@ -164,7 +159,7 @@ class Neo4jAbstractCache(ABC):
         """
         for k, v in items.items():
             self.set(k, v)
-    
+
     def __getitem__(self, key):
         value = self.get(key)
         if value is None:
