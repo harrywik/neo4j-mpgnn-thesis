@@ -429,6 +429,7 @@ class Neo4jAbstractFS(FeatureStore, ABC):
     def __getstate__(self):
         state = self.__dict__.copy()
         state["_driver"] = None
+        state["measurer"] = None
         return state
 
     def __setstate__(self, state):

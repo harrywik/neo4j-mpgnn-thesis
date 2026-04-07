@@ -94,12 +94,18 @@ class Measurer:
         val_accs = get_validation_accuracies(df)
         val_accs.to_csv(val_acc_path, index=False)
 
-        plot_phase_summary(csv_path, df)
-        plot_validation_convergence(csv_path, df)
-        plot_validation_convergence_time(csv_path, df)
-        plot_cpu_utilization(csv_path, df)
-        plot_cpu_bar(csv_path, df)
-        plot_cpu_timeline(csv_path, df)
+        for plot_fn, args in [
+            (plot_phase_summary, (csv_path, df)),
+            (plot_validation_convergence, (csv_path, df)),
+            (plot_validation_convergence_time, (csv_path, df)),
+            (plot_cpu_utilization, (csv_path, df)),
+            (plot_cpu_bar, (csv_path, df)),
+            (plot_cpu_timeline, (csv_path, df)),
+        ]:
+            try:
+                plot_fn(*args)
+            except Exception as e:
+                print(f"Warning: {plot_fn.__name__} failed: {e}")
         if self.profile_accumulator is not None and self.profile_accumulator.has_data():
             # Inject derived DB-exec / network-transfer metrics into the main
             # summary so they appear in measurements.json as well.
@@ -123,20 +129,26 @@ class Measurer:
             if sampler_glb.get("avg_driver_overhead_ms") is not None:
                 summary["metrics"]["network_baseline_ms"] = sampler_glb["avg_driver_overhead_ms"]
 
-        plot_subphase_latency(csv_path, summary)
-        plot_subphase_latency_waterfall(csv_path, summary)
-
-        prof_path = csv_path.with_name("train_profile.prof")
-        if prof_path.exists():
-            n_batches = summary.get("run", {}).get("batches_seen") or 1
-            plot_driver_time_breakdown(prof_path, n_batches)
-
         json_path = csv_path.with_suffix(".json")
         try:
             with open(json_path, 'w') as f:
                 json.dump(summary, f, indent=2)
         except Exception as e:
             print(f"Warning: Failed to write JSON summary to {json_path}: {e}")
+
+        try:
+            plot_subphase_latency(csv_path, summary)
+            plot_subphase_latency_waterfall(csv_path, summary)
+        except Exception as e:
+            print(f"Warning: Failed to plot subphase latency: {e}")
+
+        try:
+            prof_path = csv_path.with_name("train_profile.prof")
+            if prof_path.exists():
+                n_batches = summary.get("run", {}).get("batches_seen") or 1
+                plot_driver_time_breakdown(prof_path, n_batches)
+        except Exception as e:
+            print(f"Warning: Failed to plot driver time breakdown: {e}")
 
         if self.node_visit_counter:
             visit_path = csv_path.with_name("node_visit_counts.json")
