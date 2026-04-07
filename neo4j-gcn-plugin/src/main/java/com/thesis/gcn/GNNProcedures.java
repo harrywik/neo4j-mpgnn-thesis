@@ -3,17 +3,27 @@ package com.thesis.gcn;
 import org.neo4j.graphdb.*;
 import org.neo4j.procedure.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.channels.FileChannel;
+import java.nio.channels.ReadableByteChannel;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 /**
@@ -59,6 +69,139 @@ import java.util.stream.Stream;
 public class GNNProcedures {
 
     private static final String IN_DEGREE_PROPERTY = "in_degree";
+
+    // -------------------------------------------------------------------------
+    // Generic GNN inference infrastructure
+    // -------------------------------------------------------------------------
+
+    /**
+     * A single aggregation primitive: graph-dependent, executed in Java.
+     *
+     * <p>Implementations receive the target node's ID, the IDs of its sampled
+     * incoming neighbours, the current per-node feature map, and the stored
+     * in-degree map.  They return the aggregated feature vector for the target
+     * node (including any self-loop weighting), or {@code null} if no features
+     * are available.
+     */
+    @FunctionalInterface
+    private interface AggregationFn {
+        double[] aggregate(Long nodeId,
+                           List<Long> neighborIds,
+                           Map<Long, double[]> features,
+                           Map<Long, Long> inDegrees);
+    }
+
+    /**
+     * Registry of named aggregation functions.
+     *
+     * <p>To support a new GNN type (e.g. GraphSAGE):
+     * <ol>
+     *   <li>Add an entry here mapping a string key to an {@link AggregationFn}.</li>
+     *   <li>Add the matching entry to {@code CONV_AGGREGATION_MAP} in
+     *       {@code create_inference_spec.py}.</li>
+     *   <li>Export a new spec — no new procedure required.</li>
+     * </ol>
+     */
+    private static final Map<String, AggregationFn> AGGREGATION_REGISTRY;
+    static {
+        Map<String, AggregationFn> r = new HashMap<>();
+
+        // GCN-normalised aggregation with self-loop:
+        //   self-weight  = 1 / (d̂_v)
+        //   neighbour u  = 1 / sqrt(d̂_v · d̂_u)   where d̂ = in_degree + 1
+        r.put("gcn_norm", (nodeId, neighborIds, features, inDegrees) -> {
+            double[] selfFeat = features.get(nodeId);
+            double   selfDeg  = inDegrees.getOrDefault(nodeId, 0L) + 1.0;
+            double[] agg      = null;
+
+            if (selfFeat != null) {
+                agg = new double[selfFeat.length];
+                accumulateScaledStatic(agg, selfFeat, 1.0 / selfDeg);
+            }
+            for (Long nbrId : neighborIds) {
+                double[] nbrFeat = features.get(nbrId);
+                if (nbrFeat == null) continue;
+                if (agg == null) agg = new double[nbrFeat.length];
+                double nbrDeg = inDegrees.getOrDefault(nbrId, 0L) + 1.0;
+                accumulateScaledStatic(agg, nbrFeat, 1.0 / Math.sqrt(selfDeg * nbrDeg));
+            }
+            return agg;
+        });
+
+        // Mean aggregation (no self-loop, no normalisation):
+        r.put("mean", (nodeId, neighborIds, features, inDegrees) -> {
+            double[] sum = null;
+            int count = 0;
+            for (Long nbrId : neighborIds) {
+                double[] nbrFeat = features.get(nbrId);
+                if (nbrFeat == null) continue;
+                if (sum == null) sum = new double[nbrFeat.length];
+                accumulateScaledStatic(sum, nbrFeat, 1.0);
+                count++;
+            }
+            if (sum == null || count == 0) return features.get(nodeId); // fall back to self
+            for (int i = 0; i < sum.length; i++) sum[i] /= count;
+            return sum;
+        });
+
+        AGGREGATION_REGISTRY = Collections.unmodifiableMap(r);
+    }
+
+    /** Static accumulate used inside lambda closures (lambdas cannot call instance methods). */
+    private static void accumulateScaledStatic(double[] acc, double[] feat, double scale) {
+        for (int i = 0; i < acc.length; i++) acc[i] += scale * feat[i];
+    }
+
+    // ─── Spec / weights caches (keyed by model-directory path) ───────────────
+
+    /** Descriptor for one op in the execution plan. */
+    private static class LayerSpec {
+        final String op;         // "aggregate" | "linear" | "relu" | "tanh"
+        final String method;     // aggregation method key  (aggregate ops only)
+        final String weightKey;  // state-dict key for W    (linear ops only)
+        final String biasKey;    // state-dict key for b    (linear ops only)
+
+        LayerSpec(String op, String method, String weightKey, String biasKey) {
+            this.op = op; this.method = method;
+            this.weightKey = weightKey; this.biasKey = biasKey;
+        }
+    }
+
+    /** Full model spec loaded from {@code spec.json}. */
+    private static class GNNSpec {
+        final int              numHops;
+        final List<LayerSpec>  layers;
+
+        GNNSpec(int numHops, List<LayerSpec> layers) {
+            this.numHops = numHops;
+            this.layers  = layers;
+        }
+    }
+
+    /**
+     * Flat tensor storage: shape + row-major float data.
+     * Vectors (rank-1) and matrices (rank-2) are both stored here.
+     */
+    private static class Tensor {
+        final int[]    shape;
+        final double[] data;
+
+        Tensor(int[] shape, double[] data) { this.shape = shape; this.data = data; }
+
+        double[] asVector() { return data; }
+
+        double[][] asMatrix() {
+            int rows = shape[0], cols = shape[1];
+            double[][] M = new double[rows][cols];
+            for (int i = 0; i < rows; i++)
+                for (int j = 0; j < cols; j++)
+                    M[i][j] = data[i * cols + j];
+            return M;
+        }
+    }
+
+    private static final ConcurrentHashMap<String, GNNSpec>              SPEC_CACHE    = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<String, Map<String, Tensor>>  WEIGHTS_CACHE = new ConcurrentHashMap<>();
 
     @Context
     public Transaction tx;
@@ -161,6 +304,24 @@ public class GNNProcedures {
             this.labels = labels;
             this.targetNodeIds = targetNodeIds;
             this.aggregatedFeatures = aggregatedFeatures;
+        }
+    }
+
+    /**
+     * Result row for {@link #gnnInfer}: one record per seed node.
+     */
+    public static class GNNInferenceResult {
+        /** Application-level node ID. */
+        public final Long nodeId;
+        /** Argmax over the logit vector — the predicted class index. */
+        public final Long predictedClass;
+        /** Raw logit scores, one per class. */
+        public final List<Double> logits;
+
+        public GNNInferenceResult(Long nodeId, Long predictedClass, List<Double> logits) {
+            this.nodeId = nodeId;
+            this.predictedClass = predictedClass;
+            this.logits = logits;
         }
     }
 
@@ -653,6 +814,247 @@ public class GNNProcedures {
     }
 
     // -------------------------------------------------------------------------
+    // Generic GNN inference procedure
+    // -------------------------------------------------------------------------
+
+    /**
+     * Run full GNN inference for any architecture whose message-passing layers
+     * are registered in {@link #AGGREGATION_REGISTRY}.
+     *
+     * <h3>Model directory</h3>
+     * Produce the two files with {@code src/create_inference_spec.py}:
+     * <ul>
+     *   <li>{@code spec.json}    — execution plan (architecture + layer sequence)</li>
+     *   <li>{@code weights.bin}  — keyed binary tensor file</li>
+     * </ul>
+     *
+     * <h3>Execution</h3>
+     * <ol>
+     *   <li>Count {@code aggregate} ops in the spec → {@code numHops}.</li>
+     *   <li>Pre-fetch a {@code numHops}-hop subgraph from the seed nodes.</li>
+     *   <li>Execute the layer sequence.  Each {@code aggregate} op folds one
+     *       hop ring inward; subsequent {@code linear}/{@code relu} ops are
+     *       applied only to the nodes that were just aggregated.</li>
+     *   <li>Return the argmax prediction + logits for each seed node.</li>
+     * </ol>
+     *
+     * <h3>Usage (Cypher)</h3>
+     * <pre>{@code
+     * CALL gnnProcedures.inference.run(
+     *     $seed_ids,
+     *     "id",                    -- nodeIdKey
+     *     "embedding_bytes",       -- featureKey
+     *     "byte[]",                -- featureType ("byte[]" or "f64[]")
+     *     "Paper",                 -- nodeLabel
+     *     "CITES",                 -- edgeType ("" = any type)
+     *     "/path/to/model_dir/",   -- folder containing spec.json + weights.bin
+     *     10                       -- maxNeighbors per hop (-1 = no limit)
+     * ) YIELD nodeId, predictedClass, logits
+     * }</pre>
+     */
+    @Procedure(name = "gnnProcedures.inference.run", mode = Mode.READ)
+    @Description(
+        "GNN inference for any architecture whose aggregation types are in "
+        + "AGGREGATION_REGISTRY. Resolves modelName to $NEO4J_GNN_MODEL_DIR/<modelName>/."
+    )
+    public Stream<GNNInferenceResult> gnnInfer(
+            @Name("seedIds")                                     List<Long> seedIds,
+            @Name("nodeIdKey")                                   String nodeIdKey,
+            @Name("featureKey")                                  String featureKey,
+            @Name("featureType")                                 String featureType,
+            @Name("nodeLabel")                                   String nodeLabel,
+            @Name("modelName")                                   String modelName,
+            @Name(value = "edgeType",        defaultValue = "")  String edgeType,
+            @Name(value = "maxNeighbors",    defaultValue = "10") Long maxNeighbors
+    ) {
+        if (seedIds == null || seedIds.isEmpty()) return Stream.empty();
+        try {
+            String modelDir = resolveModelDir(modelName);
+            return runEngine(
+                    loadSpecCached(modelDir),
+                    loadWeightsCached(modelDir),
+                    seedIds, nodeIdKey, featureKey, featureType, nodeLabel, edgeType, maxNeighbors);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load model '" + modelName + "'.", e);
+        }
+    }
+
+    /**
+     * Resolve a model name to an absolute directory path using the
+     * {@code NEO4J_GNN_MODEL_DIR} environment variable.
+     *
+     * <p>Set the variable once on the Neo4j server, e.g.:
+     * <pre>  export NEO4J_GNN_MODEL_DIR=/var/lib/neo4j/gnn-models</pre>
+     * Then {@code "my_gcn"} resolves to
+     * {@code /var/lib/neo4j/gnn-models/my_gcn/}.
+     */
+    private static String resolveModelDir(String modelName) {
+        // Check environment variable first, then JVM system property (-DNEO4J_GNN_MODEL_DIR=...)
+        String base = System.getenv("NEO4J_GNN_MODEL_DIR");
+        if (base == null || base.isBlank()) {
+            base = System.getProperty("NEO4J_GNN_MODEL_DIR");
+        }
+        if (base == null || base.isBlank()) {
+            throw new RuntimeException(
+                    "NEO4J_GNN_MODEL_DIR is not set. Add to neo4j.conf:\n"
+                    + "  server.jvm.additional=-DNEO4J_GNN_MODEL_DIR=/path/to/gnn_models");
+        }
+        return base + File.separator + modelName;
+    }
+
+    // ── Shared execution engine ───────────────────────────────────────────────
+
+    /**
+     * Core GNN inference engine. Runs the full layer plan against the live graph
+     * using the current Neo4j transaction.
+     */
+    private Stream<GNNInferenceResult> runEngine(
+            GNNSpec             spec,
+            Map<String, Tensor> weights,
+            List<Long>          seedIds,
+            String              nodeIdKey,
+            String              featureKey,
+            String              featureType,
+            String              nodeLabel,
+            String              edgeType,
+            long                maxNeighbors
+    ) {
+        int numHops = spec.numHops;
+
+        Label            label       = Label.label(nodeLabel);
+        boolean          hasEdgeType = edgeType != null && !edgeType.isEmpty();
+        RelationshipType relType     = hasEdgeType ? RelationshipType.withName(edgeType) : null;
+        Random           rng         = new Random(42L);
+
+        // ── Step 1: Pre-fetch numHops-hop subgraph ────────────────────────────
+
+        List<List<Long>>      hopNodes        = new ArrayList<>(numHops + 1);
+        Map<Long, List<Long>> sampledIncoming = new HashMap<>();
+        Map<Long, Node>       allNodes        = new LinkedHashMap<>();
+
+        List<Long> seedLayer = new ArrayList<>();
+        for (Long sid : seedIds) {
+            Node n = tx.findNode(label, nodeIdKey, sid);
+            if (n == null) continue;
+            allNodes.put(sid, n);
+            seedLayer.add(sid);
+        }
+        hopNodes.add(seedLayer);
+
+        List<Node> frontier = new ArrayList<>(allNodes.values());
+        for (int h = 0; h < numHops; h++) {
+            List<Long> newLayer     = new ArrayList<>();
+            List<Node> nextFrontier = new ArrayList<>();
+
+            for (Node src : frontier) {
+                Long srcId = getNodeIdValue(src, nodeIdKey);
+                if (srcId == null) continue;
+
+                Iterable<Relationship> rels = hasEdgeType
+                        ? src.getRelationships(Direction.INCOMING, relType)
+                        : src.getRelationships(Direction.INCOMING);
+
+                List<Node> nbrs   = reservoirSample(rels, maxNeighbors, rng);
+                List<Long> nbrIds = new ArrayList<>(nbrs.size());
+
+                for (Node nbr : nbrs) {
+                    Long nbrId = getNodeIdValue(nbr, nodeIdKey);
+                    if (nbrId == null) continue;
+                    nbrIds.add(nbrId);
+                    if (!allNodes.containsKey(nbrId)) {
+                        allNodes.put(nbrId, nbr);
+                        newLayer.add(nbrId);
+                        nextFrontier.add(nbr);
+                    }
+                }
+                sampledIncoming.put(srcId, nbrIds);
+            }
+
+            hopNodes.add(newLayer);
+            frontier = nextFrontier;
+        }
+
+        // ── Step 2: Extract raw features and in-degrees ───────────────────────
+
+        Map<Long, double[]> currentH  = new HashMap<>(allNodes.size());
+        Map<Long, Long>     inDegrees = new HashMap<>(allNodes.size());
+
+        for (Map.Entry<Long, Node> e : allNodes.entrySet()) {
+            Long nid  = e.getKey();
+            Node node = e.getValue();
+            double[] feat = extractFeatures(node, featureKey, featureType);
+            if (feat != null) currentH.put(nid, feat);
+            inDegrees.put(nid, getStoredIncomingDegreeOrCount(node, relType, hasEdgeType, label));
+        }
+
+        // ── Step 3: Execute the layer plan ────────────────────────────────────
+        //
+        // activeLevel  = deepest hop ring still being updated; decremented per aggregate.
+        // lastAggLevel = ring depth used by linear/relu ops (floored at 0 so that
+        //                pure-MLP specs with num_hops=0 still apply to seeds).
+
+        int activeLevel  = numHops - 1;
+        int lastAggLevel = Math.max(0, numHops - 1);
+
+        for (LayerSpec layer : spec.layers) {
+
+            if ("aggregate".equals(layer.op)) {
+                AggregationFn fn = AGGREGATION_REGISTRY.get(layer.method);
+                if (fn == null) throw new RuntimeException(
+                        "Unknown aggregation '" + layer.method + "'. Add it to AGGREGATION_REGISTRY.");
+
+                Map<Long, double[]> newH = new HashMap<>();
+                for (int d = 0; d <= activeLevel; d++) {
+                    for (Long nodeId : hopNodes.get(d)) {
+                        List<Long> nbrs = sampledIncoming.getOrDefault(nodeId, Collections.emptyList());
+                        double[] agg = fn.aggregate(nodeId, nbrs, currentH, inDegrees);
+                        if (agg != null) newH.put(nodeId, agg);
+                    }
+                }
+                currentH.putAll(newH);
+                lastAggLevel = activeLevel;
+                activeLevel--;
+
+            } else if ("linear".equals(layer.op)) {
+                double[][] W = weights.get(layer.weightKey).asMatrix();
+                double[]   b = weights.get(layer.biasKey).asVector();
+                for (int d = 0; d <= lastAggLevel; d++)
+                    for (Long nid : hopNodes.get(d)) {
+                        double[] h = currentH.get(nid);
+                        if (h != null) currentH.put(nid, linearTransform(h, W, b));
+                    }
+
+            } else if ("relu".equals(layer.op)) {
+                for (int d = 0; d <= lastAggLevel; d++)
+                    for (Long nid : hopNodes.get(d)) {
+                        double[] h = currentH.get(nid);
+                        if (h != null) currentH.put(nid, relu(h));
+                    }
+
+            } else if ("tanh".equals(layer.op)) {
+                for (int d = 0; d <= lastAggLevel; d++)
+                    for (Long nid : hopNodes.get(d)) {
+                        double[] h = currentH.get(nid);
+                        if (h == null) continue;
+                        double[] out = new double[h.length];
+                        for (int i = 0; i < h.length; i++) out[i] = Math.tanh(h[i]);
+                        currentH.put(nid, out);
+                    }
+            }
+        }
+
+        // ── Step 4: Emit predictions for seed nodes ───────────────────────────
+
+        List<GNNInferenceResult> results = new ArrayList<>(seedIds.size());
+        for (Long seedId : seedIds) {
+            double[] logits = currentH.get(seedId);
+            if (logits == null) continue;
+            results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits)));
+        }
+        return results.stream();
+    }
+
+    // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
 
@@ -889,5 +1291,136 @@ public class GNNProcedures {
         List<Double> list = new ArrayList<>(arr.length);
         for (double v : arr) list.add(v);
         return list;
+    }
+
+    // -------------------------------------------------------------------------
+    // Inference math helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Affine transform: {@code out[i] = b[i] + Σ_j W[i][j] · in[j]}.
+     *
+     * <p>{@code W} has shape {@code [out_dim, in_dim]} — matching PyTorch's
+     * convention ({@code weight.shape == [out_features, in_features]}).
+     */
+    private double[] linearTransform(double[] input, double[][] W, double[] b) {
+        int outDim = W.length;
+        double[] result = new double[outDim];
+        for (int i = 0; i < outDim; i++) {
+            result[i] = b[i];
+            double[] row = W[i];
+            for (int j = 0; j < input.length; j++) {
+                result[i] += row[j] * input[j];
+            }
+        }
+        return result;
+    }
+
+    /** Element-wise ReLU (returns a new array). */
+    private double[] relu(double[] x) {
+        double[] out = new double[x.length];
+        for (int i = 0; i < x.length; i++) out[i] = x[i] > 0.0 ? x[i] : 0.0;
+        return out;
+    }
+
+    /** Index of the largest value in {@code x}. */
+    private long argmax(double[] x) {
+        int best = 0;
+        for (int i = 1; i < x.length; i++) if (x[i] > x[best]) best = i;
+        return best;
+    }
+
+    // -------------------------------------------------------------------------
+    // Spec + weights loading  (cached by model-directory path)
+    // -------------------------------------------------------------------------
+
+    private static GNNSpec loadSpecCached(String modelDir) throws IOException {
+        GNNSpec cached = SPEC_CACHE.get(modelDir);
+        if (cached != null) return cached;
+        GNNSpec loaded = parseSpec(new File(modelDir, "spec.json"));
+        GNNSpec prev   = SPEC_CACHE.putIfAbsent(modelDir, loaded);
+        return prev != null ? prev : loaded;
+    }
+
+    private static Map<String, Tensor> loadWeightsCached(String modelDir) throws IOException {
+        Map<String, Tensor> cached = WEIGHTS_CACHE.get(modelDir);
+        if (cached != null) return cached;
+        Map<String, Tensor> loaded = parseWeights(new File(modelDir, "weights.bin"));
+        Map<String, Tensor> prev   = WEIGHTS_CACHE.putIfAbsent(modelDir, loaded);
+        return prev != null ? prev : loaded;
+    }
+
+    // ── spec.json parsers ─────────────────────────────────────────────────────
+
+    private static GNNSpec parseSpec(File specFile) throws IOException {
+        return parseSpecFromNode(new ObjectMapper().readTree(specFile));
+    }
+
+    private static GNNSpec parseSpecFromNode(JsonNode root) {
+        int numHops = root.path("num_hops").asInt(0);
+        List<LayerSpec> layers = new ArrayList<>();
+        for (JsonNode n : root.path("layers")) {
+            layers.add(new LayerSpec(
+                    n.path("op").asText(),
+                    n.path("method").asText(null),
+                    n.path("weight").asText(null),
+                    n.path("bias").asText(null)));
+        }
+        return new GNNSpec(numHops, layers);
+    }
+
+    // ── weights.bin parsers ───────────────────────────────────────────────────
+    //
+    // Format (all little-endian):
+    //   num_tensors : int32
+    //   [repeated num_tensors times]
+    //     key_length : int32
+    //     key        : UTF-8 bytes[key_length]
+    //     rank       : int32
+    //     dims       : int32[rank]
+    //     data       : float32[Π dims]   (row-major)
+
+    private static Map<String, Tensor> parseWeights(File weightsFile) throws IOException {
+        try (FileInputStream fis = new FileInputStream(weightsFile)) {
+            return parseWeightsFromChannel(fis.getChannel());
+        }
+    }
+
+    private static Map<String, Tensor> parseWeightsFromChannel(ReadableByteChannel ch)
+            throws IOException {
+        Map<String, Tensor> map = new HashMap<>();
+
+        int numTensors = readInt(ch);
+        for (int t = 0; t < numTensors; t++) {
+            int    keyLen   = readInt(ch);
+            byte[] keyBytes = readBytes(ch, keyLen);
+            String key      = new String(keyBytes, java.nio.charset.StandardCharsets.UTF_8);
+
+            int   rank  = readInt(ch);
+            int[] dims  = new int[rank];
+            int   total = 1;
+            for (int d = 0; d < rank; d++) { dims[d] = readInt(ch); total *= dims[d]; }
+
+            ByteBuffer buf = ByteBuffer.allocate(total * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+            ch.read(buf);
+            buf.flip();
+            double[] data2 = new double[total];
+            for (int i = 0; i < total; i++) data2[i] = buf.getFloat();
+
+            map.put(key, new Tensor(dims, data2));
+        }
+        return map;
+    }
+
+    private static int readInt(ReadableByteChannel ch) throws IOException {
+        ByteBuffer buf = ByteBuffer.allocate(Integer.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        ch.read(buf); buf.flip();
+        return buf.getInt();
+    }
+
+    private static byte[] readBytes(ReadableByteChannel ch, int len) throws IOException {
+        ByteBuffer buf = ByteBuffer.allocate(len);
+        ch.read(buf);
+        return buf.array();
     }
 }

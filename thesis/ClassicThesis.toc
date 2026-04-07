@@ -1,40 +1,62 @@
 \babel@toc {american}{}\relax 
 \vspace {-\cftbeforechapskip }
-\babel@toc {american}{}\relax 
-\contentsline {chapter}{\numberline {1}\spacedlowsmallcaps {Introduction}}{1}{chapter.1}%
-\contentsline {section}{\numberline {1.1}Research Questions}{1}{section.1.1}%
-\contentsline {section}{\numberline {1.2}Scope and Limitations}{2}{section.1.2}%
-\contentsline {section}{\numberline {1.3}Related Work}{2}{section.1.3}%
-\contentsline {chapter}{\numberline {2}\spacedlowsmallcaps {Background}}{3}{chapter.2}%
-\contentsline {section}{\numberline {2.1}Traditional Graph Representation Learning}{3}{section.2.1}%
-\contentsline {subsection}{\numberline {2.1.1}Transductive Nature of Traditional \textsmaller {GRL}}{4}{subsection.2.1.1}%
-\contentsline {section}{\numberline {2.2}Neural Networks}{4}{section.2.2}%
-\contentsline {subsection}{\numberline {2.2.1}Weight Optimization}{5}{subsection.2.2.1}%
-\contentsline {section}{\numberline {2.3}Graph Neural Networks}{5}{section.2.3}%
-\contentsline {subsection}{\numberline {2.3.1}Graph Neural Network Architecture}{6}{subsection.2.3.1}%
-\contentsline {section}{\numberline {2.4}Graph Neural Networks and Large Graphs}{7}{section.2.4}%
-\contentsline {subsection}{\numberline {2.4.1}Training on Large Datasets Under Memory Constraints}{7}{subsection.2.4.1}%
-\contentsline {subsection}{\numberline {2.4.2}Subgraph Sampling}{8}{subsection.2.4.2}%
-\contentsline {section}{\numberline {2.5}PyTorch Geometric}{9}{section.2.5}%
-\contentsline {section}{\numberline {2.6}Neo4j}{9}{section.2.6}%
-\contentsline {section}{\numberline {2.7}Evaluation Metrics}{10}{section.2.7}%
-\contentsline {chapter}{\numberline {3}\spacedlowsmallcaps {Methodology}}{11}{chapter.3}%
-\contentsline {section}{\numberline {3.1}System Architecture}{11}{section.3.1}%
-\contentsline {section}{\numberline {3.2}Graph Representation in Neo4j}{11}{section.3.2}%
-\contentsline {section}{\numberline {3.3}PyG Interface Implementations}{12}{section.3.3}%
-\contentsline {section}{\numberline {3.4}Sampling Algorithms}{12}{section.3.4}%
-\contentsline {paragraph}{Neighbor sampling.}{12}{section.3.4}%
-\contentsline {paragraph}{GraphSAINT random-walk sampling.}{12}{section.3.4}%
-\contentsline {section}{\numberline {3.5}Graph Neural Network Model}{12}{section.3.5}%
-\contentsline {section}{\numberline {3.6}Datasets and Experimental Setup}{13}{section.3.6}%
-\contentsline {section}{\numberline {3.7}Benchmarking Methodology}{13}{section.3.7}%
-\contentsline {subsection}{\numberline {3.7.1}End-to-End Latency Decomposition}{13}{subsection.3.7.1}%
-\contentsline {subsection}{\numberline {3.7.2}Query Execution Profiling}{13}{subsection.3.7.2}%
-\contentsline {subsection}{\numberline {3.7.3}Python-Level Profiling}{14}{subsection.3.7.3}%
-\contentsline {subsection}{\numberline {3.7.4}Sampler Comparison Framework}{14}{subsection.3.7.4}%
-\contentsline {section}{\numberline {3.8}Correctness and Verification}{14}{section.3.8}%
-\contentsline {chapter}{\numberline {A}\spacedlowsmallcaps {Appendix}}{15}{appendix.A}%
-\def \@chapapp {\appendixname }
-\vspace {\beforebibskip }
-\contentsline {chapter}{\spacedlowsmallcaps {Bibliography}}{17}{dummy.6}%
+\contentsline {chapter}{\numberline {1}\spacedlowsmallcaps {Introduction}}{4}{chapter.1}%
+\contentsline {section}{\numberline {1.1}Research questions}{4}{section.1.1}%
+\contentsline {section}{\numberline {1.2}Scope and limitations}{5}{section.1.2}%
+\contentsline {section}{\numberline {1.3}Thesis outline}{5}{section.1.3}%
+\contentsline {chapter}{\numberline {2}\spacedlowsmallcaps {Background}}{6}{chapter.2}%
+\contentsline {section}{\numberline {2.1}Graphs and graph representation learning}{6}{section.2.1}%
+\contentsline {subsection}{\numberline {2.1.1}Transductive nature of traditional GRL}{7}{subsection.2.1.1}%
+\contentsline {section}{\numberline {2.2}Neural networks}{7}{section.2.2}%
+\contentsline {section}{\numberline {2.3}Graph neural networks}{8}{section.2.3}%
+\contentsline {subsection}{\numberline {2.3.1}Message passing}{8}{subsection.2.3.1}%
+\contentsline {subsection}{\numberline {2.3.2}Implications for large-graph training}{8}{subsection.2.3.2}%
+\contentsline {section}{\numberline {2.4}Graph neural networks for large graphs}{9}{section.2.4}%
+\contentsline {subsection}{\numberline {2.4.1}Training Under Memory Constraints}{9}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.2}Subgraph sampling}{10}{subsection.2.4.2}%
+\contentsline {section}{\numberline {2.5}PyTorch Geometric}{10}{section.2.5}%
+\contentsline {section}{\numberline {2.6}Neo4j and graph databases}{11}{section.2.6}%
+\contentsline {subsection}{\numberline {2.6.1}Alternatives to Neo4j}{11}{subsection.2.6.1}%
+\contentsline {subsection}{\numberline {2.6.2}Querying Neo4j with Cypher and Procedures}{11}{subsection.2.6.2}%
+\contentsline {subsection}{\numberline {2.6.3}Data Retrieval from Neo4j }{11}{subsection.2.6.3}%
+\contentsline {subsection}{\numberline {2.6.4}Cypher Query Execution Pipeline}{12}{subsection.2.6.4}%
+\contentsline {chapter}{\numberline {3}\spacedlowsmallcaps {Related work}}{13}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Subgraph sampling}{13}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Distributed GNN systems}{13}{section.3.2}%
+\contentsline {section}{\numberline {3.3}Database-backed GNN pipelines}{13}{section.3.3}%
+\contentsline {chapter}{\numberline {4}\spacedlowsmallcaps {Method}}{15}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Experimental methodology}{15}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Baseline graph-DB backed GNN system}{15}{section.4.2}%
+\contentsline {section}{\numberline {4.3}System configurations}{15}{section.4.3}%
+\contentsline {section}{\numberline {4.4}Equivalence constraint}{16}{section.4.4}%
+\contentsline {section}{\numberline {4.5}Performance evaluation}{16}{section.4.5}%
+\contentsline {section}{\numberline {4.6}Benchmarking procedure}{16}{section.4.6}%
+\contentsline {section}{\numberline {4.7}Datasets}{16}{section.4.7}%
+\contentsline {section}{\numberline {4.8}Graph neural network model}{17}{section.4.8}%
+\contentsline {chapter}{\numberline {5}\spacedlowsmallcaps {System Design}}{18}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Baseline architecture}{18}{section.5.1}%
+\contentsline {section}{\numberline {5.2}Improved architecture}{18}{section.5.2}%
+\contentsline {section}{\numberline {5.3}Sampling Algorithms}{18}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Neighbor Sampling}{18}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}GraphSAINT random-walk sampling}{19}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}Graph Representation in Neo4j}{19}{subsection.5.3.3}%
+\contentsline {subsection}{\numberline {5.3.4}PyG integration}{19}{subsection.5.3.4}%
+\contentsline {subsection}{\numberline {5.3.5}Profiling and logging}{20}{subsection.5.3.5}%
+\contentsline {subsubsection}{Training logging}{20}{subsection.5.3.5}%
+\contentsline {subsubsection}{Query Execution Profiling}{20}{subsection.5.3.5}%
+\contentsline {subsubsection}{Python-Level Profiling}{20}{subsection.5.3.5}%
+\contentsline {chapter}{\numberline {6}\spacedlowsmallcaps {Results}}{21}{chapter.6}%
+\contentsline {section}{\numberline {6.1}RQ1: Bottlenecks}{21}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}Training phase vs sampling phase}{21}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {6.1.2}Sampling subphases}{21}{subsection.6.1.2}%
+\contentsline {subsection}{\numberline {6.1.3}Feature vector datatype}{21}{subsection.6.1.3}%
+\contentsline {subsection}{\numberline {6.1.4}Impact of: Multisampler parallelism}{21}{subsection.6.1.4}%
+\contentsline {subsection}{\numberline {6.1.5}Impact of: Caching to reduce feature fetch overhead}{21}{subsection.6.1.5}%
+\contentsline {section}{\numberline {6.2}RQ2: Sampling}{21}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Neo4j: Neighborsampling vs Graphsaint}{21}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Neo4j sampling vs PyG sampling}{21}{subsection.6.2.2}%
+\contentsline {chapter}{\numberline {7}\spacedlowsmallcaps {Discussion}}{22}{chapter.7}%
+\contentsline {section}{\numberline {7.1}Optimal system implementation}{22}{section.7.1}%
+\contentsline {chapter}{\numberline {8}\spacedlowsmallcaps {Conclusion}}{23}{chapter.8}%
+\contentsline {section}{\numberline {8.1}RQ1 - Bottleneck}{23}{section.8.1}%
 \providecommand \tocbasic@end@toc@file {}\tocbasic@end@toc@file 

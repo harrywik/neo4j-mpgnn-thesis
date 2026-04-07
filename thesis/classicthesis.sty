@@ -264,10 +264,9 @@
             \setlength{\marginparsep}{2em}%
         }{% Palatino or other
             \PackageInfo{classicthesis}{A4 paper, Palatino or other}
-            \areaset[current]{336pt}{750pt} % ~ 336 * factor 2 + 33 head + 42 \the\footskip 
-%            \areaset{336pt}{761pt} % 686 (factor 2.2) + 33 head + 42 head \the\footskip 10pt     
-            \setlength{\marginparwidth}{7em}%
-            \setlength{\marginparsep}{2em}%
+            \areaset[current]{440pt}{750pt} % widened from 336pt for symmetric screen/print layout
+            \setlength{\marginparwidth}{3em}%
+            \setlength{\marginparsep}{1em}%
         }%
     }
 % Here are some suggestions for the text widths and heights:
@@ -357,8 +356,12 @@
         {\relax}%
         {\renewcommand{\chaptermark}[1]{\markboth{\spacedlowsmallcaps{#1}}{\spacedlowsmallcaps{#1}}}}
     \renewcommand{\sectionmark}[1]{\markright{\thesection\enspace\spacedlowsmallcaps{#1}}} 
-    \lehead{\mbox{\llap{\small\thepage\kern2em}\headmark\hfil}}
-    \rohead{\mbox{\hfil{\headmark}\rlap{\small\kern2em\thepage}}}
+    \if@twoside%
+        \lehead{\mbox{\llap{\small\thepage\kern2em}\headmark\hfil}}%
+        \rohead{\mbox{\hfil{\headmark}\rlap{\small\kern2em\thepage}}}%
+    \else%
+        \lohead{\mbox{\llap{\small\thepage\kern2em}\headmark}}%
+    \fi
     \renewcommand{\headfont}{\small}  
 %    \DeclareRobustCommand{\fixBothHeadlines}[2]{} % <--- ToDo
     % hack to get the content headlines right (thanks, Lorenzo!)
@@ -387,10 +390,12 @@
     }{\relax}
     % chapters
     \ifthenelse{\boolean{@linedheaders}}%
-    {% lines above and below, number right
-    \titleformat{\chapter}[display]%             
-        {\relax}{\raggedleft{\color{halfgray}\chapterNumber\thechapter} \\ }{0pt}%
-        {\titlerule\vspace*{.9\baselineskip}\raggedright\spacedallcaps}[\normalsize\vspace*{.8\baselineskip}\titlerule]%
+    {% title left, number right, same line
+    \titleformat{\chapter}%
+        {\relax}%
+        {\smash{\rlap{\makebox[\textwidth][r]{\color{halfgray}\chapterNumber\thechapter}}}}%
+        {0pt}%
+        {\raggedright\spacedallcaps}[\normalsize\vspace*{.8\baselineskip}\titlerule]%
     }{% something like Bringhurst  
     \titleformat{\chapter}[display]%
         {\relax}{\mbox{}\oldmarginpar{\vspace*{-3\baselineskip}\color{halfgray}\chapterNumber\thechapter}}{0pt}%
@@ -413,7 +418,7 @@
     % spacing
     \ifthenelse{\boolean{@nochapters}}%
         {\relax}%
-        {\titlespacing*{\chapter}{0pt}{1\baselineskip}{1.2\baselineskip}}
+        {\titlespacing*{\chapter}{0pt}{5\baselineskip}{1.2\baselineskip}}
     \titlespacing*{\section}{0pt}{1.25\baselineskip}{1\baselineskip} 
     \titlespacing*{\subsection}{0pt}{1.25\baselineskip}{1\baselineskip}
     \titlespacing*{\paragraph}{0pt}{1\baselineskip}{1\baselineskip}

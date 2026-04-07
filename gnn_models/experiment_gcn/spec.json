@@ -1,0 +1,35 @@
+{
+  "num_hops": 2,
+  "max_neighbors": 10,
+  "layers": [
+    {
+      "op": "aggregate",
+      "method": "gcn_norm"
+    },
+    {
+      "op": "linear",
+      "weight": "GCN1.lin.weight",
+      "bias": "GCN1.bias"
+    },
+    {
+      "op": "relu"
+    },
+    {
+      "op": "aggregate",
+      "method": "gcn_norm"
+    },
+    {
+      "op": "linear",
+      "weight": "GCN2.lin.weight",
+      "bias": "GCN2.bias"
+    },
+    {
+      "op": "relu"
+    },
+    {
+      "op": "linear",
+      "weight": "classifier.weight",
+      "bias": "classifier.bias"
+    }
+  ]
+}
