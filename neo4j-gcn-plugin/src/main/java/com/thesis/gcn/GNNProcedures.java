@@ -71,13 +71,13 @@ public class GNNProcedures {
         /** Application-level node ID (same value that was passed in {@code seedIds}). */
         public final Long nodeId;
         /** Mean-aggregated feature vector across all sampled neighbours. */
-        public final List<Double> aggregatedFeatures;
+        public final byte[] aggregatedFeatures;
         /** Optional raw node label property value. */
         public final Object label;
         /** Optional raw feature vector from the seed node itself. */
-        public final List<Double> nodeFeatures;
+        public final byte[] nodeFeatures;
 
-        public AggResult(Long nodeId, List<Double> aggregatedFeatures, Object label, List<Double> nodeFeatures) {
+        public AggResult(Long nodeId, byte[] aggregatedFeatures, Object label, byte[] nodeFeatures) {
             this.nodeId = nodeId;
             this.aggregatedFeatures = aggregatedFeatures;
             this.label = label;
@@ -98,9 +98,9 @@ public class GNNProcedures {
         /** Hop distance: 0 = seed's own features, 1 = 1-hop mean, 2 = 2-hop mean, … */
         public final Long hop;
         /** Mean-aggregated feature vector for nodes at this hop distance. */
-        public final List<Double> aggregatedFeatures;
+        public final byte[] aggregatedFeatures;
 
-        public SIGNResult(Long nodeId, Long hop, List<Double> aggregatedFeatures) {
+        public SIGNResult(Long nodeId, Long hop, byte[] aggregatedFeatures) {
             this.nodeId = nodeId;
             this.hop = hop;
             this.aggregatedFeatures = aggregatedFeatures;
@@ -332,11 +332,11 @@ public class GNNProcedures {
             }
 
             Object outLabel = includeLabel ? seedNode.getProperty(targetKey, null) : null;
-            List<Double> outNodeFeatures = includeNode
-                    ? toDoubleList(extractFeatures(seedNode, featureKey, featureType))
+            byte[] outNodeFeatures = includeNode
+                    ? extractFeaturesAsFloat32Bytes(seedNode, featureKey, featureType)
                     : null;
 
-            results.add(new AggResult(seedId, toDoubleList(agg), outLabel, outNodeFeatures));
+            results.add(new AggResult(seedId, packFloat32Bytes(agg), outLabel, outNodeFeatures));
         }
 
         return results.stream();
@@ -416,11 +416,11 @@ public class GNNProcedures {
             }
 
             Object outLabel = includeLabel ? seedNode.getProperty(targetKey, null) : null;
-            List<Double> outNodeFeatures = includeNode
-                    ? toDoubleList(seedFeatures)
+            byte[] outNodeFeatures = includeNode
+                    ? extractFeaturesAsFloat32Bytes(seedNode, featureKey, featureType)
                     : null;
 
-            results.add(new AggResult(seedId, toDoubleList(agg), outLabel, outNodeFeatures));
+            results.add(new AggResult(seedId, packFloat32Bytes(agg), outLabel, outNodeFeatures));
         }
 
         return results.stream();
@@ -606,7 +606,7 @@ public class GNNProcedures {
             // hop 0: seed's own features (no aggregation).
             double[] ownFeat = extractFeatures(seedNode, featureKey, featureType);
             int featLen = ownFeat != null ? ownFeat.length : 0;
-            results.add(new SIGNResult(seedId, 0L, toDoubleList(ownFeat)));
+            results.add(new SIGNResult(seedId, 0L, packFloat32Bytes(ownFeat)));
 
             // BFS: track which nodes have been seen (by element ID to avoid revisiting).
             Set<String> visited = new HashSet<>();
@@ -635,14 +635,14 @@ public class GNNProcedures {
                 // Aggregate mean over the new shell; emit zero vector if shell is empty.
                 double[] agg = aggregateMean(shell, featureKey, featureType);
                 if (agg == null) agg = new double[featLen];
-                results.add(new SIGNResult(seedId, (long) h, toDoubleList(agg)));
+                results.add(new SIGNResult(seedId, (long) h, packFloat32Bytes(agg)));
 
                 visited = nextVisited;
                 frontier = shell;
                 // If frontier is empty, pad remaining hops with zero vectors.
                 if (frontier.isEmpty()) {
                     for (int rest = h + 1; rest <= k; rest++) {
-                        results.add(new SIGNResult(seedId, (long) rest, toDoubleList(new double[featLen])));
+                        results.add(new SIGNResult(seedId, (long) rest, packFloat32Bytes(new double[featLen])));
                     }
                     break;
                 }

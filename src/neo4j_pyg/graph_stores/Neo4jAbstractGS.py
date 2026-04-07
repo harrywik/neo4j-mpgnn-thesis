@@ -245,18 +245,15 @@ class Neo4jAbstractGS(GraphStore, ABC):
         else:
             flat = [nid for hop in record["nodes_by_hop"] for nid in hop]
             ordered_global_ids = torch.tensor(flat, dtype=torch.long)
-        global_to_local = {
-            int(gid): i for i, gid in enumerate(ordered_global_ids.tolist())
-        }
 
         edge_pairs = record.get("edge_pairs") or []
         if edge_pairs:
-            row = torch.tensor(
-                [global_to_local[e[0]] for e in edge_pairs], dtype=torch.long
-            )
-            col = torch.tensor(
-                [global_to_local[e[1]] for e in edge_pairs], dtype=torch.long
-            )
+            # Optimized vectorized mapping
+            edge_index_global = torch.tensor(edge_pairs, dtype=torch.long)
+            sorted_global_ids, perm = torch.sort(ordered_global_ids)
+            indices = torch.searchsorted(sorted_global_ids, edge_index_global)
+            row = perm[indices[:, 0]]
+            col = perm[indices[:, 1]]
         else:
             row = col = torch.zeros(0, dtype=torch.long)
 
