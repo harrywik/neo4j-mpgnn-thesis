@@ -15,10 +15,9 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
      │                  │       │           │           │          │
      ├─ Neo4jNoCacheFS  │       │           │           │          └─ Neo4jTwoLevelCache
      ├─ Neo4jCachedFS   │       │           │           │
-     ├─ Neo4jSIGNFS     │       │           │           ├─ GCN
-     └─ Neo4jUDPFS      ├─ Neo4jMultiGS     │           ├─ GCNPostAggregation
-                        └─ Neo4jSingleGS    │           ├─ MLPPostAggregation
-                                            │           └─ SIGNPostAggregation
+     └─ Neo4jUDPFS      ├─ Neo4jMultiGS     │           ├─ GCN
+                        └─ Neo4jSingleGS    │           ├─ GCNPostAggregation
+                                            │           └─ MLPPostAggregation
                                      ┌──────┴──────────────────────────────────┐
                                      │              BaseSampler                │
                                      ├─ Neo4jSampler                           │
@@ -26,7 +25,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
                                      ├─ Neo4jEdgeModeSampler                   │
                                      ├─ Neo4jJavaNeighborSampler               │
                                      ├─ Neo4jAggregationSampler                │
-                                     ├─ Neo4jSIGNSampler                       │
                                      └─ OldNeighborSampler                     │
                                                                                ░│
                                     DataLoader                                 ░│
@@ -150,27 +148,26 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
 └───────────┬───────────────┬──────────────────┬───────────────────────────┘
             │               │                  │                   │
             ▼               ▼                  ▼                   ▼
-┌────────────────┐ ┌──────────────────┐ ┌──────────────────┐ ┌────────────────────┐
-│Neo4jNoCacheFS  │ │ Neo4jCachedFS    │ │Neo4jSIGNFeature  │ │Neo4jUDPFeatureStore│
-│                │ │                  │ │Store             │ │                    │
-├────────────────┤ ├──────────────────┤ ├──────────────────┤ ├────────────────────┤
-│ (no new attrs) │ │ label_map:       │ │ sampler:         │ │ sampler:           │
-│                │ │  Dict[str,int]   │ │  Neo4jSIGNSampler│ │  (optional)        │
-│                │ │ cache_size_GB:   │ │ hops: int = 2    │ │ max_neighbors: int │
-│                │ │  float           │ │                  │ │ edge_type: str     │
-│                │ │ _cache:          │ │                  │ │                    │
-│                │ │  TwoLevelCache ◆─┼─┼──────────────────┼─┼────────────────────┤
-├────────────────┤ ├──────────────────┤ ├──────────────────┤ ├────────────────────┤
-│ _get_cached    │ │ _prefill_hot_    │ │ _multi_get_tensor│ │ _query_both        │
-│  _value → None │ │  cache(g,k,...)  │ │  [reads sampler  │ │  (@cached_property)│
-│ _update_cached │ │ _get_cached_     │ │   .pending_sign] │ │  UDP Cypher call   │
-│  _value → pass │ │  value → cache   │ │ _get_cached_     │ │ _query_x           │
-│ _remove_cached │ │ _update_cached   │ │  _value → None   │ │  (@cached_property)│
-│  _value → pass │ │  _value → cache  │ │ _update_cached   │ │ _decode_feature_   │
-│                │ │ _remove_cached   │ │  _value → pass   │ │  matrix → np.array │
-│                │ │  _value → delete │ │ _remove_cached   │ │ cache methods→noop │
-└────────────────┘ └──────────────────┘ │  _value → pass   │ └────────────────────┘
-                                        └──────────────────┘
+┌────────────────┐ ┌──────────────────┐ ┌────────────────────┐
+│Neo4jNoCacheFS  │ │ Neo4jCachedFS    │ │Neo4jUDPFeatureStore│
+│                │ │                  │ │                    │
+├────────────────┤ ├──────────────────┤ ├────────────────────┤
+│ (no new attrs) │ │ label_map:       │ │ sampler:           │
+│                │ │  Dict[str,int]   │ │  (optional)        │
+│                │ │ cache_size_GB:   │ │ max_neighbors: int │
+│                │ │  float           │ │ edge_type: str     │
+│                │ │ _cache:          │ │                    │
+│                │ │  TwoLevelCache ◆─┼─┼────────────────────┤
+├────────────────┤ ├──────────────────┤ │ _query_both        │
+│ _get_cached    │ │ _prefill_hot_    │ │  (@cached_property)│
+│  _value → None │ │  cache(g,k,...)  │ │  UDP Cypher call   │
+│ _update_cached │ │ _get_cached_     │ │ _query_x           │
+│  _value → pass │ │  value → cache   │ │  (@cached_property)│
+│ _remove_cached │ │ _update_cached   │ │ _decode_feature_   │
+│  _value → pass │ │  _value → cache  │ │  matrix → np.array │
+│                │ │ _remove_cached   │ │ cache methods→noop │
+│                │ │  _value → delete │ └────────────────────┘
+└────────────────┘ └──────────────────┘
 ```
 
 ### Composition in feature_stores
@@ -179,11 +176,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
   Neo4jCachedFS
   ┌──────────────────────────────────────┐
   │  _cache ──────────────────────────► Neo4jTwoLevelCache
-  └──────────────────────────────────────┘
-
-  Neo4jSIGNFeatureStore
-  ┌──────────────────────────────────────┐
-  │  sampler ─────────────────────────► Neo4jSIGNSampler
   └──────────────────────────────────────┘
 
   Neo4jUDPFeatureStore
@@ -305,25 +297,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
 │  + reset_parameters()   [Xavier + zeros, fixed seed 0]                  │
 └──────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────────────────────────────────────────┐
-│  SIGNPostAggregation                                                     │
-│  (inherits: torch.nn.Module)                                             │
-├──────────────────────────────────────────────────────────────────────────┤
-│  ATTRIBUTES                                                              │
-│  ─────────────────────────────────────────────────────────────────────  │
-│  feature_dim : int                                                       │
-│  hops        : int                                                       │
-│  hidden_dims : List[int]                                                 │
-│  nbr_classes : int                                                       │
-│  layers      : nn.ModuleList                                             │
-│  (input_dim = feature_dim * (hops + 1))                                  │
-├──────────────────────────────────────────────────────────────────────────┤
-│  METHODS                                                                 │
-│  ─────────────────────────────────────────────────────────────────────  │
-│  + forward(X, edge_index=None) -> Tensor                                 │
-│    [ReLU on all layers except last]                                      │
-│  + reset_parameters()   [Xavier + zeros, fixed seed 0]                  │
-└──────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -462,32 +435,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
 │  + sample_from_edges(...) -> NotImplementedError                         │
 └──────────────────────────────────────────────────────────────────────────┘
 
-┌──────────────────────────────────────────────────────────────────────────┐
-│  Neo4jSIGNSampler                                                        │
-│  (inherits: torch_geometric.sampler.BaseSampler)                         │
-├──────────────────────────────────────────────────────────────────────────┤
-│  ATTRIBUTES                                                              │
-│  ─────────────────────────────────────────────────────────────────────  │
-│  graph_store         : Neo4jAbstractGS              (composition)        │
-│  node_id_key         : str           = "id"                              │
-│  feature_key         : str           = "embedding_bytes"                 │
-│  feature_type        : str           = "byte[]"                          │
-│  node_label          : str           = "Paper"                           │
-│  edge_type           : str           = ""                                │
-│  hops                : int           = 2                                 │
-│  max_neighbors_per_hop : int         = 10                                │
-│  measurer            : Optional[Measurer]                                │
-│  pending_sign        : Dict[int, List[ndarray]]                          │
-│                        (nodeId → [arr_hop0, ..., arr_hopK])              │
-│  _cypher             : str           (calls gnnProcedures.aggregation     │
-│                                       .sign.multiHop UDP)                │
-├──────────────────────────────────────────────────────────────────────────┤
-│  METHODS                                                                 │
-│  ─────────────────────────────────────────────────────────────────────  │
-│  + sample_from_nodes(index: NodeSamplerInput) -> SamplerOutput           │
-│    [returns empty topology; stores hop arrays in pending_sign]           │
-│  + sample_from_edges(...) -> NotImplementedError                         │
-└──────────────────────────────────────────────────────────────────────────┘
 
 ┌──────────────────────────────────────────────────────────────────────────┐
 │  OldNeighborSampler                                                      │
@@ -585,9 +532,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
  │  Neo4jCachedFS ────────────────────────◆ Neo4jTwoLevelCache             │
  │                                          (._cache)                      │
  │                                                                         │
- │  Neo4jSIGNFeatureStore ────────────────◆ Neo4jSIGNSampler               │
- │                                          (.sampler)                     │
- │                                                                         │
  │  Neo4jUDPFeatureStore  ─ ─ ─ ─ ─ ─ ─ ◇ (optional sampler)             │
  │                                                                         │
  │  Neo4jGraphSAINTSampler ────────────── ◆ Neo4jAbstractGS               │
@@ -599,7 +543,6 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
  │  Neo4jEdgeModeSampler      ────────────◆ Neo4jAbstractGS               │
  │  Neo4jJavaNeighborSampler  ────────────◆ Neo4jAbstractGS               │
  │  Neo4jAggregationSampler   ────────────◆ Neo4jAbstractGS               │
- │  Neo4jSIGNSampler          ────────────◆ Neo4jAbstractGS               │
  │  OldNeighborSampler        ────────────◆ Neo4jAbstractGS               │
  │                                          (.graph_store)                 │
  └─────────────────────────────────────────────────────────────────────────┘
@@ -631,7 +574,7 @@ Neo4jAbstractFS  Neo4jAbstractGS│           │           │   Neo4jAbstractC
  │  NodeSamplerInput                                                       │
  │       │                                                                 │
  │       ▼                                                                 │
- │  Neo4jAggregationSampler / Neo4jSIGNSampler                             │
+ │  Neo4jAggregationSampler                                                │
  │  .sample_from_nodes()                                                   │
  │       │                                                                 │
  │       ├──► graph_store.fetch_aggregated_features(cypher, kwargs)        │

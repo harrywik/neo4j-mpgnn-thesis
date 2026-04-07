@@ -229,28 +229,6 @@ public class GNNProcedures {
     }
 
     /**
-     * Result row for {@link #signAggregate}: one row per (seed, hop) pair.
-     *
-     * <p>The Python sampler groups rows by {@code nodeId} and concatenates
-     * {@code aggregatedFeatures} across hops to build the SIGN input tensor:
-     * {@code [x_0 || x_1 || … || x_k]}.
-     */
-    public static class SIGNResult {
-        /** Application-level node ID. */
-        public final Long nodeId;
-        /** Hop distance: 0 = seed's own features, 1 = 1-hop mean, 2 = 2-hop mean, … */
-        public final Long hop;
-        /** Mean-aggregated feature vector for nodes at this hop distance. */
-        public final List<Double> aggregatedFeatures;
-
-        public SIGNResult(Long nodeId, Long hop, List<Double> aggregatedFeatures) {
-            this.nodeId = nodeId;
-            this.hop = hop;
-            this.aggregatedFeatures = aggregatedFeatures;
-        }
-    }
-
-    /**
      * Result row for {@link #neighborSample}: one record containing full sampled
      * topology for a mini-batch.
      *
@@ -710,107 +688,6 @@ public class GNNProcedures {
                 outTargetIds,
                 outAggregated
         ));
-    }
-
-    // -------------------------------------------------------------------------
-    // SIGN procedure
-    // -------------------------------------------------------------------------
-
-    /**
-     * SIGN-style multi-hop aggregation.
-     *
-     * <p>Returns {@code hops + 1} rows per seed node:
-     * <ul>
-     *   <li>hop 0 — seed's own feature vector (no aggregation).</li>
-     *   <li>hop 1 — mean of 1-hop incoming neighbours' features.</li>
-     *   <li>hop k — mean of features at the k-hop shell (BFS frontier, new nodes only).</li>
-     * </ul>
-     *
-     * <p>The Python sampler groups rows by {@code nodeId}, sorts by {@code hop}, then
-     * concatenates to build the SIGN input {@code [x_0 || x_1 || … || x_k]}.
-     *
-     * <h3>Usage</h3>
-     * <pre>{@code
-    * CALL gnnProcedures.aggregation.sign.multiHop(
-     *     $seed_ids, "id", "embedding_bytes", "byte[]", "Paper", "CITES", 2, 10
-     * ) YIELD nodeId, hop, aggregatedFeatures
-     * RETURN nodeId, hop, aggregatedFeatures ORDER BY nodeId, hop
-     * }</pre>
-     */
-    @Procedure(name = "gnnProcedures.aggregation.sign.multiHop", mode = Mode.READ)
-    @Description(
-        "SIGN multi-hop aggregation. Returns one row per (seed, hop) with the mean-aggregated "
-        + "feature vector for nodes at that hop distance. hop=0 is the seed's own features."
-    )
-    public Stream<SIGNResult> signAggregate(
-            @Name("seedIds")                              List<Long> seedIds,
-            @Name("nodeIdKey")                            String nodeIdKey,
-            @Name("featureKey")                           String featureKey,
-            @Name("featureType")                          String featureType,
-            @Name("nodeLabel")                            String nodeLabel,
-            @Name(value = "edgeType",            defaultValue = "") String edgeType,
-            @Name(value = "hops",                defaultValue = "2") Long hops,
-            @Name(value = "maxNeighborsPerHop",  defaultValue = "10") Long maxNeighborsPerHop
-    ) {
-        Label label = Label.label(nodeLabel);
-        boolean hasEdgeType = edgeType != null && !edgeType.isEmpty();
-        RelationshipType relType = hasEdgeType ? RelationshipType.withName(edgeType) : null;
-        Random rng = new Random(42L);
-        int k = (int) (long) hops;
-
-        List<SIGNResult> results = new ArrayList<>(seedIds.size() * (k + 1));
-
-        for (Long seedId : seedIds) {
-            Node seedNode = tx.findNode(label, nodeIdKey, seedId);
-            if (seedNode == null) continue;
-
-            // hop 0: seed's own features (no aggregation).
-            double[] ownFeat = extractFeatures(seedNode, featureKey, featureType);
-            int featLen = ownFeat != null ? ownFeat.length : 0;
-            results.add(new SIGNResult(seedId, 0L, toDoubleList(ownFeat)));
-
-            // BFS: track which nodes have been seen (by element ID to avoid revisiting).
-            Set<String> visited = new HashSet<>();
-            visited.add(seedNode.getElementId());
-            List<Node> frontier = Collections.singletonList(seedNode);
-
-            for (int h = 1; h <= k; h++) {
-                // Expand frontier: collect new nodes at this hop level.
-                List<Node> shell = new ArrayList<>();
-                Set<String> nextVisited = new HashSet<>(visited);
-
-                for (Node node : frontier) {
-                    Iterable<Relationship> rels = hasEdgeType
-                            ? node.getRelationships(Direction.INCOMING, relType)
-                            : node.getRelationships(Direction.INCOMING);
-                    List<Node> sampled = reservoirSample(rels, maxNeighborsPerHop, rng);
-                    for (Node nbr : sampled) {
-                        String eid = nbr.getElementId();
-                        if (!nextVisited.contains(eid)) {
-                            nextVisited.add(eid);
-                            shell.add(nbr);
-                        }
-                    }
-                }
-
-                // Aggregate mean over the new shell; emit zero vector if shell is empty.
-                double[] agg = aggregateMean(shell, featureKey, featureType);
-                if (agg == null) agg = new double[featLen];
-                results.add(new SIGNResult(seedId, (long) h, toDoubleList(agg)));
-
-                visited = nextVisited;
-                frontier = shell;
-                // If frontier is empty, pad remaining hops with zero vectors.
-                if (frontier.isEmpty()) {
-                    for (int rest = h + 1; rest <= k; rest++) {
-                        results.add(new SIGNResult(seedId, (long) rest, toDoubleList(new double[featLen])));
-                    }
-                    break;
-                }
-            }
-        }
-
-        return results.stream();
     }
 
     // -------------------------------------------------------------------------

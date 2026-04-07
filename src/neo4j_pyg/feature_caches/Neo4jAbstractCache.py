@@ -139,9 +139,31 @@ class Neo4jAbstractCache(ABC):
     def get(self, key):
         pass
 
+    def get_many(self, keys) -> dict:
+        """Return a dict of {key: value} for all cached keys.
+
+        Default implementation calls :meth:`get` in a loop.  Override for
+        batch-aware backends (Redis MGET, etc.).
+        """
+        result = {}
+        for k in keys:
+            v = self.get(k)
+            if v is not None:
+                result[k] = v
+        return result
+
     @abstractmethod
     def set(self, key, value):
         pass
+
+    def set_many(self, items: dict) -> None:
+        """Write all key→value pairs to the cache.
+
+        Default implementation calls :meth:`set` in a loop.  Override for
+        batch-aware backends (Redis pipeline, etc.).
+        """
+        for k, v in items.items():
+            self.set(k, v)
     
     def __getitem__(self, key):
         value = self.get(key)
