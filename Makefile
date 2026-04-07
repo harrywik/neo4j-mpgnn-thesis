@@ -126,8 +126,10 @@ build-plugin:
 	@cd neo4j-gcn-plugin && mvn clean package -q -Dneo4j.version=$(NEO4J_VERSION)
 	@echo "Built: neo4j-gcn-plugin/target/neo4j-gcn-plugin-1.0.0.jar"
 	@if [ -n "$(NEO4J_PLUGINS_DIR)" ]; then \
-		cp neo4j-gcn-plugin/target/neo4j-gcn-plugin-1.0.0.jar "$(NEO4J_PLUGINS_DIR)/"; \
-		echo "Deployed to $(NEO4J_PLUGINS_DIR)"; \
+		sudo cp neo4j-gcn-plugin/target/neo4j-gcn-plugin-1.0.0.jar "$(NEO4J_PLUGINS_DIR)/"; \
+		sudo chown neo4j:adm "$(NEO4J_PLUGINS_DIR)/neo4j-gcn-plugin-1.0.0.jar"; \
+		sudo chmod 777 "$(NEO4J_PLUGINS_DIR)/neo4j-gcn-plugin-1.0.0.jar"; \
+		echo "Deployed to $(NEO4J_PLUGINS_DIR) with ownership neo4j:adm and mode 777"; \
 		echo "Restart Neo4j: sudo systemctl restart neo4j"; \
 		echo "Then run: SHOW PROCEDURES YIELD name WHERE name STARTS WITH 'gnnProcedures.' RETURN name ORDER BY name"; \
 	else \

@@ -313,7 +313,7 @@ public class GNNProcedures {
             Node seedNode = tx.findNode(label, nodeIdKey, seedId);
             if (seedNode == null) {
                 // Emit a zero-length vector so downstream code detects the miss.
-                results.add(new AggResult(seedId, new ArrayList<>(), null, null));
+                results.add(new AggResult(seedId, null, null, null));
                 continue;
             }
 
@@ -378,7 +378,7 @@ public class GNNProcedures {
         for (Long seedId : seedIds) {
             Node seedNode = tx.findNode(label, nodeIdKey, seedId);
             if (seedNode == null) {
-                results.add(new AggResult(seedId, new ArrayList<>(), null, null));
+                results.add(new AggResult(seedId, null, null, null));
                 continue;
             }
 
