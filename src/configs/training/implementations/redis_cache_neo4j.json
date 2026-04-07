@@ -7,7 +7,8 @@
       "redis_url": "redis://localhost:6379/0",
       "redis_key_prefix": "fs",
       "redis_ttl_seconds": null,
-      "l1_maxsize": 10000
+      "l1_maxsize": 10000,
+      "memory_GB": null
     }
   },
   "graph_store": {

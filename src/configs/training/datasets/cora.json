@@ -16,7 +16,7 @@
   "planetoid_root": "data/Planetoid",
   "planetoid_name": "Cora",
   "lr": 1e-3,
-  "batch_size": 140,
+  "batch_size": 30,
   "max_epochs": 90,
   "patience": 200,
   "min_delta": 0.01,
