@@ -1,0 +1,33 @@
+{
+  "feature_store": {
+    "class_name": "Neo4jRedisCachedFS",
+    "connection_mode": "driver",
+    "extra_kwargs": {
+      "feature_dim": 1433,
+      "redis_url": "redis://localhost:6379/0",
+      "redis_key_prefix": "fs",
+      "redis_ttl_seconds": null,
+      "l1_maxsize": 10000
+    }
+  },
+  "graph_store": {
+    "class_name": "Neo4jSingleGS",
+    "connection_mode": "driver"
+  },
+  "sampler": {
+    "class_name": "Neo4jJavaNeighborSampler",
+    "num_neighbors": [10, 5]
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "Trainer",
+  "nodeloader_args": {
+    "pickle_safe": false,
+    "num_workers": 4,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": false,
+    "pin_memory": false
+  }
+}

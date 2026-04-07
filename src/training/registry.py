@@ -18,14 +18,16 @@ from typing import Any, Dict, Type
 from neo4j_pyg.feature_stores.Neo4jNoCacheFS import Neo4jNoCacheFS
 from neo4j_pyg.feature_stores.Neo4jCachedFS import Neo4jCachedFS
 from neo4j_pyg.feature_stores.Neo4jPreAggFeatureStore import Neo4jPreAggFeatureStore
-from neo4j_pyg.feature_stores.Neo4jSIGNFeatureStore import Neo4jSIGNFeatureStore
+from neo4j_pyg.feature_stores.Neo4jGPUCachedFS import Neo4jGPUCachedFS
+from neo4j_pyg.feature_stores.Neo4jRedisCachedFS import Neo4jRedisCachedFS
 
 FEATURE_STORES: Dict[str, Type] = {
     "Neo4jNoCacheFS": Neo4jNoCacheFS,
     "Neo4jCachedFS": Neo4jCachedFS,
     "Neo4jPreAggFeatureStore": Neo4jPreAggFeatureStore,
     "Neo4jUDPFeatureStore": Neo4jPreAggFeatureStore,  # backward-compat alias
-    "Neo4jSIGNFeatureStore": Neo4jSIGNFeatureStore,
+    "Neo4jGPUCachedFS": Neo4jGPUCachedFS,
+    "Neo4jRedisCachedFS": Neo4jRedisCachedFS,
 }
 
 try:
@@ -75,7 +77,6 @@ except ImportError:
 from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
 from neo4j_pyg.samplers.Neo4jJavaNeighborSampler import Neo4jJavaNeighborSampler
 from neo4j_pyg.deprecated.Neo4jAggregationSampler import Neo4jAggregationSampler
-from neo4j_pyg.samplers.Neo4jSIGNSampler import Neo4jSIGNSampler
 from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import (
     Neo4jGraphSAINTSampler,
     Neo4jGraphSAINTRandomWalkSampler,
@@ -85,7 +86,6 @@ SAMPLERS: Dict[str, Type] = {
     "Neo4jSampler": Neo4jSampler,
     "Neo4jJavaNeighborSampler": Neo4jJavaNeighborSampler,
     "Neo4jAggregationSampler": Neo4jAggregationSampler,
-    "Neo4jSIGNSampler": Neo4jSIGNSampler,
     "Neo4jGraphSAINTSampler": Neo4jGraphSAINTSampler,
     "Neo4jGraphSAINTRandomWalkSampler": Neo4jGraphSAINTRandomWalkSampler,
 }
@@ -101,13 +101,11 @@ except ImportError:
 # ---------------------------------------------------------------------------
 from neo4j_pyg.models.GCN import GCN
 from neo4j_pyg.models.GCNPostAggregation import GCNPostAggregation, MLPPostAggregation
-from neo4j_pyg.models.SIGNPostAggregation import SIGNPostAggregation
 
 MODELS: Dict[str, Type] = {
     "GCN": GCN,
     "GCNPostAggregation": GCNPostAggregation,
     "MLPPostAggregation": MLPPostAggregation,
-    "SIGNPostAggregation": SIGNPostAggregation,
 }
 
 # ---------------------------------------------------------------------------

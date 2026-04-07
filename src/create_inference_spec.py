@@ -126,7 +126,6 @@ def _ops_for_module(
         ops.append({"op": "tanh"})
 
     elif isinstance(module, nn.ModuleList):
-        # e.g. SIGNPostAggregation: a list of Linear layers with relu between them.
         items = list(module.named_children())
         for i, (sub_name, sub_mod) in enumerate(items):
             full_name = f"{name}.{sub_name}"
