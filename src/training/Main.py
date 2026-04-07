@@ -7,8 +7,8 @@ Usage
     python -m training.Main --dataset cora --implementation neo4j_udp
     python -m training.Main --dataset cora --implementation saint_neo4j
 
-The --dataset argument selects a JSON from src/configs/datasets/.
-The --implementation argument selects a JSON from src/configs/implementations/.
+The --dataset argument selects a JSON from src/configs/training/datasets/.
+The --implementation argument selects a JSON from src/configs/training/implementations/.
 """
 
 import argparse
@@ -42,8 +42,8 @@ def _load_json(path: Path) -> dict:
 
 
 def load_configs(dataset: str, implementation: str) -> tuple[dict, dict]:
-    dataset_cfg = _load_json(CONFIGS_DIR / "datasets" / f"{dataset}.json")
-    impl_cfg = _load_json(CONFIGS_DIR / "implementations" / f"{implementation}.json")
+    dataset_cfg = _load_json(CONFIGS_DIR / "training" / "datasets" / f"{dataset}.json")
+    impl_cfg = _load_json(CONFIGS_DIR / "training" / "implementations" / f"{implementation}.json")
     return dataset_cfg, impl_cfg
 
 
@@ -141,7 +141,6 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
         from neo4j_pyg.models.preagg_adapters import to_preaggregated_first_layer
         result = to_preaggregated_first_layer(model)
         model = result.model
-        print(result.preagg_spec)
     if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
         from neo4j_pyg.models.preagg_adapters import to_hybrid_last_hop_gcn
         model = to_hybrid_last_hop_gcn(model)
@@ -216,7 +215,7 @@ def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
 def _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, model):
     from training.GraphSAINTTrainer import GraphSAINTTrainer
     from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import Neo4jGraphSAINTRandomWalkSampler
-    from neo4j_pyg.samplers.Neo4jNeighborSampler import Neo4jNeighborSampler
+    from neo4j_pyg.deprecated.Neo4jNeighborSampler import Neo4jNeighborSampler
 
     saint = impl_cfg["saint_extra"]
     train_loader = Neo4jGraphSAINTRandomWalkSampler(
