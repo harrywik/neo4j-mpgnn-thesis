@@ -1,10 +1,12 @@
 {
-  "needs_sampler_in_fs": true,
   "feature_store": {
-    "class_name": "Neo4jSIGNFeatureStore",
+    "class_name": "Neo4jGPUCachedFS",
     "connection_mode": "driver",
     "extra_kwargs": {
-      "hops": 2
+      "cache_size_GB": 0.5,
+      "auto_size": false,
+      "device": "cuda",
+      "reserved_gb": 1.0
     }
   },
   "graph_store": {
@@ -12,16 +14,11 @@
     "connection_mode": "driver"
   },
   "sampler": {
-    "class_name": "Neo4jSIGNSampler",
-    "hops": 2,
-    "max_neighbors_per_hop": 10
+    "class_name": "Neo4jJavaNeighborSampler",
+    "num_neighbors": [10, 5]
   },
   "model": {
-    "class_name": "SIGNPostAggregation",
-    "extra_kwargs": {
-      "hops": 2,
-      "hidden_dims": [256, 128]
-    }
+    "class_name": "GCN"
   },
   "trainer": "Trainer",
   "nodeloader_args": {

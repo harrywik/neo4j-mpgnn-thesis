@@ -1,4 +1,3 @@
 from .Neo4jSampler import Neo4jSampler
 from .Neo4jGraphSAINTSampler import Neo4jGraphSAINTSampler, Neo4jGraphSAINTRandomWalkSampler
-from .Neo4jSIGNSampler import Neo4jSIGNSampler
 from .Neo4jJavaNeighborSampler import Neo4jJavaNeighborSampler

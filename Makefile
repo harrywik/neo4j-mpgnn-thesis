@@ -4,7 +4,8 @@ PYTHONPATH := src
 GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
-	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp neo4j_java_sampler preagg_neo4j
+	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp neo4j_java_sampler preagg_neo4j \
+	gpu_cache_neo4j redis_cache_neo4j
 NBR_RUNS ?= 3
 EXPERIMENTS := sampler_comparison compare_implementations compare_datasets inference_experiment inference_plots
 INFERENCE_DATASET ?= cora
@@ -18,7 +19,7 @@ DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 #   make build-plugin NEO4J_PLUGINS_DIR=/var/lib/neo4j/plugins
 NEO4J_PLUGINS_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_PLUGINS_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin neo4j_udp_sign inference_experiment inference_plots
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush
 
 help:
 	@echo "Usage: make <implementation> [DATASET=cora]"
@@ -26,7 +27,8 @@ help:
 	@echo ""
 	@echo "Available datasets: cora arxiv products papers100M"
 	@echo "Available implementations: baseline_neo4j baseline_pyg cache_multsampler cache_neo4j"
-	@echo "                           multsampler neo4j_udp preagg_neo4j neo4j_java_sampler neo4j_udp_sign saint_neo4j saint_pyg distributed"
+	@echo "                           multsampler neo4j_udp preagg_neo4j neo4j_java_sampler saint_neo4j saint_pyg distributed"
+	@echo "                           gpu_cache_neo4j redis_cache_neo4j"
 	@echo ""
 	@echo "Compare multiple implementations:"
 	@echo "  make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler\" [DATASET=cora] [NBR_RUNS=3]"
@@ -44,11 +46,14 @@ run:
 	fi
 	@PYTHONPATH=$(PYTHONPATH) $(PY) $(SCRIPT)
 
+test:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m pytest tests/ -v
+
+redis-flush:
+	@redis-cli FLUSHDB && echo "Redis cache cleared"
+
 $(IMPLS):
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset $(DATASET) --implementation $@
-
-neo4j_udp_sign:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) -m training.Main --dataset $(DATASET) --implementation neo4j_udp_sign
 
 baseline_db:
 	@$(MAKE) baseline_neo4j DATASET=$(DATASET)
