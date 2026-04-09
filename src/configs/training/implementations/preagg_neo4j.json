@@ -17,7 +17,7 @@
   },
   "model": {
     "class_name": "GCN",
-    "to_hybrid_last_hop_preaggregation": true
+    "to_preaggregated_first_layer": true
   },
   "trainer": "Trainer",
   "nodeloader_args": {

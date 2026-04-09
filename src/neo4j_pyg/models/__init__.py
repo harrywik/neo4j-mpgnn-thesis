@@ -7,13 +7,12 @@ from .GCNPostAggregation import (
     gcnconv_to_linear,
     linear_to_gcnconv,
 )
-from .preagg_adapters import (
+from neo4j_pyg.neo4j_model_interface.preagg_adapters import (
     to_preaggregated_first_layer,
-    to_hybrid_last_hop_gcn,
+    HybridAggModel,
     PreAggResult,
     PreAggGCNConvAdapter,
     PreAggModelWrapper,
-    HybridLastHopWrapper,
 )
 
 __all__ = [
@@ -25,9 +24,8 @@ __all__ = [
     "gcnconv_to_linear",
     "linear_to_gcnconv",
     "to_preaggregated_first_layer",
-    "to_hybrid_last_hop_gcn",
+    "HybridAggModel",
     "PreAggResult",
     "PreAggGCNConvAdapter",
     "PreAggModelWrapper",
-    "HybridLastHopWrapper",
 ]

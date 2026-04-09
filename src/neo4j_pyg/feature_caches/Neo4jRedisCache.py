@@ -113,9 +113,8 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         nodeid_property: str = "nodeId",
         feature_property: str = "features",
         target_property: str = "category",
-        feature_property_type: str = "f64[]",
+        feature_property_type: str = "f32[]",
         label_map: Optional[Dict] = None,
-        cache_size_GB: float = 0.0,
         memory_GB: Optional[float] = None,
     ) -> None:
         # Do not call super().__init__() — the abstract base queries Neo4j to

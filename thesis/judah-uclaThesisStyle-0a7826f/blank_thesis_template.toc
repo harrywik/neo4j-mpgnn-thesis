@@ -1,0 +1,34 @@
+\contentsline {chapter}{\numberline {1}Introduction}{1}{}%
+\contentsline {section}{\numberline {1.1}Context and problem}{1}{}%
+\contentsline {section}{\numberline {1.2}Purpose and expected contributions}{1}{}%
+\contentsline {section}{\numberline {1.3}Research questions}{1}{}%
+\contentsline {section}{\numberline {1.4}Scope and limitations}{1}{}%
+\contentsline {section}{\numberline {1.5}Thesis outline}{2}{}%
+\contentsline {chapter}{\numberline {2}Background}{3}{}%
+\contentsline {section}{\numberline {2.1}Foundational concepts}{3}{}%
+\contentsline {section}{\numberline {2.2}Technical background}{3}{}%
+\contentsline {section}{\numberline {2.3}System or domain background}{3}{}%
+\contentsline {chapter}{\numberline {3}Related Work}{4}{}%
+\contentsline {section}{\numberline {3.1}Prior approaches}{4}{}%
+\contentsline {section}{\numberline {3.2}Research gap}{4}{}%
+\contentsline {chapter}{\numberline {4}Method}{5}{}%
+\contentsline {section}{\numberline {4.1}Research design}{5}{}%
+\contentsline {section}{\numberline {4.2}Experimental setup}{5}{}%
+\contentsline {section}{\numberline {4.3}Evaluation criteria}{5}{}%
+\contentsline {section}{\numberline {4.4}Model or algorithm specification}{5}{}%
+\contentsline {chapter}{\numberline {5}System Design}{6}{}%
+\contentsline {section}{\numberline {5.1}Overall architecture}{6}{}%
+\contentsline {section}{\numberline {5.2}Core components}{6}{}%
+\contentsline {section}{\numberline {5.3}Implementation decisions}{6}{}%
+\contentsline {chapter}{\numberline {6}Results}{7}{}%
+\contentsline {section}{\numberline {6.1}RQ1 results}{7}{}%
+\contentsline {section}{\numberline {6.2}RQ2 results}{7}{}%
+\contentsline {section}{\numberline {6.3}RQ3 results}{7}{}%
+\contentsline {section}{\numberline {6.4}RQ4 results}{7}{}%
+\contentsline {chapter}{\numberline {7}Discussion}{8}{}%
+\contentsline {section}{\numberline {7.1}Interpretation of results}{8}{}%
+\contentsline {section}{\numberline {7.2}Implications}{8}{}%
+\contentsline {section}{\numberline {7.3}Threats to validity}{8}{}%
+\contentsline {chapter}{\numberline {8}Conclusion}{9}{}%
+\contentsline {section}{\numberline {8.1}Summary}{9}{}%
+\contentsline {section}{\numberline {8.2}Future work}{9}{}%

@@ -29,6 +29,7 @@ class DistributedTrainer:
         optimizer: torch.optim.Optimizer = None,
         nodes_per_epoch: int | None = None,
         max_train_seconds: int = 3600,
+        partition_property: str | None = None,
         eval_every_epochs: int | None = None,
         eval_split: str = "val",
         evaluate_fn=None,
@@ -52,6 +53,7 @@ class DistributedTrainer:
         self.batch_size = batch_size
         self.nodes_per_epoch = nodes_per_epoch
         self.max_train_seconds = max_train_seconds
+        self.partition_property = partition_property
         self.epochs_run = 0
         self.criterion = torch.nn.CrossEntropyLoss() if criterion is None else criterion
         self.eval_every_epochs = eval_every_epochs
@@ -125,7 +127,16 @@ class DistributedTrainer:
             self.measurer.set_phase(phase)
 
     def _get_train_indices(self) -> torch.Tensor:
-        # Rank 0 fetches the split and broadcasts its size first
+        if self.partition_property is not None:
+            # Each rank queries its own METIS partition directly — no broadcast needed.
+            return self.graph_store.get_split_by_partition(
+                split="train",
+                partition_id=self.rank,
+                limit=self.nodes_per_epoch,
+                partition_property=self.partition_property,
+            ).to(torch.long)
+
+        # Fallback: rank 0 fetches all train indices and shards by interleaving.
         if self.rank == 0:
             indices = self.graph_store.get_split(
                 self.nodes_per_epoch,

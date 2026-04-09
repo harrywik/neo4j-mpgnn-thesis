@@ -1,0 +1,611 @@
+% **************************************************************************************************************
+% A Classic Thesis Style
+% An Homage to The Elements of Typographic Style
+%
+% Copyright (C) 2015 André Miede http://www.miede.de
+%
+% If you like the style then I would appreciate a postcard. My address 
+% can be found in the file ClassicThesis.pdf. A collection of the 
+% postcards I received so far is available online at 
+% http://postcards.miede.de
+%
+% License:
+% This program is free software; you can redistribute it and/or modify
+% it under the terms of the GNU General Public License as published by
+% the Free Software Foundation; either version 2 of the License, or
+% (at your option) any later version.
+%
+% This program is distributed in the hope that it will be useful,
+% but WITHOUT ANY WARRANTY; without even the implied warranty of
+% MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+% GNU General Public License for more details.
+%
+% You should have received a copy of the GNU General Public License
+% along with this program; see the file COPYING.  If not, write to
+% the Free Software Foundation, Inc., 59 Temple Place - Suite 330,
+% Boston, MA 02111-1307, USA.
+%
+% **************************************************************************************************************
+\RequirePackage{fix-cm} % fix some latex issues see: http://texdoc.net/texmf-dist/doc/latex/base/fixltx2e.pdf
+\documentclass[ oneside,openright,titlepage,numbers=noenddot,headinclude,%1headlines,% letterpaper a4paper
+                footinclude=true,cleardoublepage=empty,abstractoff, % <--- obsolete, remove (todo)
+                BCOR=0mm,paper=a4,fontsize=11pt,%11pt,a4paper,%
+                ngerman,american,%
+                ]{scrreprt}
+
+%********************************************************************
+% Note: Make all your adjustments in here
+%*******************************************************
+\input{classicthesis-config}
+
+%********************************************************************
+% Bibliographies
+%*******************************************************
+\addbibresource{Bibliography.bib}
+\addbibresource[label=ownpubs]{AMiede_Publications.bib}
+
+%********************************************************************
+% Hyphenation
+%*******************************************************
+%\hyphenation{put special hyphenation here}
+
+% ********************************************************************
+% GO!GO!GO! MOVE IT!
+%*******************************************************
+\title{Graph Neural Networks}
+\author{Harry Wik, Victor Pekkari}
+\date{March 2026}
+
+\begin{document}
+
+\maketitle
+
+
+\newpage
+\tableofcontents
+\newpage
+
+
+
+\chapter{Introduction}
+
+% The introduction of your thesis should describe the following:
+
+% context / area and problem addressed in the thesis
+% purpose/focus  (expected contributions) of the thesis, and
+% report disposition (to help the reader navigate your future full report).
+Graph structures are a natural way to model entities and their relationships in several important domains. Such models are applied in diverse domains, including predicting chemical bonds in medical science and detecting fraud in finance. The prevalence of graph-structured data across many domains creates a need for efficient and accurate methods to model and analyze graphs.
+
+graph neural networks (GNNs) have emerged as a leading approach for representation learning on graphs, combining the structural intuition behind classical
+graph algorithms with the expressiveness and inductive capabilities of neural networks. 
+
+However, GNNs introduce a challenge absent in traditional neural networks: message passing creates growing dependencies between nodes during training and inference.
+
+Existing approaches for scaling GNNs to large graphs rely on partitioning the graph, sampling subgraphs, and distributing computation across machines. These approaches often suffer from high communication overhead between machines, and from inefficient sampling procedures that can take longer than the actual model training.
+
+In practice, many large graphs are already stored in graph databases before they are loaded into workers for GNN training or inference. The characteristics of fast graph traversal and practically unlimited memory in graph databases make them a promising component in a GNN training and inference pipeline for large graphs. While it has been shown that it is possible to use a graph database as a backend for GNN training, prior work has mainly demonstrated feasibility rather than performance competitiveness with state-of-the-art distributed systems. It is therefore still unclear (i) what the bottlenecks in graph-database-backed training and inference are, (ii) what an efficient graph-database-based pipeline would look like, (iii) whether and when graph-database-backed training pipelines might be a better choice than distributed systems, and (iv) how inference should be done with the graph stored in a graph-DB.
+
+This thesis investigates whether a graph database can serve as an efficient and scalable backend for GNN training and inference on large graphs. To answer this, we implement and evaluate a Neo4j-backed pipeline integrated with PyTorch Geometric, analyze its main bottlenecks, compare sampling strategies, and study how the usefulness of this approach depends on graph size and inference setting.
+
+
+\section{Research questions}
+This thesis addresses the following research questions:
+
+\begin{enumerate}
+
+    \item \textbf{RQ1 — Bottlenecks:}\label{question:bottleneck} What are the primary bottlenecks in GNN training when using a graph database for graph storage, and to what extent can they be mitigated?
+
+    \item \textbf{RQ2 — Sampling:}\label{question:sampling} Which subgraph sampling strategies are most efficient when the graph is stored in a graph database?
+
+    \item \textbf{RQ3 - Inference:}\label{question:inference} What is the optimal method for doing inference on new nodes when the graph is stored in a graph database?
+
+    \item \textbf{RQ4 — Graph size:}\label{question:graphsize} For which graph sizes does a graph database-based storage approach provide the greatest benefits?
+
+\end{enumerate}
+\section{Scope and limitations}
+The experiments in this thesis are conducted on four datasets of varying sizes using a two-layer Graph Convolutional Network (GCN) for node classification. The main emphasis is on the training and inference pipeline rather than on model architecture. The study is therefore limited to a specific GNN setting, but targets system-level questions that are relevant to large-scale graph learning more broadly.
+
+\section{Thesis outline}
+Chapter 2 provides background on important topics fundamental for understanding the the rest of the thesis, such as GNNs, neural networks, graph representation learning, neo4j and pytorch geometric. Chapter 3 reviews related work on GNNs applied to large graphs. Chapter 4 describes the methodology used during the experiments. Chapter 5 outlines the implemented GNN pipelines. Chapter 6 describes the results, chapter 7 is discussion, and chapter 8 is conclusion.
+
+\chapter{Background}
+
+Graphs in mathematics are used to model pairwise relationships between objects. Objects are modeled as nodes $\mathcal{V}$, and their relations are called edges $\mathcal{E}$. 
+Many domains benefit from modeling data as objects (nodes) and relationships (edges). Consider, for example, social networks, protein--drug interactions, or railway networks. 
+Studying graph structure and node features allows us to predict properties of the graph. For example, predictions may concern how a graph evolves over time. In fraud detection, nodes can represent accounts and edges transactions. By modeling typical graph evolution, such as which transactions and accounts are added, it becomes possible to detect anomalous transactions that deviate from expected patterns.
+
+When making predictions about graphs it is often good to start by creating an embedding of the graph. The optimal embedding depends on the downstream task. There are several ways to embed a graph, transductively with traditional graph representation learning (GRL) approaches, and inductively with GNNs.
+
+The purpose of this section is to give a fundamental understanding in topics such as traditional GRL algorithms, neural networks, describe how GNNs combine ideas from traditional graph representation learning and neural networks. From traditional GRL GNNs inherit the idea that node embeddings should reflect graph structure, while from neural networks they adopt a learnable, parameterized function. Challenges working with GNNs on big datasets, that do not exist in traditional neural networks too is brought up in this section.
+
+Lastly a basic introduction in \texttt{PyTorch Geometric}, the machine learning library used during experiments, and \texttt{Neo4j}, a graph database that provides useful graph operations for training GNNs, which is used as the graph storage during the experiments.
+
+\section{Graphs and graph representation learning}\label{sec:traditional_grl}
+In graph representation learning the aim is to find a representation of the graph that encodes it's structure. Embeddings like this are often used in  downstream tasks such as node classification, link prediction, or clustering. Finding a good embedding is somewhat dependent on what the downstream task is.
+
+The simplest way of constructing node embeddings is to manually choose a node statistic to encode the node (e.g. node degree or centrality measures). A more advanced group of methods involve factorizing the adjacency matrix into node-node similarity. Another class of methods is based on random walks. These methods learn embeddings by maximizing co-occurrence between nodes appearing in the same random walks, and can be shown to implicitly perform matrix factorization.
+
+
+\subsection{Transductive nature of traditional GRL}
+A common feature throughout all graph representation learning algorithms above, using node statistics, matrix factorization, or random walks, is that no weights are shared between nodes, no node-embedding generating function is learned, only node embeddings for the current nodes in the graph. This means that if new nodes are introduced to the graph, not only isn't there a way to compute their embeddings, the embeddings for the old nodes are not accurate anymore (the later also happens if nodes disappear from the graph).
+
+Consider a simplification of the optimization problem for the random walk algorithms.
+
+\[
+\min_{\{z_x \,\,: \,\,x \in \mathcal{V} \}}
+\sum_{(u,v)\in\mathcal{D}}
+-\log\left(\sigma(\mathbf{z}_u^\top \mathbf{z}_v)\right)
+\]
+
+where nodes $\mathcal{D}$ is a set of pair-of-nodes encountered on random walks, and $\mathcal{V}$ is the set of notes in the graph. 
+
+The optimization problem above is an example of how it is the actual node embeddings that are optimized (and therefore learned), rather than some embedding generating function. This is what makes all traditional representation learning algorithms transductive in nature.
+
+Consider a social network where people are nodes, and their relations are edges. if a transductive graph representation is used, it is the feature vectors for specific people in the graph. If more people are introduced to the network, the feature vector for every person has to be recomputed.
+
+
+\section{Neural networks}
+
+Neural networks are parameterised functions that can learn a function mapping inputs to outputs. Given an input $x$, produces an output $\hat{y}$ given a function $f_{\theta}(x)$, where $\theta$ are the parameters (also known as weights) of the model.
+
+Optimizing the weights $\theta$ of the model include minimizing a loss function $\mathcal{L}$ which measures how off the model prediction is from the desired target values. This optimization is usually done using some gradient based method.
+
+A key property of neural networks is that they are inductive: instead of learning representations tied to specific data points, they learn a general function that can be applied to unseen inputs. This enables generalization beyond the training data.
+
+Standard neural network training further relies on the assumption that datapoints are independent. Under this assumption, the loss can be approximated using mini-batches of data, allowing efficient and scalable training.
+However, this assumption does not hold for graph-structured data, where datapoints (nodes) are explicitly dependent on each other through the graph topology. This limitation motivates the development of graph neural networks, which extend neural networks to account for relational dependencies.
+
+
+Standard neural network training further relies on the assumption that datapoints are independent. Under this assumption, the loss can be approximated using mini-batches of data, allowing efficient and scalable training.
+However, this assumption does not hold for graph-structured data, where datapoints (nodes) are explicitly dependent on each other through the graph topology. This limitation motivates the development of graph neural networks, which extend neural networks to account for relational dependencies.
+
+
+\section{Graph neural networks}
+
+Graph neural networks (GNNs) are neural networks designed for graph-structured data. 
+Like traditional graph representation learning methods, they aim to produce node representations that reflect graph structure. 
+Unlike shallow graph embedding methods, however, GNNs learn a shared parameterized function that generates node representations from node features and graph connectivity. 
+This makes GNNs inductive: once trained, the same model can be applied to unseen nodes, and in some cases to entirely new graphs drawn from a similar distribution.
+
+A central idea in GNNs is \emph{message passing}. 
+Instead of computing a node representation only from the node's own features, a GNN updates each node by aggregating information from its neighbors. 
+By stacking several such layers, the model can incorporate information from increasingly distant parts of the graph.
+
+\subsection{Message passing}
+
+At message passing layer $k$, the representation of node $v$ is updated as
+\[
+\mathbf{x}_v^{(k)} =
+\phi^{(k)}\!\left(
+\mathbf{x}_v^{(k-1)},
+\bigoplus_{u \in \mathcal{N}(v)}
+\psi^{(k)}\!\left(\mathbf{x}_v^{(k-1)}, \mathbf{x}_u^{(k-1)}\right)
+\right),
+\]
+where $\mathcal{N}(v)$ denotes the neighbors of node $v$, $\psi^{(k)}$ is a message function, $\bigoplus$ is a (most often permutation-invariant) aggregation operator such as sum or mean, and $\phi^{(k)}$ is an update function.
+
+After $K$ layers, the representation of a node depends on information from its $K$-hop neighborhood. 
+This allows GNNs to exploit both node features and graph structure when solving downstream tasks such as node classification.
+
+\subsection{Implications for large-graph training}
+
+The message-passing mechanism also creates the main computational challenge in GNN training. 
+In standard neural networks, datapoints in a mini-batch are usually treated as independent, so the loss and gradient can be computed from the batch alone. 
+In a GNN, this is no longer true: the representation of a node depends on its neighbors, whose representations in turn depend on their neighbors. 
+As a result, computing the output for a batch of seed nodes generally requires access to a larger induced subgraph around those nodes.
+
+This dependency grows with the number of GNN layers. 
+For a $K$-layer model, each seed node may depend on a $K$-hop neighborhood, which can become very large in real-world graphs. 
+Training on the full graph is therefore often infeasible for memory and computation reasons, especially for large graphs. 
+To address this, practical GNN pipelines typically rely on subgraph or neighborhood sampling, where only a bounded part of the neighborhood is retrieved for each mini-batch.
+
+\section{Graph neural networks for large graphs}
+
+In typical neural networks, datapoints are either independent or have dependencies with a clear and structured form. This structure is determined by the architectural inductive bias, which makes it straightforward to derive which datapoints influence each other. For example, in RNNs, $t_n$ depends on $\{t_{n-1}, t_{n-2}, \dots\}$, while in convolutional neural networks (CNNs), a pixel $p_{x,y}$ depends only on a local neighborhood $\{\,p_{i,j} \mid |i-x| \le r,\ |j-y| \le r \,\}$ in the same image.
+In both cases, the set of dependent datapoints is explicitly defined and bounded.
+
+In contrast, graph neural networks lack such explicit structural assumptions. The dependency structure is determined by the graph itself, making it harder to determine which datapoints influence a given node. Moreover, these dependencies are not only less structured, but also significantly larger. The representation of a node depends on its $k$-hop neighborhood, which can grow exponentially with $k$. As a result, each datapoint in a GNN may depend on orders of magnitude more datapoints than in models such as CNNs, where dependencies are limited to small local regions.
+
+
+\subsection{Training Under Memory Constraints}
+
+In standard neural networks, the independence (or structured-bounded dependence) between datapoints allows training on datasets larger than available memory. Data can be processed in virtual mini-batches $\{d^{(1)}, \dots, d^{(n)}\}$ such that
+\[
+\sum_i d^{(i)}_x < Y,
+\]
+where $Y$ is the available memory. Crucially, the gradient computed on a batch depends only on the datapoints within that batch. This assumption breaks for GNNs as the output for one node is dependent on an un-bounded number of neighbors. The gradient for the seed nodes in the batch can't be computed accuraretely without their neighbors. To solve this the neighbors of the seed nodes are fetched in the beginning of every batch, to build a sub-graph around the seed nodes so that the gradient for that batch can be computed accuretly.
+
+\begin{algorithm}[H]
+\label{algo:sampling}
+\footnotesize
+\caption{Mini-batch GNN Training (Single Epoch)}
+\DontPrintSemicolon
+\tcp{Mini-batch training with neighbor-sampled subgraphs}
+\KwIn{$f_\theta$, $V$}
+\KwOut{$\theta$}
+\For{each batch $B \subseteq V$}{
+    $\mathcal{G}_B \leftarrow \emptyset$\;
+    \For{each seed node $v \in B$}{
+        $(\mathbf{X}_v, \mathbf{y}_v, E_v) \leftarrow \textsc{Sample}(v)$\;
+        $\mathcal{G}_B \leftarrow \mathcal{G}_B \cup (\mathbf{X}_v, \mathbf{y}_v, E_v)$\;
+    }
+    $\hat{\mathbf{y}} \leftarrow f_\theta(\mathbf{X}_B,\, E_B)$\;
+    $\mathcal{L} \leftarrow \textsc{CrossEntropy}(\hat{\mathbf{y}},\, \mathbf{y}_B)$\;
+    $\theta \leftarrow \theta - \eta \nabla_\theta \mathcal{L}$\;
+}
+\Return $\theta$\;
+\end{algorithm}
+
+
+\subsection{Subgraph sampling}
+
+To address this, GNN training typically relies on subgraph sampling. 
+Instead of using full neighborhoods, a bounded subset of neighbors is sampled for each node. 
+Given a batch of seed nodes, a subgraph is constructed by sampling up to a fixed number of neighbors at each hop. 
+This limits the size of the computation graph and enables mini-batch training.
+
+A common approach is layer-wise neighbor sampling, where upper bounds are defined as \texttt{[$k_0, k_1, \ldots, k_{K-1}$]}. 
+At layer $i$, at most $k_i$ neighbors are sampled per node. 
+If the number of neighbors exceeds this bound, a subset is selected, typically uniformly at random.
+
+While sampling makes training tractable, it introduces an approximation of the true neighborhood aggregation. 
+Consider the exact aggregation for a node $v$, using the mean of node-neighbor feature-vectors as the aggregation function:
+\[
+h_v = \sigma\!\left( \frac{1}{|\mathcal{N}(v)|} \sum_{u \in \mathcal{N}(v)} x_u \right),
+\]
+where $\sigma$ is a nonlinear activation function.
+
+With sampling, we instead compute:
+\[
+\tilde{h}_v = \sigma\!\left( \frac{1}{k} \sum_{u \in \tilde{\mathcal{N}}(v)} x_u \right),
+\]
+where $\tilde{\mathcal{N}}(v)$ is a sampled subset of neighbors.
+
+Although the sampled mean is an unbiased estimator of the true mean,
+\[
+\mathbb{E}\!\left[ \frac{1}{k} \sum_{u \in \tilde{\mathcal{N}}(v)} x_u \right]
+=
+\frac{1}{|\mathcal{N}(v)|} \sum_{u \in \mathcal{N}(v)} x_u,
+\]
+the presence of the nonlinearity introduces bias:
+\[
+\mathbb{E}[\tilde{h}_v]
+=
+\mathbb{E}\!\left[\sigma\!\left( \cdot \right)\right]
+\neq
+\sigma\!\left( \mathbb{E}[\cdot] \right)
+=
+h_v.
+\]
+
+This discrepancy arises because $\sigma$ is nonlinear, and therefore expectation does not commute with the activation function. 
+In practice, this bias is often small and does not prevent convergence, especially for shallow GNNs.
+
+\section{PyTorch Geometric}
+PyTorch Geometric is a graph machine learning library built on top of pytorch. It provides implementations of various message passing layers, as well as abstractions for storing the graph.
+
+
+
+\begin{itemize}
+    \item \texttt{FeatureStore:} which defines how the node features are stored and retrieved.
+    
+    \item \texttt{GraphStore:} which defines how the graph is traversed, and how edges are stored.
+
+    \item \texttt{BaseSampler:} which defines the exact how the neighborhood sampling is done, this is tightly coupled with graphstore.
+
+    \item \texttt{NodeLoader:} takes instances of implementations of FeatureStore, GraphStore, and BaseSampler tand provides a dataloader.
+\end{itemize}
+
+\section{Neo4j and graph databases}
+Databases are systems used to efficiently store and fetch data. Instead of scanning raw files, databases provide a way to find relevant data with low latency. Traditional databases are relational, and the data is stored in the form of tables of rows and columns. Relationships between objects are stored through foreign keys, which leads to expensive join operations when retrieving relational data.  This model is not well suited for queries that involve repeated traversal of relationships, which is something needed for fast subgraph sampling in GNN training.
+
+Graph databases such as Neo4j are, in contrast, optimized to have efficient operations on graphs. This is done by explicitly modeling nodes and edges, making relationships first class citizens. This allows queries that follow connections, such as multi-hop traversals, to be expressed and executed more naturally and efficiently. 
+In an ETL-pipeline to a GNN-model it is of necessity that the database supports efficient operations, mainly retrieval, and scalability in the form of horizontal scaling via clustering as well as vertical scale-up of the machines running the database instance(s).
+%This makes graph databases great for graph storage for GNNs, as the two requirements are that large graphs can be stored, and that the database supports efficient graph operations on the data.
+\subsection{Alternatives to Neo4j}
+
+Although Neo4j is a market leader, capturing the largest market share in the graph database space, there are several alternatives. Amazon Neptune, Azure Cosmos and Google Spanner Graph are examples that mainly compete with Neo4j by tight integration to the respective cloud platforms: AWS, MS Azure and Google Cloud. Other examples include Memgraph and Tigergraph.
+
+
+\subsection{Querying Neo4j with Cypher and Procedures}
+
+Cypher is a declarative query language for graph databases where the queries are expressed as pattern matches over the nodes and edges in the graph. The travel planner translates the cyhper code into execution plans optimized for traversal and lookup. In this work, Cypher is used to express neighborhood expansion queries required for subgraph sampling.
+
+Procedures extend cypher with imperative logic that cannot be expressed in cypher. All Procedures are defined in java within the database engine, allowing custom traversal strategies, early termination, and more fine-grained control over execution. This makes procedures a relevant alternative when trying to optimize highly specialized cypher queries, procedures are something that is explored just as well as cypher when fetching neighbors of the seed nodes.
+
+\subsection{Data Retrieval from Neo4j
+}
+Data is retrieved in batches determined by the \texttt{fetch\_size}. A smaller \texttt{fetch\_size} results in more round trips between the client and the database.
+For each batch, a number of rows corresponding to the \texttt{fetch\_size} are first located in the database and then serialized before being transmitted over the network. The serialization speed depends on the underlying data format; for example, byte arrays are typically faster to serialize than more complex structures.
+While one batch is being transmitted, the next batch is prepared in the database, serialized, and subsequently sent to the client.
+
+\subsection{Cypher Query Execution Pipeline}
+% Neo4j is a persistence layer used in diverse applications where graph data modeling is of importance. More concretely, Neo4j is an ACID-compliant database management system. The main interface to Neo4j is a query language called `Cypher' that has been influential in developing a standardized Graph Query Language, \footnote{ISO/IEC 39075}{GQL}. 
+
+The incoming Cypher string is parsed into an Abstract Syntax Tree, AST. The AST is then validated, e.g. raises an error if a non-existent label/relationship type/property filter predicate is used. The next step is to make the AST have canonical form. 
+The normalized AST is used to generate one or more logical plans: operator trees that define how to produce the query response. Much like the expression:
+\begin{align*}
+    R := c + a \cdot b
+\end{align*}
+Above is a simple algebraic operator tree where the $a*b$ term will be reduced first because of precedence and the result thereof summed together with $c$ and bound to $R$. The logical plan generated by the Cypher-query will act similarly upon the data source but instead with operators such as \texttt{NodeByLabelScan} (lookup nodes with a label) and \texttt{Filter} (applies a filter such as \texttt{n.age} $> 30$). One logical plan can be resolved according to many different physical plans all yielding the same output given the input. A simpler query is likely to only have one physical plan whereas a more complex query could have a multitude. In the case of multiple physical plans, they are compared against each other in such a way that a cost metric is minimized. Examples of elements weighed into the cost optimization are metadata such as how many nodes have a certain label and whether to utilize an index lookup.
+After the cost optimization one physical plan is promoted to be the execution plan. 
+The execution compiles optimized bytecode that can be used (and reused).
+To answer the query in a timely manner, the execution step can have a parallel runtime. 
+\\\\
+Some features are restricted to paying database clients i.e. clients that run `Neo4j Enterprise' rather than `Neo4j Community'. Parallelism is one such example along with clustering, extra constraints, online backups and Role Based Access Control.
+\\\\
+Regardless of parallelism, the execution first attempts to retrieve from the page cache, in RAM. The nodes and relations required to resolve the query are either found in cache through pointer chasing or a page fault occurs and data needs to be loaded from non-volatile memory for example an NVMe-raid disk. The exact method of retrieval depends on the storage \footnote{https://neo4j.com/docs/operations-manual/current/database-internals/store-formats/}{format}. The current default is block format.
+\\\\
+After data has been localized, it needs to be sent back to the client. First, the binary representations are cast to proper types. Next is the removal of non-return variables. Before finally returning data to the client the java classes needs to be serialized. Neo4j has a `bolt'-server that utilizes PackStream to binary encode the data after which the standard TCP/IP stack takes over and answers the query.
+
+\chapter{Related work}
+
+Existing approaches to scaling GNN training can be broadly categorized as sampling-based methods and distributed systems.  
+Sampling methods reduce computational cost by approximating neighborhoods, while distributed systems improve scalability through parallelism at the cost of communication overhead.
+
+\section{Subgraph sampling}
+Sampling methods are widely used when training GNNs because of the exploding neighborhoods that comes from the stacked message passing layers. Sampling based methods samples subgraphs from the larger original graph. This reduces both the computational and memory cost.
+
+\textbf{GraphSAGE} introduced layer-wise neighbor sampling, where a fixed number of neighbors are sampled per node during training. 
+\textbf{GraphSAINT} instead samples subgraphs using random walks or node-based sampling strategies, aiming to improve training efficiency and reduce variance.
+
+While these methods make large-scale GNN training tractable, they introduce approximation error due to incomplete neighborhood information, and their performance depends on the efficiency of the sampling procedure.
+
+
+
+\section{Distributed GNN systems}
+Another line of work focuses on distributed GNN training, where the graph is partitioned across multiple machines. These systems aim to scale training by parallelizing both computation and data access.
+
+[insert aobut papers here]
+
+Despite their scalability, distributed approaches often suffer from communication overhead between machines and require careful partitioning strategies to balance load and minimize data transfer.
+
+
+\section{Database-backed GNN pipelines}
+
+A smaller body of work explores graph-DB backed GNN training. Here the memory storage, and fast graph traversal in graph-DBs is leveraged, instead of storing the graph in-memory across several machines.
+
+
+Lopushanskyy and Shi demonstrate that it is possible to train GNNs directly on a graph database by retrieving only the required subgraphs during training. 
+
+
+However, existing work in this area has primarily focused on demonstrating feasibility, with limited evaluation of performance compared to state-of-the-art distributed systems. 
+In particular, it remains unclear what the main bottlenecks are and under what conditions database-backed approaches are competitive.
+
+
+\chapter{Method}
+
+This research study was conducted at Neo4j, within the Graph Data Science team. It follows an experimental systems-oriented methodology, where different GNN training and inference pipelines are tested in an ablational manor. The primary objective in the experiments is to find a GNN pipeline that keeps functional equivalence to PyG while maximizing throughput.
+
+\section{Experimental methodology}
+The study is based around a graph-DB backed GNN pipeline that has been proven to have functional equivalence to PyG. Components of the GNN pipeline are modified and benchmarked to identify performance bottlenecks and potential optimizations.
+
+Each experiment isolates a single design choice (e.g., sampling strategy, data retrieval method, or caching mechanism), allowing its impact on performance to be evaluated independently. This enables a systematic exploration of the design space of graph-database-backed GNN training.
+
+
+\section{Baseline graph-DB backed GNN system}
+As a reference, a PyG-based training pipeline is used. This pipeline defines the expected behavior of sampling, batching, and model execution, and serves as a ground truth for correctness.
+The Neo4j-backed implementation replaces the data loading and sampling components of this pipeline while keeping the model architecture and training loop identical.
+
+
+\section{System configurations}
+Experiments are conducted across multiple system configurations, where both hardware setup and pipeline design may vary. These configurations include:
+
+\begin{itemize}
+    \item Different sampling implementations (Cypher queries vs. procedures)
+    \item Variations in data retrieval strategies (batch size, serialization format)
+    \item Use of caching mechanisms in feature retrieval
+Parallel vs. single-sampler execution
+\end{itemize}
+
+Each configuration represents a distinct point in the design space of graph-database-backed GNN training.
+
+\section{Equivalence constraint}
+
+A key requirement throughout all experiments is that the Neo4j-backed pipeline remains functionally equivalent to the PyG reference implementation.
+Equivalence is evaluated using:
+\begin{itemize}
+    \item Consistency in sampled subgraph structure statistics (e.g. number of sampled edges and nodes at each K-hop) 
+    \item Similar training convergence behavior
+Comparable validation and test accuracy
+\item Distributional similarity of sampled neighborhoods at each K-hop.
+
+\end{itemize}
+
+Only configurations that satisfy these criteria are considered valid, ensuring that performance improvements do not come at the cost of altered model behavior.
+
+
+\section{Performance evaluation}
+The primary performance metric is training throughput, measured as the number of processed seed nodes per unit time. This is complemented by a detailed breakdown of pipeline stages, including:
+\begin{itemize}
+    \item Sampling time
+    \item Feature retrieval time
+\end{itemize}
+In addition, database-level metrics such as query latency, number of database hits, and serialization overhead are collected to identify system bottlenecks.
+
+\section{Benchmarking procedure}
+A dedicated measurement framework is used to collect timing and profiling data during training. Each experiment is run for multiple epochs to ensure stable measurements.
+Comparisons between configurations are made under identical conditions, including:
+
+\begin{itemize}
+    \item Fixed model architecture
+    \item Consistent hyperparameters
+    \item Identical datasets
+\end{itemize}
+
+This ensures that observed performance differences are attributable solely to system design choices.
+
+\section{Datasets}
+The datasets (consisting of homogenous graphs) to be used for training and evaluating GNNs for node classification were:
+
+\begin{itemize}
+    \item \textbf{ogbn-arxiv}, 170k nodes, "The ogbn-arxiv dataset is a directed graph, representing the citation network between all Computer Science (CS) arXiv papers indexed by MAG"
+    \item \textbf{ogbn-products}, 2.4M nodes, The ogbn-products dataset is an undirected and unweighted graph, representing an Amazon product co-purchasing network
+    \item \textbf{ogbn-papers100M}, 111M nodes, "The ogbn-papers100M dataset is a directed citation graph of 111 million papers indexed by MAG"
+\end{itemize}
+%------------------------------------------------
+\section{Graph neural network model}\label{sec:model}
+%------------------------------------------------
+
+All experiments use a two-layer Graph Convolutional Network ({GCN}). The
+model applies two \texttt{GCNConv} message-passing layers with {ReLU}
+activations and a final linear classifier. The architecture is intentionally kept
+simple to focus evaluation on the data pipeline rather than the model itself. The parameters in the model that varied was the dimension of the first GCNConv layer (same dimension as the dimension of the node feature-vectors, the output dimension (same as the number of classes for the dataset.
+
+
+
+%------------------------------------------------
+\chapter{System Design}\label{sec:sys_arch}
+%------------------------------------------------
+
+The system consists of three main components: a Neo4j graph database acting as the
+graph and feature store, a Python training process that implements the PyG abstract
+interfaces, and a \texttt{NodeLoader} that orchestrates mini-batch construction during
+training. The implementations \texttt{FeatureStore} and \texttt{GraphStore} acts as the interface
+between the training process and the \texttt{Neo4j} database. The implementation of \texttt{BaseSampler}
+defines how the subgraph sampling is being done.
+
+
+
+\section{Baseline architecture}
+
+\section{Improved architecture}
+
+%------------------------------------------------
+\section{Sampling Algorithms}\label{sec:sampling_algs}
+%------------------------------------------------
+
+Two sampling algorithms are evaluated:
+
+\subsection{Neighbor Sampling}
+For each seed node in the mini-batch, the sampler
+issues a Cypher query that traverses the graph up to $K$ hops, sampling at most
+$[k_0, k_1, \ldots, k_{K-1}]$ neighbors at each hop. Neighbors exceeding the limit
+are selected uniformly at random without replacement. This corresponds to the GraphSAGE
+sampling strategy.
+\begin{algorithm}[H]
+\footnotesize
+\caption{Neighbor Sampling}
+\label{algo:neighbor_sampling}
+\DontPrintSemicolon
+\KwIn{Seed nodes $S$, neighbor limits $[k_0, k_1, \ldots, k_{K-1}]$}
+\KwOut{Sampled node set $\mathcal{V}_{\mathrm{sub}}$}
+
+$\mathcal{V}_{\mathrm{sub}} \leftarrow S$\;
+$\mathrm{begin} \leftarrow 0$\;
+$\mathrm{end} \leftarrow |S|$\;
+
+\For{$\ell \leftarrow 0$ \KwTo $K-1$}{
+    $k \leftarrow k_\ell$\;
+    
+    \For{$i \leftarrow \mathrm{begin}$ \KwTo $\mathrm{end}-1$}{
+        $v \leftarrow \mathcal{V}_{\mathrm{sub}}[i]$\;
+        
+        Sample up to $k$ neighbors of $v$ uniformly at random, with or without replacement\;
+        
+        Add sampled neighbors to $\mathcal{V}_{\mathrm{sub}}$ if not already present\;
+    }
+    
+    $\mathrm{begin} \leftarrow \mathrm{end}$\;
+    $\mathrm{end} \leftarrow |\mathcal{V}_{\mathrm{sub}}|$\;
+}
+\Return{$\mathcal{V}_{\mathrm{sub}}$}\;
+\end{algorithm}
+
+\subsection{GraphSAINT random-walk sampling}
+Instead of expanding neighborhoods
+around seed nodes, GraphSAINT constructs a subgraph by first sampling a set of nodes
+via random walks and then inducing the subgraph over those nodes.
+
+
+%------------------------------------------------
+\subsection{Graph Representation in Neo4j}\label{sec:graph_repr}
+%------------------------------------------------
+
+Nodes in Neo4j are stored with a label corresponding to the node type (e.g.,
+\texttt{Paper} for citation networks). Each node carries the following properties:
+
+\begin{itemize}
+    \item A unique integer id.
+    \item Pre-computed node feature vectors. The vectors can either be stored as Float64[] or bytes[]
+    \item A target class label for supervised node classification, which is an integer signifying what class the node belongs to
+    \item A split indicator (\texttt{train}, \texttt{val}, \texttt{test}) used to
+    partition the dataset. This can either be a string, or integer.
+\end{itemize}
+
+Edges are stored as typed relationships connecting pairs of nodes. No edge features
+are used in the experiments.
+
+
+%------------------------------------------------
+\subsection{PyG integration}\label{sec:pyg_impl}
+%------------------------------------------------
+
+Three PyG abstract classes described in \ref{sec:pyg} were implemented:\\
+
+\noindent \textbf{\texttt{Neo4jAbstractFS}} is an abstract class extending FeatureStore. The
+ purpose of this class is to provide storage of the feature vectors (e.g. a graph database), and
+ to implement an efficient interface for fetching feature vectors. The reason it is kept abstract
+is that while there are some methods any Neo4j interacting PyG FeatureStore needs (e.g. executing queries)
+there are also some features that may vary depending on the use case. One example of this is caching.
+Avoiding the neo4j fetching by storing commonly used features in RAM is a good optimization, but how this 
+caching is done in the feature store is something that should be up to the user. There are also two extensions of the 
+\texttt{Neo4jAbstractFS}, which in the \texttt{Neo4jCachedFS} and \texttt{Neo4jNoCacheFS}.\\
+
+\noindent \textbf{\texttt{Neo4jAbstractGS}} an abstract class extending GraphStore, with the main goal
+of implementing efficient traversal over the graph to enable fast subgraph sampling. It has two implementations
+\texttt{Neo4jMultiGS} and \texttt{Neo4jSingleGS} where the difference is how many sampler they are 
+optimized of being able to handle.\\
+
+\noindent \textbf{\texttt{Neo4jSampler}} implements the sampling algorithm, and is tightly coupled
+with the graph store where it executes the sampling algorithm.
+
+
+\subsection{Profiling and logging}
+
+\subsubsection{Training logging}
+Measurements are continously taken during training and stored in a 
+%------------------------------------------------
+
+%------------------------------------------------
+\subsubsection{Query Execution Profiling}\label{sec:query_profiling}
+%------------------------------------------------
+
+Cypher queries are instrumented with the \texttt{PROFILE} keyword to collect
+operator-level statistics: rows produced, {DB} hits, estimated memory
+usage, and query execution time. These are aggregated across batches and stored as averaged {CSV}.
+
+%------------------------------------------------
+\subsubsection{Python-Level Profiling}\label{sec:python_profiling}
+%------------------------------------------------
+
+Call-stack profiles are collected using Python's \texttt{cProfile} module and stored
+as \texttt{train\_profile.txt}. These are used to identify hot-spots in the Python
+data pipeline that are not visible in the query-level metrics, such as tensor
+allocation overhead or unnecessary data copies.
+
+
+\chapter{Results}
+
+\section{RQ1: Bottlenecks}
+\subsection{Training phase vs sampling phase}
+\subsection{Sampling subphases}
+\subsection{Feature vector datatype}
+\subsection{Impact of: Multisampler parallelism}
+\subsection{Impact of: Caching to reduce feature fetch overhead}
+
+\section{RQ2: Sampling}
+\subsection{Neo4j: Neighborsampling vs Graphsaint}
+\subsection{Neo4j sampling vs PyG sampling}
+
+
+
+\chapter{Discussion}
+\section{Optimal system implementation}
+
+\chapter{Conclusion}
+
+\section{RQ1 - Bottleneck}
+The experiments show that the primary bottleneck is the deser
+
+\end{document}
