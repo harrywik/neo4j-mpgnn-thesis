@@ -29,6 +29,10 @@ import java.util.ArrayDeque;
 import java.util.Queue;
 import java.util.stream.Stream;
 
+import jdk.incubator.vector.FloatVector;
+import jdk.incubator.vector.VectorOperators;
+import jdk.incubator.vector.VectorSpecies;
+
 /**
  * Neo4j User Defined Procedure that performs server-side 1-hop mean aggregation
  * of neighbour feature vectors for each given seed node.
@@ -72,6 +76,9 @@ import java.util.stream.Stream;
 public class GNNProcedures {
 
     private static final String IN_DEGREE_PROPERTY = "in_degree";
+
+    /** Preferred SIMD lane width for vectorised linear-algebra kernels. */
+    private static final VectorSpecies<Float> SPECIES = FloatVector.SPECIES_PREFERRED;
 
     // -------------------------------------------------------------------------
     // Generic GNN inference infrastructure
@@ -155,6 +162,65 @@ public class GNNProcedures {
         for (int i = 0; i < acc.length; i++) acc[i] += scale * feat[i];
     }
 
+    // ── Float-precision aggregation registry (inference engine) ──────────────
+
+    /**
+     * Float counterpart of {@link AggregationFn} used exclusively by the
+     * inference engine ({@link #runEngine}) to avoid double↔float conversions.
+     */
+    @FunctionalInterface
+    private interface AggregationFnF {
+        float[] aggregate(Long nodeId,
+                          List<Long> neighborIds,
+                          Map<Long, float[]> features,
+                          Map<Long, Long> inDegrees);
+    }
+
+    private static final Map<String, AggregationFnF> AGG_REGISTRY_F;
+    static {
+        Map<String, AggregationFnF> r = new HashMap<>();
+
+        r.put("gcn_norm", (nodeId, neighborIds, features, inDegrees) -> {
+            float[] selfFeat = features.get(nodeId);
+            float   selfDeg  = inDegrees.getOrDefault(nodeId, 0L) + 1.0f;
+            float[] agg      = null;
+            if (selfFeat != null) {
+                agg = new float[selfFeat.length];
+                accumulateScaledF(agg, selfFeat, 1.0f / selfDeg);
+            }
+            for (Long nbrId : neighborIds) {
+                float[] nbrFeat = features.get(nbrId);
+                if (nbrFeat == null) continue;
+                if (agg == null) agg = new float[nbrFeat.length];
+                float nbrDeg = inDegrees.getOrDefault(nbrId, 0L) + 1.0f;
+                accumulateScaledF(agg, nbrFeat,
+                        1.0f / (float) Math.sqrt(selfDeg * nbrDeg));
+            }
+            return agg;
+        });
+
+        r.put("mean", (nodeId, neighborIds, features, inDegrees) -> {
+            float[] sum = null;
+            int count = 0;
+            for (Long nbrId : neighborIds) {
+                float[] nbrFeat = features.get(nbrId);
+                if (nbrFeat == null) continue;
+                if (sum == null) sum = new float[nbrFeat.length];
+                accumulateScaledF(sum, nbrFeat, 1.0f);
+                count++;
+            }
+            if (sum == null || count == 0) return features.get(nodeId);
+            for (int i = 0; i < sum.length; i++) sum[i] /= count;
+            return sum;
+        });
+
+        AGG_REGISTRY_F = Collections.unmodifiableMap(r);
+    }
+
+    private static void accumulateScaledF(float[] acc, float[] feat, float scale) {
+        for (int i = 0; i < acc.length; i++) acc[i] += scale * feat[i];
+    }
+
     // ─── Spec / weights caches (keyed by model-directory path) ───────────────
 
     /** Descriptor for one op in the execution plan. */
@@ -182,25 +248,24 @@ public class GNNProcedures {
     }
 
     /**
-     * Flat tensor storage: shape + row-major float data.
+     * Flat tensor storage: shape + row-major float32 data.
      * Vectors (rank-1) and matrices (rank-2) are both stored here.
+     * Data stays in its native float32 precision for cache efficiency and SIMD.
      */
     private static class Tensor {
-        final int[]    shape;
-        final double[] data;
+        final int[]   shape;
+        final float[] data;
 
-        Tensor(int[] shape, double[] data) { this.shape = shape; this.data = data; }
+        Tensor(int[] shape, float[] data) { this.shape = shape; this.data = data; }
 
-        double[] asVector() { return data; }
+        /** Return the raw data as a flat vector. */
+        float[] asVector() { return data; }
 
-        double[][] asMatrix() {
-            int rows = shape[0], cols = shape[1];
-            double[][] M = new double[rows][cols];
-            for (int i = 0; i < rows; i++)
-                for (int j = 0; j < cols; j++)
-                    M[i][j] = data[i * cols + j];
-            return M;
-        }
+        /** Number of rows (first dimension). */
+        int rows() { return shape[0]; }
+
+        /** Number of columns (second dimension). */
+        int cols() { return shape[1]; }
     }
 
     private static final ConcurrentHashMap<String, GNNSpec>              SPEC_CACHE    = new ConcurrentHashMap<>();
@@ -910,15 +975,15 @@ public class GNNProcedures {
             frontier = nextFrontier;
         }
 
-        // ── Step 2: Extract raw features and in-degrees ───────────────────────
+        // ── Step 2: Extract raw features and in-degrees (float32) ─────────────
 
-        Map<Long, double[]> currentH  = new HashMap<>(allNodes.size());
-        Map<Long, Long>     inDegrees = new HashMap<>(allNodes.size());
+        Map<Long, float[]> currentH  = new HashMap<>(allNodes.size());
+        Map<Long, Long>    inDegrees = new HashMap<>(allNodes.size());
 
         for (Map.Entry<Long, Node> e : allNodes.entrySet()) {
             Long nid  = e.getKey();
             Node node = e.getValue();
-            double[] feat = extractFeatures(node, featureKey, featureType);
+            float[] feat = extractFeaturesF(node, featureKey, featureType);
             if (feat != null) currentH.put(nid, feat);
             inDegrees.put(nid, getStoredIncomingDegreeOrCount(node, relType, hasEdgeType, label));
         }
@@ -935,15 +1000,15 @@ public class GNNProcedures {
         for (LayerSpec layer : spec.layers) {
 
             if ("aggregate".equals(layer.op)) {
-                AggregationFn fn = AGGREGATION_REGISTRY.get(layer.method);
+                AggregationFnF fn = AGG_REGISTRY_F.get(layer.method);
                 if (fn == null) throw new RuntimeException(
-                        "Unknown aggregation '" + layer.method + "'. Add it to AGGREGATION_REGISTRY.");
+                        "Unknown aggregation '" + layer.method + "'. Add it to AGG_REGISTRY_F.");
 
-                Map<Long, double[]> newH = new HashMap<>();
+                Map<Long, float[]> newH = new HashMap<>();
                 for (int d = 0; d <= activeLevel; d++) {
                     for (Long nodeId : hopNodes.get(d)) {
                         List<Long> nbrs = sampledIncoming.getOrDefault(nodeId, Collections.emptyList());
-                        double[] agg = fn.aggregate(nodeId, nbrs, currentH, inDegrees);
+                        float[] agg = fn.aggregate(nodeId, nbrs, currentH, inDegrees);
                         if (agg != null) newH.put(nodeId, agg);
                     }
                 }
@@ -952,29 +1017,38 @@ public class GNNProcedures {
                 activeLevel--;
 
             } else if ("linear".equals(layer.op)) {
-                double[][] W = weights.get(layer.weightKey).asMatrix();
-                double[]   b = weights.get(layer.biasKey).asVector();
+                Tensor wt = weights.get(layer.weightKey);
+                float[] W = wt.data;       // flat row-major [outDim × inDim]
+                float[] b = weights.get(layer.biasKey).asVector();
+                int outDim = wt.rows();
+                int inDim  = wt.cols();
+
+                // Batched transform: collect active nodes, transform in one pass
+                // so the weight matrix stays warm in L1/L2 across all nodes.
+                List<Long>    batchIds = new ArrayList<>();
+                List<float[]> batchIn  = new ArrayList<>();
                 for (int d = 0; d <= lastAggLevel; d++)
                     for (Long nid : hopNodes.get(d)) {
-                        double[] h = currentH.get(nid);
-                        if (h != null) currentH.put(nid, linearTransform(h, W, b));
+                        float[] h = currentH.get(nid);
+                        if (h != null) { batchIds.add(nid); batchIn.add(h); }
                     }
+                float[][] batchOut = batchedLinearTransform(batchIn, W, b, outDim, inDim);
+                for (int k = 0; k < batchIds.size(); k++)
+                    currentH.put(batchIds.get(k), batchOut[k]);
 
             } else if ("relu".equals(layer.op)) {
                 for (int d = 0; d <= lastAggLevel; d++)
                     for (Long nid : hopNodes.get(d)) {
-                        double[] h = currentH.get(nid);
-                        if (h != null) currentH.put(nid, relu(h));
+                        float[] h = currentH.get(nid);
+                        if (h != null) reluInPlace(h);
                     }
 
             } else if ("tanh".equals(layer.op)) {
                 for (int d = 0; d <= lastAggLevel; d++)
                     for (Long nid : hopNodes.get(d)) {
-                        double[] h = currentH.get(nid);
+                        float[] h = currentH.get(nid);
                         if (h == null) continue;
-                        double[] out = new double[h.length];
-                        for (int i = 0; i < h.length; i++) out[i] = Math.tanh(h[i]);
-                        currentH.put(nid, out);
+                        for (int i = 0; i < h.length; i++) h[i] = (float) Math.tanh(h[i]);
                     }
             }
         }
@@ -983,7 +1057,7 @@ public class GNNProcedures {
 
         List<GNNInferenceResult> results = new ArrayList<>(seedIds.size());
         for (Long seedId : seedIds) {
-            double[] logits = currentH.get(seedId);
+            float[] logits = currentH.get(seedId);
             if (logits == null) continue;
             results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits)));
         }
@@ -1200,6 +1274,26 @@ public class GNNProcedures {
         }
     }
 
+    /** Float-precision feature extraction for the inference engine (avoids double promotion). */
+    private float[] extractFeaturesF(Node node, String featureKey, String featureType) {
+        Object prop = node.getProperty(featureKey, null);
+        if (prop == null) return null;
+
+        if ("byte[]".equals(featureType)) {
+            byte[] bytes = (byte[]) prop;
+            int n = bytes.length / Float.BYTES;
+            ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+            float[] result = new float[n];
+            for (int i = 0; i < n; i++) result[i] = buf.getFloat();
+            return result;
+        } else {
+            double[] d = (double[]) prop;
+            float[] result = new float[d.length];
+            for (int i = 0; i < d.length; i++) result[i] = (float) d[i];
+            return result;
+        }
+    }
+
     /** Return node features as packed little-endian float32 bytes for transport efficiency. */
     private byte[] extractFeaturesAsFloat32Bytes(Node node, String featureKey, String featureType) {
         Object prop = node.getProperty(featureKey, null);
@@ -1229,38 +1323,59 @@ public class GNNProcedures {
         return list;
     }
 
+    /** Box a primitive {@code float[]} to {@code List<Double>}. */
+    private static List<Double> toDoubleList(float[] arr) {
+        if (arr == null) return new ArrayList<>(0);
+        List<Double> list = new ArrayList<>(arr.length);
+        for (float v : arr) list.add((double) v);
+        return list;
+    }
+
     // -------------------------------------------------------------------------
-    // Inference math helpers
+    // Inference math helpers (float32, flat weights, SIMD via Vector API)
     // -------------------------------------------------------------------------
 
     /**
-     * Affine transform: {@code out[i] = b[i] + Σ_j W[i][j] · in[j]}.
+     * Batched affine transform using flat weight storage and SIMD.
      *
-     * <p>{@code W} has shape {@code [out_dim, in_dim]} — matching PyTorch's
-     * convention ({@code weight.shape == [out_features, in_features]}).
+     * <p>{@code W} is a flat row-major {@code float[outDim * inDim]} matching
+     * PyTorch's convention ({@code weight.shape == [out_features, in_features]}).
+     * Processing an entire batch keeps the weight matrix warm in L1/L2 cache.
      */
-    private double[] linearTransform(double[] input, double[][] W, double[] b) {
-        int outDim = W.length;
-        double[] result = new double[outDim];
-        for (int i = 0; i < outDim; i++) {
-            result[i] = b[i];
-            double[] row = W[i];
-            for (int j = 0; j < input.length; j++) {
-                result[i] += row[j] * input[j];
+    private static float[][] batchedLinearTransform(
+            List<float[]> inputs, float[] W, float[] b, int outDim, int inDim) {
+        int batchSize = inputs.size();
+        float[][] outputs = new float[batchSize][];
+        int simdBound = SPECIES.loopBound(inDim);
+
+        for (int n = 0; n < batchSize; n++) {
+            float[] input  = inputs.get(n);
+            float[] result = new float[outDim];
+            for (int i = 0; i < outDim; i++) {
+                int offset = i * inDim;
+                FloatVector sumVec = FloatVector.zero(SPECIES);
+                int j = 0;
+                for (; j < simdBound; j += SPECIES.length()) {
+                    FloatVector vw = FloatVector.fromArray(SPECIES, W, offset + j);
+                    FloatVector vi = FloatVector.fromArray(SPECIES, input, j);
+                    sumVec = vw.fma(vi, sumVec);
+                }
+                float sum = b[i] + sumVec.reduceLanes(VectorOperators.ADD);
+                for (; j < inDim; j++) sum += W[offset + j] * input[j];
+                result[i] = sum;
             }
+            outputs[n] = result;
         }
-        return result;
+        return outputs;
     }
 
-    /** Element-wise ReLU (returns a new array). */
-    private double[] relu(double[] x) {
-        double[] out = new double[x.length];
-        for (int i = 0; i < x.length; i++) out[i] = x[i] > 0.0 ? x[i] : 0.0;
-        return out;
+    /** In-place element-wise ReLU on a float vector. */
+    private static void reluInPlace(float[] x) {
+        for (int i = 0; i < x.length; i++) if (x[i] < 0.0f) x[i] = 0.0f;
     }
 
-    /** Index of the largest value in {@code x}. */
-    private long argmax(double[] x) {
+    /** Index of the largest value in {@code x} (float version). */
+    private static long argmax(float[] x) {
         int best = 0;
         for (int i = 1; i < x.length; i++) if (x[i] > x[best]) best = i;
         return best;
@@ -1340,10 +1455,10 @@ public class GNNProcedures {
             ByteBuffer buf = ByteBuffer.allocate(total * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
             ch.read(buf);
             buf.flip();
-            double[] data2 = new double[total];
-            for (int i = 0; i < total; i++) data2[i] = buf.getFloat();
+            float[] data = new float[total];
+            for (int i = 0; i < total; i++) data[i] = buf.getFloat();
 
-            map.put(key, new Tensor(dims, data2));
+            map.put(key, new Tensor(dims, data));
         }
         return map;
     }
