@@ -1,6 +1,7 @@
 from collections import OrderedDict
 from pathlib import Path
 from typing import Dict, Optional, Tuple
+import os
 import sys
 
 import numpy as np
@@ -55,7 +56,12 @@ class Neo4jTwoLevelCache(Neo4jAbstractCache):
         self.label_cache: OrderedDict[int, int] = OrderedDict()
 
         if prefill:
-            self.prefill_hot_cache(graph_name="hot_cache_projection", k=self.cache_size // 3)
+            # Use a per-process projection name so concurrent DDP workers
+            # (each with a different RANK env var set by torchrun) don't race
+            # to create the same GDS graph projection.
+            rank = os.environ.get("RANK", "")
+            graph_name = f"hot_cache_projection_{rank}" if rank else "hot_cache_projection"
+            self.prefill_hot_cache(graph_name=graph_name, k=self.cache_size // 3)
 
     @staticmethod
     def _split_key(key: Tuple[str, int]) -> Tuple[str, int]:

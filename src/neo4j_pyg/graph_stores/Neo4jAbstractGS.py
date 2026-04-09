@@ -57,6 +57,34 @@ class Neo4jAbstractGS(GraphStore, ABC):
     def _get_edge_index(self, attr: EdgeAttr) -> Optional[torch.Tensor]:
         pass
 
+    def get_split_by_partition(
+        self,
+        split: str = "train",
+        partition_id: int = 0,
+        limit: int | None = None,
+        partition_property: str = "rankId",
+    ) -> torch.Tensor:
+        """Return train/val/test node IDs belonging to one METIS partition.
+
+        Each worker calls this independently with its own rank as partition_id,
+        so no cross-rank broadcast is needed.
+        """
+        split_map = {"train": 0, "val": 1, "test": 2}
+        split_val = split_map[split] if self.split_property_type == "int" else split
+
+        query = f"""
+        MATCH (n {{ {self.split_property_name}: $split, {partition_property}: $partition_id }})
+        ORDER BY n.{self.nodeid_property} ASC
+        LIMIT toInteger(coalesce($limit, 9223372036854775807))
+        RETURN n.{self.nodeid_property} AS id
+        """
+
+        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
+            result = session.run(query, split=split_val, partition_id=partition_id, limit=limit)
+            seed_ids = [record["id"] for record in result]
+
+        return torch.tensor(seed_ids, dtype=torch.int64)
+
     def get_split(self, limit: int | None = None, offset: int | None = None, split: str = "train", shuffle: bool = False) -> torch.Tensor:   
         shuffle_clause = "ORDER BY rand()" if shuffle else f"ORDER BY n.{self.nodeid_property} ASC"
 

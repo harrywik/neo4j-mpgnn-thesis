@@ -1,7 +1,7 @@
 {
   "latex-workshop.latex.autoBuild.run": "onFileChange",
   "latex-workshop.latex.rootFile.useSubFileAsRoot": true,
-  "latex-workshop.latex.outDir": "%DIR%/../thesis",
+  "latex-workshop.latex.outDir": "%DIR%",
   "latex-workshop.latex.recipes": [
     {
       "name": "latexmk (pdflatex)",

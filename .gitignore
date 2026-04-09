@@ -48,7 +48,7 @@ data/ogbn-papers100M/ogbn_papers100M
 data/ogbn-arxiv/ogbn_arxiv
 data/arxiv/
 
-
+/thesis
 /.claude
 /.cursor
 /.vscode
