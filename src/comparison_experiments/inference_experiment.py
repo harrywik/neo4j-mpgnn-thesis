@@ -122,14 +122,34 @@ def build_components(cfg: dict, driver):
 # Training / checkpoint loading
 # ---------------------------------------------------------------------------
 
+_CHECKPOINT_DIR = Path(__file__).resolve().parent.parent.parent / "checkpoints" / "inference"
+
+
+def _checkpoint_path(cfg: dict) -> Path:
+    """Deterministic checkpoint path based on dataset + model config."""
+    ds_name = cfg["dataset"].get("dataset_name", "dataset")
+    model_class = cfg["model"].get("model_class", "model")
+    return _CHECKPOINT_DIR / f"{ds_name}_{model_class}.pt"
+
+
 def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None:
-    checkpoint = cfg["model"].get("checkpoint_path")
-    if checkpoint:
-        state = torch.load(checkpoint, map_location="cpu")
+    # 1. Explicit checkpoint in config takes priority
+    explicit = cfg["model"].get("checkpoint_path")
+    if explicit:
+        state = torch.load(explicit, map_location="cpu")
         model.load_state_dict(state["MODEL_STATE"])
-        print(f"Loaded checkpoint from {checkpoint}")
+        print(f"Loaded checkpoint from {explicit}")
         return
 
+    # 2. Auto-saved checkpoint from a previous inference experiment run
+    ckpt = _checkpoint_path(cfg)
+    if ckpt.exists():
+        state = torch.load(ckpt, map_location="cpu")
+        model.load_state_dict(state["MODEL_STATE"])
+        print(f"Loaded cached checkpoint from {ckpt}")
+        return
+
+    # 3. No checkpoint found — train and save
     from training.Training import Trainer, put_nodeLoader_args_map
     from benchmarking_tools import Measurer
     train_ds = cfg["train_ds"]
@@ -154,6 +174,11 @@ def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None
         max_test_size=train_ds.get("max_test_size"),
     )
     trainer.train(max_epochs=train_ds["max_epochs"])
+
+    # Save for next run
+    ckpt.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"MODEL_STATE": model.state_dict()}, ckpt)
+    print(f"Saved checkpoint to {ckpt}")
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +462,118 @@ def run_in_db_java(
 
 
 # ---------------------------------------------------------------------------
+# Subgraph verification
+# ---------------------------------------------------------------------------
+
+def verify_subgraph_match(
+    seed_ids: list[int],
+    cfg: dict,
+    driver,
+) -> dict:
+    """Assert that ``neighbor.sample`` and ``inference.run`` sample the same subgraph.
+
+    Calls both Java procedures with the same seeds and parameters, then
+    compares the returned ``ordered_nodes`` and ``edge_pairs``.  Raises
+    ``AssertionError`` with a diff summary if they disagree.
+
+    Returns a dict with verification details for inclusion in results JSON.
+    """
+    ds = cfg["dataset"]
+    mdl = cfg["model"]
+    node_label = ds["node_label"]
+    edge_type = ds.get("edge_type", "")
+    nodeid_prop = ds["nodeid_property"]
+    feature_prop = ds["feature_property"]
+    feature_type = ds["feature_property_type"]
+    max_neighbors = ds.get("num_neighbors", ds.get("max_neighbors", 10))
+    num_hops = ds.get("num_hops", 2)
+    model_name = mdl.get("model_name", "experiment_gcn")
+    db = cfg["train_ds"]["database_name"]
+
+    # -- 1. Call neighbor.sample ------------------------------------------------
+    sample_query = (
+        "CALL gnnProcedures.sampling.neighbor.sample("
+        "$seedIds, $nodeIdKey, $nodeLabel, $numNeighbors, $edgeType, $randomSeed"
+        ") YIELD ordered_nodes, edge_pairs"
+    )
+    with driver.session(database=db) as session:
+        rec = session.run(
+            sample_query,
+            seedIds=seed_ids,
+            nodeIdKey=nodeid_prop,
+            nodeLabel=node_label,
+            numNeighbors=[max_neighbors] * num_hops,
+            edgeType=edge_type,
+            randomSeed=42,
+        ).single()
+        sample_nodes = list(rec["ordered_nodes"])
+        sample_edges = [list(e) for e in rec["edge_pairs"]]
+
+    # -- 2. Call inference.run and extract subgraph from first row ---------------
+    infer_query = (
+        "CALL gnnProcedures.inference.run("
+        "$seedIds, $nodeIdKey, $featureKey, $featureType, "
+        "$nodeLabel, $modelName, $edgeType, $maxNeighbors"
+        ") YIELD ordered_nodes, edge_pairs"
+    )
+    with driver.session(database=db) as session:
+        rec = session.run(
+            infer_query,
+            seedIds=seed_ids,
+            nodeIdKey=nodeid_prop,
+            featureKey=feature_prop,
+            featureType=feature_type,
+            nodeLabel=node_label,
+            modelName=model_name,
+            edgeType=edge_type,
+            maxNeighbors=max_neighbors,
+        ).single()
+        infer_nodes = list(rec["ordered_nodes"])
+        infer_edges = [list(e) for e in rec["edge_pairs"]]
+
+    # -- 3. Compare (sort edges for order-insensitive check) --------------------
+    node_match = sample_nodes == infer_nodes
+    edge_match = sorted(sample_edges) == sorted(infer_edges)
+
+    verification = {
+        "seed_ids": seed_ids,
+        "nodes_match": node_match,
+        "edges_match": edge_match,
+        "num_nodes": len(sample_nodes),
+        "num_edges": len(sample_edges),
+    }
+
+    if node_match and edge_match:
+        print(
+            f"  ✓ Subgraph verification passed — "
+            f"{len(sample_nodes)} nodes, {len(sample_edges)} edges identical"
+        )
+        return verification
+
+    lines = ["Subgraph mismatch between neighbor.sample and inference.run!"]
+    if not node_match:
+        s_set, i_set = set(sample_nodes), set(infer_nodes)
+        lines.append(f"  Nodes: sample={len(sample_nodes)}, infer={len(infer_nodes)}")
+        only_sample = s_set - i_set
+        only_infer = i_set - s_set
+        if only_sample:
+            lines.append(f"  Only in sample: {sorted(only_sample)[:20]}")
+        if only_infer:
+            lines.append(f"  Only in infer:  {sorted(only_infer)[:20]}")
+    if not edge_match:
+        s_set = set(map(tuple, sample_edges))
+        i_set = set(map(tuple, infer_edges))
+        lines.append(f"  Edges: sample={len(sample_edges)}, infer={len(infer_edges)}")
+        only_sample_e = s_set - i_set
+        only_infer_e = i_set - s_set
+        if only_sample_e:
+            lines.append(f"  Only in sample: {sorted(only_sample_e)[:20]}")
+        if only_infer_e:
+            lines.append(f"  Only in infer:  {sorted(only_infer_e)[:20]}")
+    raise AssertionError("\n".join(lines))
+
+
+# ---------------------------------------------------------------------------
 # Accuracy
 # ---------------------------------------------------------------------------
 
@@ -564,7 +701,11 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
     ds = cfg["dataset"]
     mdl = cfg["model"]
     node_counts: list[int] = ds["node_counts"]
-    nbr_runs: int = ds.get("nbr_runs", 5)
+    _nbr_runs_cfg = ds.get("nbr_runs", 5)
+    if isinstance(_nbr_runs_cfg, list):
+        nbr_runs_list: list[int] = _nbr_runs_cfg
+    else:
+        nbr_runs_list = [int(_nbr_runs_cfg)] * len(node_counts)
     strategies: list[str] = mdl.get("strategies", ["full_graph", "neighborhood_sampling", "in_db_java"])
     batch_size: int = ds.get("inference_batch_size", 256)
     num_neighbors_val: int = ds.get("num_neighbors", ds.get("max_neighbors", 10))
@@ -604,7 +745,7 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
     print(f"Strategies: {strategies}")
     print(f"Fanout per hop: {num_neighbors}  ({num_hops} hops × {num_neighbors_val} neighbors)\n")
 
-    for N in node_counts:
+    for N, nbr_runs in zip(node_counts, nbr_runs_list):
         # Check if strategies have enough test nodes
         neo4j_skip = (
             any(s in strategies for s in ("neighborhood_sampling", "in_db_java"))
@@ -616,8 +757,9 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
             continue
 
         run_data: dict[str, list] = {s: [] for s in strategies}
+        agreement_data: list[float] = []
 
-        for run_i in range(nbr_runs):
+        for run_i in range(int(nbr_runs)):
             # Sample N Neo4j test nodes (same for neighborhood_sampling and in_db_java)
             neo4j_test_ids: list[int] = []
             neo4j_labels: dict[int, int] = {}
@@ -625,6 +767,8 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                 rng = random.Random(run_i * 10007 + N)
                 neo4j_test_ids = rng.sample(neo4j_test_pool, N)
                 neo4j_labels = fetch_labels(neo4j_test_ids, cfg, driver)
+
+            run_preds: dict[str, dict[int, int]] = {}
 
             for strategy in strategies:
                 try:
@@ -655,6 +799,7 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                         print(f"  Unknown strategy '{strategy}', skipping.")
                         continue
 
+                    run_preds[strategy] = preds
                     entry = {"accuracy": acc, **metrics}
                     run_data[strategy].append(entry)
 
@@ -663,9 +808,28 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                     print(f"  [{strategy}] N={N} run {run_i+1} FAILED: {exc}")
                     traceback.print_exc()
 
+            # Compare neighborhood_sampling vs in_db_java predictions
+            ns_preds = run_preds.get("neighborhood_sampling")
+            java_preds = run_preds.get("in_db_java")
+            if ns_preds is not None and java_preds is not None:
+                common = set(ns_preds) & set(java_preds)
+                if common:
+                    agree = sum(1 for nid in common if ns_preds[nid] == java_preds[nid])
+                    agreement_data.append(agree / len(common))
+
         agg_by_strategy = {s: _agg(run_data[s]) for s in strategies if run_data[s]}
+        if agreement_data:
+            mean_agr = float(np.mean(agreement_data)) * 100
+            ci_agr = _ci95(agreement_data) * 100
+            agg_by_strategy["_ns_vs_java_agreement"] = {
+                "mean": mean_agr, "ci95": ci_agr,
+            }
         all_results[N] = agg_by_strategy
         print_table(N, nbr_runs, agg_by_strategy)
+
+        if agreement_data:
+            print(f"  neighborhood_sampling vs in_db_java agreement: "
+                  f"{mean_agr:.1f}% ±{ci_agr:.1f}%")
 
     print_scaling_summary(all_results)
 
@@ -698,7 +862,7 @@ def _next_run_dir(output_dir: Path) -> Path:
     return run_dir
 
 
-def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str) -> None:
+def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str, *, subgraph_verification: dict | None = None) -> None:
     ds_name = cfg["dataset"].get("dataset_name", "dataset")
     model_class = cfg["model"].get("model_class", "model")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -711,8 +875,14 @@ def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str) -> None
         str(N): {s: agg for s, agg in by_strat.items()}
         for N, by_strat in all_results.items()
     }
+    payload = {}
+    if subgraph_verification is not None:
+        payload["subgraph_verification"] = subgraph_verification
+    payload["config"] = cfg["dataset"]
+    payload["model"] = cfg["model"]
+    payload["results"] = serialisable
     with open(out_path, "w") as f:
-        json.dump({"config": cfg["dataset"], "model": cfg["model"], "results": serialisable}, f, indent=2)
+        json.dump(payload, f, indent=2)
     print(f"\nResults saved → {out_path}")
 
     from comparison_experiments.inference_experiment_plots import plot_all
@@ -746,8 +916,27 @@ def main() -> None:
     train_or_load(model, cfg, graph_store, feature_store, training_sampler)
     model.eval()
 
+    # Quick sanity check: sampling procedure and inference procedure agree
+    subgraph_verification = None
+    if "in_db_java" in cfg["model"].get("strategies", ["full_graph", "neighborhood_sampling", "in_db_java"]):
+        test_pool = graph_store.get_split(split="test").tolist()
+        verify_seeds = random.sample(test_pool, min(4, len(test_pool)))
+        print(f"\nVerifying subgraph match on {len(verify_seeds)} seed nodes...")
+        try:
+            subgraph_verification = verify_subgraph_match(verify_seeds, cfg, driver)
+        except Exception as e:
+            msg = str(e)
+            if "ProcedureNotFound" in msg or "ordered_nodes" in msg or "edge_pairs" in msg:
+                print(
+                    f"  ⚠ Subgraph verification skipped — deployed plugin jar is outdated.\n"
+                    f"    Run: make build-plugin NEO4J_PLUGINS_DIR=<path> to redeploy.\n"
+                    f"    ({msg[:120]})"
+                )
+            else:
+                raise
+
     all_results = run_experiment(cfg, model, graph_store, feature_store, driver)
-    save_results_and_plot(all_results, cfg, args.output_dir)
+    save_results_and_plot(all_results, cfg, args.output_dir, subgraph_verification=subgraph_verification)
 
     try:
         driver.close()
