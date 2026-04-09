@@ -1,0 +1,13 @@
+# Fdb version 4
+["pdflatex"] 1775573768.51776 "blank_thesis_template.tex" "blank_thesis_template.pdf" "blank_thesis_template" 1775573768.65475 2
+  "/usr/local/texlive/2026/texmf-dist/web2c/texmf.cnf" 1770478701 43630 e9fa012910491fe5ae08a72c3c2997a7 ""
+  "/usr/local/texlive/2026/texmf-var/web2c/pdftex/pdflatex.fmt" 1774361475 3636762 305523329a6d3bc2bb2c53b9e9996b26 ""
+  "/usr/local/texlive/2026/texmf.cnf" 1772409725 577 648cd9f92f9c0eac486f4c71c85cfbbe ""
+  "blank_thesis_template.aux" 1775573760.51721 32 3985256e7290058c681f74d7a3565a19 "pdflatex"
+  "blank_thesis_template.tex" 1775573768.03759 44341 18088284c696c4af9aef2cfc55be3a06 ""
+  "uclathes.cls" 0 -1 0 ""
+  (generated)
+  "blank_thesis_template.aux"
+  "blank_thesis_template.log"
+  "blank_thesis_template.pdf"
+  (rewritten before read)

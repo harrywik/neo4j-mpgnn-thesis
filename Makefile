@@ -61,6 +61,11 @@ distributed-ddp:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m torch.distributed.run --nproc-per-node=$(NPROC) -m training.Main \
 		--dataset $(DATASET) --implementation distributed
 
+distributed-ddp-metis:
+	@lsof -ti :29500 | xargs kill -9 2>/dev/null; true
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m torch.distributed.run --nproc-per-node=$(NPROC) -m training.Main \
+		--dataset $(DATASET) --implementation distributed_metis
+
 baseline_db:
 	@$(MAKE) baseline_neo4j DATASET=$(DATASET)
 

@@ -20,6 +20,27 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+import torch
+import torch.distributed as dist
+from torch_geometric.datasets import Planetoid
+from torch_geometric.transforms import NormalizeFeatures
+
+from benchmarking_tools import Measurer, QueryProfileAccumulator
+from benchmarking_tools.measurements_plots import plot_aggregated_folder
+from comparison_experiments.sampler_comparison.comparison_plots import (
+    aggregate_runs,
+    plot_accuracy_vs_epochs,
+    plot_accuracy_vs_time,
+)
+from Neo4jConnection import Neo4jConnection
+from neo4j_pyg.deprecated.Neo4jNeighborSampler import Neo4jNeighborSampler
+from neo4j_pyg.neo4j_model_interface.preagg_adapters import HybridAggModel, to_preaggregated_first_layer
+from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import Neo4jGraphSAINTRandomWalkSampler
+from training.DistributedTraining import DistributedTrainer
+from training.GraphSAINTTrainer import GraphSAINTTrainer
+from training.Training import Trainer, put_nodeLoader_args_map
+from training.registry import FEATURE_STORES, GRAPH_STORES, MODELS, SAMPLERS, filter_kwargs
+
 load_dotenv()
 
 # Ensure src/ is on the path when run directly.
@@ -71,7 +92,6 @@ def _build_common_kwargs(dataset_cfg: dict, uri: str, user: str, password: str) 
 
 
 def _make_graph_store(impl_cfg: dict, common_kwargs: dict, driver, measurer, profile_accumulator):
-    from training.registry import GRAPH_STORES, filter_kwargs
     gs_cfg = impl_cfg["graph_store"]
     cls = GRAPH_STORES[gs_cfg["class_name"]]
     kwargs = dict(common_kwargs)
@@ -84,7 +104,6 @@ def _make_graph_store(impl_cfg: dict, common_kwargs: dict, driver, measurer, pro
 
 
 def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
-    from training.registry import SAMPLERS, filter_kwargs
     s_cfg = impl_cfg["sampler"]
     cls = SAMPLERS[s_cfg["class_name"]]
     kwargs = dict(s_cfg.get("extra_kwargs", {}))
@@ -108,7 +127,6 @@ def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
 
 def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
                         profile_accumulator, sampler):
-    from training.registry import FEATURE_STORES, filter_kwargs
     fs_cfg = impl_cfg["feature_store"]
     cls = FEATURE_STORES[fs_cfg["class_name"]]
     kwargs = dict(common_kwargs)
@@ -138,12 +156,10 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
         kwargs["hops"] = m_cfg["extra_kwargs"]["hops"]
     model = cls(**filter_kwargs(cls, kwargs))
     if m_cfg.get("to_preaggregated_first_layer", False):
-        from neo4j_pyg.models.preagg_adapters import to_preaggregated_first_layer
         result = to_preaggregated_first_layer(model)
         model = result.model
     if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
-        from neo4j_pyg.models.preagg_adapters import to_hybrid_last_hop_gcn
-        model = to_hybrid_last_hop_gcn(model)
+        model = HybridAggModel(model)
     return model
 
 
@@ -152,9 +168,6 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
 # ---------------------------------------------------------------------------
 
 def _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model):
-    from training.Training import Trainer, put_nodeLoader_args_map
-    from training.registry import filter_kwargs
-
     nla = impl_cfg["nodeloader_args"]
     nodeloader_args = put_nodeLoader_args_map(**nla)
 
@@ -178,10 +191,6 @@ def _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, s
 
 def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
     """Baseline PyG / saint_pyg path — loads Planetoid from disk."""
-    import torch
-    from torch_geometric.datasets import Planetoid
-    from training.Training import Trainer, put_nodeLoader_args_map
-
     planetoid_root = dataset_cfg.get("planetoid_root", "data/Planetoid")
     planetoid_name = dataset_cfg.get("planetoid_name", dataset_cfg["name"].capitalize())
     dataset = Planetoid(root=planetoid_root, name=planetoid_name)
@@ -191,7 +200,6 @@ def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
     num_neighbors = impl_cfg.get("num_neighbors", [10, 5])
 
     nla = impl_cfg.get("nodeloader_args", {})
-    from training.Training import put_nodeLoader_args_map
     nodeloader_args = put_nodeLoader_args_map(
         pickle_safe=nla.get("pickle_safe", False),
         shuffle=dataset_cfg.get("shuffle", True),
@@ -213,10 +221,6 @@ def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
 
 
 def _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, model):
-    from training.GraphSAINTTrainer import GraphSAINTTrainer
-    from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import Neo4jGraphSAINTRandomWalkSampler
-    from neo4j_pyg.deprecated.Neo4jNeighborSampler import Neo4jNeighborSampler
-
     saint = impl_cfg["saint_extra"]
     train_loader = Neo4jGraphSAINTRandomWalkSampler(
         graph_store=graph_store,
@@ -256,10 +260,6 @@ def _run_saint_neo4j(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
 
 
 def _run_saint_pyg(dataset_cfg, impl_cfg, measurer, model):
-    from torch_geometric.datasets import Planetoid
-    from torch_geometric.transforms import NormalizeFeatures
-    from training.GraphSAINTTrainer import GraphSAINTTrainer
-
     planetoid_root = dataset_cfg.get("planetoid_root", "data/Planetoid")
     planetoid_name = dataset_cfg.get("planetoid_name", dataset_cfg["name"].capitalize())
     dataset = Planetoid(root=planetoid_root, name=planetoid_name, transform=NormalizeFeatures())
@@ -285,12 +285,7 @@ def _run_saint_pyg(dataset_cfg, impl_cfg, measurer, model):
 
 
 def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, sampler, model):
-    import torch.distributed as dist
-    from training.DistributedTraining import DistributedTrainer
-
     if "RANK" in os.environ and "WORLD_SIZE" in os.environ:
-        import torch
-        import torch.distributed as dist
         local_rank = int(os.environ["LOCAL_RANK"])
         cuda_available = torch.cuda.is_available()
         if cuda_available:
@@ -300,7 +295,6 @@ def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
         dist.barrier()
 
     nla = impl_cfg["nodeloader_args"]
-    from training.Training import put_nodeLoader_args_map
     nodeloader_args = put_nodeLoader_args_map(**nla)
 
     trainer = DistributedTrainer(
@@ -311,6 +305,7 @@ def _run_distributed(dataset_cfg, impl_cfg, measurer, feature_store, graph_store
         measurer=measurer,
         batch_size=dataset_cfg["batch_size"],
         nodeloader_args=nodeloader_args,
+        partition_property=impl_cfg.get("partition_property"),
     )
     trainer.train(max_epochs=dataset_cfg["max_epochs"])
 
@@ -364,12 +359,6 @@ def _create_multi_run_parent_dir() -> Path:
 
 def _aggregate_multi_run(parent_dir: Path, nbr_runs: int, impl_name: str) -> None:
     """Aggregate per-run results and write mean ± 95 % CI plots and summary JSON."""
-    from comparison_experiments.sampler_comparison.comparison_plots import (
-        aggregate_runs,
-        plot_accuracy_vs_epochs,
-        plot_accuracy_vs_time,
-    )
-    from benchmarking_tools.measurements_plots import plot_aggregated_folder
     agg = aggregate_runs(parent_dir, nbr_runs)
     n = agg["n_runs"]
     if n == 0:
@@ -431,7 +420,6 @@ def main():
     # Single run — original behaviour
     # -----------------------------------------------------------------------
     if nbr_runs <= 1:
-        from benchmarking_tools import Measurer, QueryProfileAccumulator
         # In distributed mode only rank 0 writes measurements to disk;
         # other ranks get None to avoid racing on directory creation.
         _rank = int(os.environ.get("RANK", "0"))
@@ -451,7 +439,6 @@ def main():
                 _run_in_memory(dataset_cfg, impl_cfg, measurer, model)
             return
 
-        from Neo4jConnection import Neo4jConnection
         driver = Neo4jConnection(uri, user, password).get_driver()
         common_kwargs = _build_common_kwargs(dataset_cfg, uri, user, password)
 
@@ -482,8 +469,6 @@ def main():
     print(f"Multi-run experiment: {nbr_runs} runs for dataset={args.dataset}, "
           f"implementation={args.implementation}")
 
-    from benchmarking_tools import Measurer, QueryProfileAccumulator
-
     parent_dir = _create_multi_run_parent_dir()
     print(f"Results parent directory: {parent_dir}")
 
@@ -491,7 +476,6 @@ def main():
     driver = None
     common_kwargs = None
     if not in_memory:
-        from Neo4jConnection import Neo4jConnection
         driver = Neo4jConnection(uri, user, password).get_driver()
         common_kwargs = _build_common_kwargs(dataset_cfg, uri, user, password)
 

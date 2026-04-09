@@ -1,0 +1,31 @@
+{
+  "_comment": "Distributed DDP with METIS partitioning. Each rank owns one graph partition (rankId property), improving per-worker cache locality. Run the partition procedure once before training: CALL gnnProcedures.partition.metis($nproc, 'Paper', 'id', 'CITES')",
+  "feature_store": {
+    "class_name": "Neo4jCachedFS",
+    "connection_mode": "uri",
+    "extra_kwargs": {
+      "cache_size_GB": 1
+    }
+  },
+  "graph_store": {
+    "class_name": "Neo4jMultiGS",
+    "connection_mode": "uri"
+  },
+  "sampler": {
+    "class_name": "Neo4jSampler",
+    "num_neighbors": [10, 5]
+  },
+  "model": {
+    "class_name": "GCN"
+  },
+  "trainer": "DistributedTrainer",
+  "partition_property": "rankId",
+  "nodeloader_args": {
+    "pickle_safe": true,
+    "num_workers": 2,
+    "prefetch_factor": 2,
+    "filter_per_worker": false,
+    "persistent_workers": true,
+    "pin_memory": false
+  }
+}

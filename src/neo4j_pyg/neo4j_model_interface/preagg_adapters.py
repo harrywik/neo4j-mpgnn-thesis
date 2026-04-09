@@ -215,7 +215,7 @@ class PreAggModelWrapper(nn.Module):
         return out
 
 
-class HybridLastHopWrapper(nn.Module):
+class HybridAggModel(nn.Module):
     """Wrapper that replaces only the deepest-hop raw features with
     pre-aggregated inputs for the K-1 frontier, for any model whose first
     MessagePassing layer has a registered :class:`PreAggAdapter`.
@@ -232,7 +232,7 @@ class HybridLastHopWrapper(nn.Module):
         if adapter is None:
             supported = ", ".join(c.__name__ for c in _ADAPTER_REGISTRY)
             raise ValueError(
-                f"HybridLastHopWrapper requires a model with a supported first "
+                f"HybridAggModel requires a model with a supported first "
                 f"MessagePassing layer. Supported: {supported}."
             )
         self.inner = inner
@@ -372,4 +372,4 @@ def to_hybrid_last_hop_gcn(model: nn.Module) -> nn.Module:
     Works with any model whose first MessagePassing layer has a registered
     adapter in ``_ADAPTER_REGISTRY``.  The original model is not modified.
     """
-    return HybridLastHopWrapper(model)
+    return HybridAggModel(model)
