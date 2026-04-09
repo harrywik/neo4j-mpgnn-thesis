@@ -368,7 +368,7 @@ def run_in_db_java(
             raise RuntimeError(
                 "NEO4J_GNN_MODEL_DIR must be set to use the in_db_java strategy."
             )
-        from create_inference_spec import create_inference_spec
+        from neo4j_pyg.neo4j_model_interface.create_inference_spec import create_inference_spec
         # Use num_neighbors from inference config for Java procedure max_neighbors
         num_neighbors = ds.get("num_neighbors", ds.get("max_neighbors", 10))
         create_inference_spec(
