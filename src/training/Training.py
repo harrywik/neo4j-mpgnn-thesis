@@ -2,6 +2,7 @@ import time
 from typing import Tuple, Union
 import torch
 import torch.nn.functional as F
+import torch_geometric.typing as T
 import cProfile
 import pstats
 from torch_geometric.loader import NeighborLoader, NodeLoader
@@ -90,7 +91,6 @@ class Trainer:
             self.graph_store = None
             self.sampler = None
             self.num_neighbors = num_neighbors
-            import torch_geometric.typing as T
 
             if T.WITH_PYG_LIB and T.WITH_TORCH_SPARSE:
                 backend = "pyg-lib"

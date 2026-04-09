@@ -28,15 +28,34 @@ import os
 import random
 import sys
 import time
+import traceback
 import tracemalloc
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
 import numpy as np
 import torch
 from dotenv import load_dotenv
-from torch_geometric.loader import NodeLoader
+from torch_geometric.datasets import Planetoid
+from torch_geometric.loader import NeighborLoader, NodeLoader
+
+from Neo4jConnection import Neo4jConnection
+from benchmarking_tools import Measurer
+from comparison_experiments.inference_experiment_plots import plot_all
+from neo4j_pyg.neo4j_model_interface.create_inference_spec import (
+    create_inference_spec,
+    validate_model_for_db_inference,
+)
+from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
+from training.Main import (
+    _build_common_kwargs,
+    _make_feature_store,
+    _make_graph_store,
+    _make_model,
+    _make_sampler,
+)
+from training.Training import Trainer, put_nodeLoader_args_map
 
 load_dotenv()
 
@@ -95,14 +114,6 @@ def load_all_configs(dataset_path: str, model_path: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def build_components(cfg: dict, driver):
-    from training.Main import (
-        _build_common_kwargs,
-        _make_feature_store,
-        _make_graph_store,
-        _make_model,
-        _make_sampler,
-    )
-
     uri      = os.environ.get("URI", "")
     user     = os.environ.get("USERNAME", "")
     password = os.environ.get("PASSWORD", "")
@@ -150,8 +161,6 @@ def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None
         return
 
     # 3. No checkpoint found — train and save
-    from training.Training import Trainer, put_nodeLoader_args_map
-    from benchmarking_tools import Measurer
     train_ds = cfg["train_ds"]
     train_impl = cfg["train_impl"]
 
@@ -212,7 +221,6 @@ class PyGGraphLoader:
         self.load_time_s: float = 0.0
 
     def load(self) -> None:
-        from torch_geometric.datasets import Planetoid
         t0 = time.monotonic()
         dataset = Planetoid(root=self.root, name=self.name)
         self._data = dataset[0]
@@ -252,8 +260,6 @@ def run_full_graph_pyg(
     metrics : timing / memory / batch-latency metrics
               (load_time_s is NOT included here; caller adds it)
     """
-    from torch_geometric.loader import NeighborLoader
-
     data = pyg_loader.data
     test_indices = pyg_loader.test_node_indices()
     sample_size = min(N, len(test_indices))
@@ -678,7 +684,6 @@ def print_scaling_summary(all_results: dict[int, dict[str, dict]]) -> None:
 
 def _build_inference_sampler(cfg: dict, graph_store):
     """Create a Neo4jSampler with the inference fanout from config."""
-    from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
     ds = cfg["dataset"]
     num_neighbors_val = ds.get("num_neighbors", ds.get("max_neighbors", 10))
     num_hops = ds.get("num_hops", 2)
@@ -804,7 +809,6 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                     run_data[strategy].append(entry)
 
                 except Exception as exc:
-                    import traceback
                     print(f"  [{strategy}] N={N} run {run_i+1} FAILED: {exc}")
                     traceback.print_exc()
 
@@ -846,7 +850,6 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
 
 def _next_run_dir(output_dir: Path) -> Path:
     """Return a fresh run_N_YYYY-MM-DD subdirectory inside *output_dir*."""
-    from datetime import date
     output_dir.mkdir(parents=True, exist_ok=True)
     existing = []
     for p in output_dir.iterdir():
@@ -885,7 +888,6 @@ def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str, *, subg
         json.dump(payload, f, indent=2)
     print(f"\nResults saved → {out_path}")
 
-    from comparison_experiments.inference_experiment_plots import plot_all
     plot_all(out_path, output_dir=run_dir)
 
 
@@ -909,7 +911,6 @@ def main() -> None:
     user     = os.environ.get("USERNAME", "")
     password = os.environ.get("PASSWORD", "")
 
-    from Neo4jConnection import Neo4jConnection
     driver = Neo4jConnection(uri, user, password).get_driver()
 
     model, graph_store, feature_store, training_sampler = build_components(cfg, driver)

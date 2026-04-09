@@ -44,6 +44,7 @@ weights.bin layout (all little-endian)
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import struct
@@ -54,6 +55,7 @@ import torch.nn as nn
 
 try:
     from torch_geometric.nn import GCNConv, SAGEConv
+    from torch_geometric.nn.conv import MessagePassing
     _HAS_PYG = True
 except ImportError:
     _HAS_PYG = False
@@ -214,6 +216,49 @@ def _print_summary(spec: dict, tensors: dict, label: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# DB-inference model validation
+# ---------------------------------------------------------------------------
+
+def validate_model_for_db_inference(model: nn.Module) -> None:
+    """Raise ``ValueError`` if *model* contains MessagePassing layers whose
+    type is not registered in the Java inference engine.
+
+    Such layers would silently produce no ``aggregate`` op in the spec, causing
+    the Java engine to skip aggregation and return incorrect predictions with
+    no error. This guard converts that silent failure into an explicit error.
+
+    The check is purely type-based — it works on any ``nn.Module``, regardless
+    of whether it was built via the Pydantic configs or constructed by hand.
+
+    Parameters
+    ----------
+    model:
+        Trained ``nn.Module`` to validate before spec export.
+
+    Raises
+    ------
+    ValueError
+        If any MessagePassing layer's type is absent from ``CONV_AGGREGATION_MAP``.
+    """
+    if not _HAS_PYG:  # pragma: no cover
+        raise ImportError("torch_geometric is required for DB inference validation")
+
+    unsupported: list[tuple[str, str]] = []
+    for name, module in model.named_modules():
+        if isinstance(module, MessagePassing) and type(module) not in CONV_AGGREGATION_MAP:
+            unsupported.append((name or "<root>", type(module).__name__))
+
+    if unsupported:
+        details = ", ".join(f"{n} ({t})" for n, t in unsupported)
+        raise ValueError(
+            f"Model contains MessagePassing layers not supported for in-DB inference: "
+            f"{details}. "
+            f"Add the layer type to CONV_AGGREGATION_MAP in create_inference_spec.py "
+            f"and register a matching AggregationFn in Java's GNNProcedures."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API — file-based
 # ---------------------------------------------------------------------------
 
@@ -246,6 +291,8 @@ def create_inference_spec(
 
     Returns the absolute path to the model directory.
     """
+    validate_model_for_db_inference(model)
+
     if base_dir is None:
         base_dir = os.environ.get("NEO4J_GNN_MODEL_DIR")
     if not base_dir:
@@ -303,6 +350,8 @@ def upload_inference_spec(
     database
         Neo4j database name.  Defaults to the driver's default database.
     """
+    validate_model_for_db_inference(model)
+
     spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors)
     tensors = _referenced_tensors(model, spec)
 
@@ -310,7 +359,6 @@ def upload_inference_spec(
 
     # Serialise weights to an in-memory bytes buffer using the same format as
     # _write_weights so the Java parseWeightsFromChannel parser can read it.
-    import io
     buf = io.BytesIO()
     buf.write(struct.pack("<i", len(tensors)))
     for key, tensor in tensors.items():

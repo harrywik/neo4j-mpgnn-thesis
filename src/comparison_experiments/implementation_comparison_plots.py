@@ -29,6 +29,10 @@ from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mticker
 import numpy as np
+import pandas as pd
+
+from comparison_experiments.sampler_comparison.comparison_plots import aggregate_runs
+import pandas as pd
 
 # ---------------------------------------------------------------------------
 # Color / style helpers  (same palette as comparison_plots.py)
@@ -472,8 +476,6 @@ def _load_cpu_trace(csv_path: Path):
     and returns time relative to the first epoch_start together with the raw
     coarse samples for marker overlays.
     """
-    import pandas as pd
-
     df = pd.read_csv(csv_path)
     df["Time"] = pd.to_numeric(df["Time"], errors="coerce")
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
@@ -635,8 +637,6 @@ def plot_all_comparisons(
     nbr_runs:
         Number of runs per implementation (passed to ``aggregate_runs``).
     """
-    from comparison_experiments.sampler_comparison.comparison_plots import aggregate_runs
-
     impl_data: dict[str, dict] = {}
     for name, impl_dir in impl_dirs.items():
         agg = aggregate_runs(impl_dir, nbr_runs)
