@@ -363,11 +363,18 @@ public class GNNProcedures {
         public final Long predictedClass;
         /** Raw logit scores, one per class. */
         public final List<Double> logits;
+        /** All sampled node IDs in hop order (seeds first). Non-empty on first row only. */
+        public final List<Long> ordered_nodes;
+        /** Sampled edges as [neighbor, target] pairs. Non-empty on first row only. */
+        public final List<List<Long>> edge_pairs;
 
-        public GNNInferenceResult(Long nodeId, Long predictedClass, List<Double> logits) {
+        public GNNInferenceResult(Long nodeId, Long predictedClass, List<Double> logits,
+                                  List<Long> ordered_nodes, List<List<Long>> edge_pairs) {
             this.nodeId = nodeId;
             this.predictedClass = predictedClass;
             this.logits = logits;
+            this.ordered_nodes = ordered_nodes;
+            this.edge_pairs = edge_pairs;
         }
     }
 
@@ -1053,13 +1060,41 @@ public class GNNProcedures {
             }
         }
 
-        // ── Step 4: Emit predictions for seed nodes ───────────────────────────
+        // ── Step 4: Build subgraph representation for verification ──────────
+
+        List<Long> orderedNodes = new ArrayList<>();
+        for (List<Long> hop : hopNodes) {
+            orderedNodes.addAll(hop);
+        }
+        List<List<Long>> edgePairs = new ArrayList<>();
+        for (List<Long> hop : hopNodes) {
+            for (Long srcId : hop) {
+                List<Long> nbrIds = sampledIncoming.get(srcId);
+                if (nbrIds == null) continue;
+                for (Long nbrId : nbrIds) {
+                    List<Long> pair = new ArrayList<>(2);
+                    pair.add(nbrId);
+                    pair.add(srcId);
+                    edgePairs.add(pair);
+                }
+            }
+        }
+
+        // ── Step 5: Emit predictions for seed nodes ───────────────────────────
 
         List<GNNInferenceResult> results = new ArrayList<>(seedIds.size());
+        boolean first = true;
         for (Long seedId : seedIds) {
             float[] logits = currentH.get(seedId);
             if (logits == null) continue;
-            results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits)));
+            if (first) {
+                results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits),
+                        orderedNodes, edgePairs));
+                first = false;
+            } else {
+                results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits),
+                        new ArrayList<>(), new ArrayList<>()));
+            }
         }
         return results.stream();
     }

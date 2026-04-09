@@ -112,15 +112,17 @@ def plot_throughput_scaling(results: dict, output_dir: Path) -> None:
 # ---------------------------------------------------------------------------
 
 def plot_latency_per_node(results: dict, output_dir: Path) -> None:
-    data = _extract(results, "ms_per_node")
+    data = _extract(results, "total_time_s")
     fig, ax = plt.subplots(figsize=(8, 5))
 
     for i, (strat, (ns, means, cis)) in enumerate(data.items()):
         ns = np.array(ns); means = np.array(means); cis = np.array(cis)
+        # convert seconds → milliseconds
+        means_ms = means * 1000; cis_ms = cis * 1000
         color = _color(i)
-        ax.plot(ns, means, label=_label(strat), color=color,
+        ax.plot(ns, means_ms, label=_label(strat), color=color,
                 linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, np.maximum(means - cis, 1e-6), means + cis,
+        ax.fill_between(ns, np.maximum(means_ms - cis_ms, 1e-6), means_ms + cis_ms,
                         alpha=0.18, color=_lighten(color))
 
     ax.set_xscale("log", base=2)
@@ -128,8 +130,8 @@ def plot_latency_per_node(results: dict, output_dir: Path) -> None:
     ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
     ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
-    ax.set_ylabel("Latency (ms / node)", fontsize=11)
-    ax.set_title("Per-node inference latency vs N (± 95 % CI)", fontsize=12)
+    ax.set_ylabel("Total inference time (ms)", fontsize=11)
+    ax.set_title("Total inference latency vs N (± 95 % CI)", fontsize=12)
     ax.legend(fontsize=10)
     ax.grid(True, which="both", linestyle="--", alpha=0.3)
     fig.tight_layout()
@@ -364,22 +366,12 @@ def plot_all(results_json_path: str | Path, output_dir: Path | None = None) -> P
     stem = results_json_path.stem
     print(f"Generating inference experiment plots → {output_dir}/")
 
-    plot_throughput_scaling(results, output_dir)
     plot_latency_per_node(results, output_dir)
     plot_accuracy(results, output_dir)
-    plot_memory(results, output_dir)
-    plot_batch_latency(results, output_dir)
-    plot_throughput_bars(results, output_dir)
-    plot_speedup(results, output_dir)
 
     plots = [
-        "inference_throughput_scaling.png",
         "inference_latency_per_node.png",
         "inference_accuracy.png",
-        "inference_memory.png",
-        "inference_batch_latency.png",
-        "inference_throughput_bars.png",
-        "inference_speedup.png",
     ]
     for p in plots:
         print(f"  {p}")
