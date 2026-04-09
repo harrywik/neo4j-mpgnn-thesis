@@ -1,0 +1,25 @@
+# ===========================================================================
+# Neo4j configuration required by the GNN inference plugin
+# ===========================================================================
+#
+# Copy the relevant lines into your server's neo4j.conf
+# (typically /var/lib/neo4j/conf/neo4j.conf).
+#
+# Each server.jvm.additional entry must be on its own line.
+# Restart Neo4j after editing.
+# ===========================================================================
+
+# --- Enable the Java Vector API (required for SIMD-accelerated inference) ---
+server.jvm.additional=--add-modules=jdk.incubator.vector
+
+# --- Tell the plugin where to find / store model files ---------------------
+# Point this to a directory the Neo4j process can read and write.
+# The upload procedure writes spec.json + weights.bin under <dir>/<modelName>/.
+server.jvm.additional=-DNEO4J_GNN_MODEL_DIR=/var/lib/neo4j/gnn-models
+
+# --- Plugin JAR -------------------------------------------------------------
+# Copy the built JAR into the plugins directory:
+#   cp neo4j-gcn-plugin-1.0.0.jar /var/lib/neo4j/plugins/
+#
+# Then allow the procedures in neo4j.conf:
+dbms.security.procedures.unrestricted=gnnProcedures.*

@@ -112,7 +112,6 @@ inference_experiment:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.inference_experiment \
 		--dataset src/configs/inference/datasets/$(INFERENCE_DATASET).json \
 		--model   src/configs/inference/models/$(INFERENCE_MODEL).json \
-		--output_dir $(INFERENCE_OUTPUT)
 
 inference_plots:
 	@if [ -z "$(INFERENCE_RESULTS)" ]; then \

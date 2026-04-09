@@ -680,13 +680,33 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
 # Save results
 # ---------------------------------------------------------------------------
 
+def _next_run_dir(output_dir: Path) -> Path:
+    """Return a fresh run_N_YYYY-MM-DD subdirectory inside *output_dir*."""
+    from datetime import date
+    output_dir.mkdir(parents=True, exist_ok=True)
+    existing = []
+    for p in output_dir.iterdir():
+        if p.is_dir() and p.name.startswith("run_"):
+            try:
+                existing.append(int(p.name.split("_")[1]))
+            except (ValueError, IndexError):
+                pass
+    next_id = (max(existing) + 1) if existing else 0
+    date_str = date.today().isoformat()
+    run_dir = output_dir / f"run_{next_id}_{date_str}"
+    run_dir.mkdir(parents=True, exist_ok=False)
+    return run_dir
+
+
 def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str) -> None:
     ds_name = cfg["dataset"].get("dataset_name", "dataset")
-    mdl_name = cfg["model"].get("model_class", "model")
+    model_class = cfg["model"].get("model_class", "model")
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_path = Path(output_dir) / f"{ds_name}_{mdl_name}_{ts}.json"
-    out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    run_dir = _next_run_dir(Path(output_dir))
+
+    json_name = f"{ds_name}_{model_class}_{ts}.json"
+    out_path = run_dir / json_name
     serialisable = {
         str(N): {s: agg for s, agg in by_strat.items()}
         for N, by_strat in all_results.items()
@@ -696,7 +716,7 @@ def save_results_and_plot(all_results: dict, cfg: dict, output_dir: str) -> None
     print(f"\nResults saved → {out_path}")
 
     from comparison_experiments.inference_experiment_plots import plot_all
-    plot_all(out_path)
+    plot_all(out_path, output_dir=run_dir)
 
 
 # ---------------------------------------------------------------------------
@@ -709,8 +729,8 @@ def main() -> None:
                         help="Path to inference dataset config (src/configs/inference/datasets/*.json)")
     parser.add_argument("--model", required=True,
                         help="Path to inference model config (src/configs/inference/models/*.json)")
-    parser.add_argument("--output_dir", default="results/inference_comparison",
-                        help="Directory to write result JSON (default: results/inference_comparison)")
+    parser.add_argument("--output_dir", default="experiment_results/inference_comparison",
+                        help="Directory to write run_N_DATE folders into (default: experiment_results/inference_comparison)")
     args = parser.parse_args()
 
     cfg = load_all_configs(args.dataset, args.model)
