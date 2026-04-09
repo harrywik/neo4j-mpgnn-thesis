@@ -269,3 +269,72 @@ def create_inference_spec(
     return os.path.abspath(output_dir)
 
 
+# ---------------------------------------------------------------------------
+# Public API — Bolt-based (upload to remote Neo4j)
+# ---------------------------------------------------------------------------
+
+def upload_inference_spec(
+    model: nn.Module,
+    model_name: str,
+    driver,
+    *,
+    activation: str = "relu",
+    num_hops: Optional[int] = None,
+    max_neighbors: int = 10,
+    database: Optional[str] = None,
+) -> None:
+    """
+    Build the inference spec and weights in memory and upload them to Neo4j
+    via the Bolt connection, without writing any files to disk.
+
+    The Neo4j server must have the ``gnnProcedures.model.upload`` procedure
+    available (requires the GNN plugin to be installed).  The server writes
+    the files to ``NEO4J_GNN_MODEL_DIR/<model_name>/`` and caches them so
+    ``gnnProcedures.inference.run`` can use the model immediately.
+
+    Parameters
+    ----------
+    model
+        Trained PyTorch model.
+    model_name
+        Name passed to ``gnnProcedures.inference.run`` in Cypher.
+    driver
+        A ``neo4j.Driver`` instance pointing at the Neo4j server.
+    database
+        Neo4j database name.  Defaults to the driver's default database.
+    """
+    spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors)
+    tensors = _referenced_tensors(model, spec)
+
+    spec_json = json.dumps(spec, indent=2)
+
+    # Serialise weights to an in-memory bytes buffer using the same format as
+    # _write_weights so the Java parseWeightsFromChannel parser can read it.
+    import io
+    buf = io.BytesIO()
+    buf.write(struct.pack("<i", len(tensors)))
+    for key, tensor in tensors.items():
+        key_bytes = key.encode("utf-8")
+        buf.write(struct.pack("<i", len(key_bytes)))
+        buf.write(key_bytes)
+        data = tensor.detach().cpu().numpy()
+        shape = list(data.shape)
+        buf.write(struct.pack("<i", len(shape)))
+        buf.write(struct.pack(f"<{len(shape)}i", *shape))
+        buf.write(data.astype("<f4").tobytes())
+    weights_bytes = buf.getvalue()
+
+    with driver.session(**({"database": database} if database else {})) as session:
+        result = session.run(
+            "CALL gnnProcedures.model.upload($name, $spec, $weights) "
+            "YIELD modelDir, numTensors",
+            name=model_name,
+            spec=spec_json,
+            weights=weights_bytes,
+        )
+        record = result.single()
+
+    _print_summary(spec, tensors, f"Bolt → {record['modelDir']} ({record['numTensors']} tensors)")
+
+
+
