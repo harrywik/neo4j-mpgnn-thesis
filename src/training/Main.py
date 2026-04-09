@@ -34,6 +34,13 @@ from comparison_experiments.sampler_comparison.comparison_plots import (
 )
 from Neo4jConnection import Neo4jConnection
 from neo4j_pyg.deprecated.Neo4jNeighborSampler import Neo4jNeighborSampler
+from neo4j_pyg.models.gnn_config import (
+    DualModeGNNConfig,
+    GNNLayerDef,
+    GenericGNN,
+    InferenceGNNConfig,
+    NeighborAggGNNConfig,
+)
 from neo4j_pyg.neo4j_model_interface.preagg_adapters import HybridAggModel, to_preaggregated_first_layer
 from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import Neo4jGraphSAINTRandomWalkSampler
 from training.DistributedTraining import DistributedTrainer
@@ -141,8 +148,41 @@ def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
 
 
 def _make_model(impl_cfg: dict, dataset_cfg: dict):
-    from training.registry import MODELS, filter_kwargs
     m_cfg = impl_cfg["model"]
+
+    # ------------------------------------------------------------------
+    # Pydantic layer-based path: activated when "layers" is present.
+    # Selects the appropriate config class based on which DB modes are
+    # declared; raises a clear ValueError at construction time if the
+    # layer types are incompatible with the requested mode.
+    # ------------------------------------------------------------------
+    if "layers" in m_cfg:
+        in_dim = dataset_cfg["feature_dim"]
+        wants_preagg = m_cfg.get("to_preaggregated_first_layer", False)
+        wants_inference = m_cfg.get("to_db_inference", False)
+        num_classes = m_cfg.get("num_classes", dataset_cfg["nbr_classes"])
+
+        layer_key = {**m_cfg, "num_classes": num_classes}
+        if wants_preagg and wants_inference:
+            config = DualModeGNNConfig(**layer_key)
+        elif wants_preagg:
+            config = NeighborAggGNNConfig(**layer_key)
+        elif wants_inference:
+            config = InferenceGNNConfig(**layer_key)
+        else:
+            # No DB mode declared — build without DB-mode enforcement.
+            layers = [GNNLayerDef(**l) for l in m_cfg["layers"]]
+            return GenericGNN(layers, in_dim, num_classes)
+
+        model = config.build_model(in_dim)
+        if wants_preagg:
+            result = to_preaggregated_first_layer(model)
+            model = result.model
+        return model
+
+    # ------------------------------------------------------------------
+    # Existing class_name registry path — fully backwards-compatible.
+    # ------------------------------------------------------------------
     cls = MODELS[m_cfg["class_name"]]
     kwargs = {
         "in_dim":      dataset_cfg["feature_dim"],
