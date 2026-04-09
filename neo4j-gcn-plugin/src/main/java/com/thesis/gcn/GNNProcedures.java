@@ -306,6 +306,21 @@ public class GNNProcedures {
         }
     }
 
+    /**
+     * Result row for {@link #uploadModel}: one record confirming the upload.
+     */
+    public static class UploadModelResult {
+        /** The resolved model directory path on the Neo4j server. */
+        public final String modelDir;
+        /** Number of weight tensors loaded. */
+        public final Long numTensors;
+
+        public UploadModelResult(String modelDir, Long numTensors) {
+            this.modelDir = modelDir;
+            this.numTensors = numTensors;
+        }
+    }
+
     // -------------------------------------------------------------------------
     // Procedure
     // -------------------------------------------------------------------------
@@ -732,6 +747,47 @@ public class GNNProcedures {
      * ) YIELD nodeId, predictedClass, logits
      * }</pre>
      */
+    @Procedure(name = "gnnProcedures.model.upload", mode = Mode.READ)
+    @Description(
+        "Upload a GNN model spec and weights from a remote client over the Bolt connection. "
+        + "Parses both payloads, writes them to NEO4J_GNN_MODEL_DIR/<modelName>/ on the server, "
+        + "and populates the in-memory cache so inference.run can use the model immediately."
+    )
+    public Stream<UploadModelResult> uploadModel(
+            @Name("modelName")   String modelName,
+            @Name("specJson")    String specJson,
+            @Name("weightsBytes") byte[] weightsBytes
+    ) {
+        try {
+            String modelDir = resolveModelDir(modelName);
+            new java.io.File(modelDir).mkdirs();
+
+            // Parse from in-memory bytes
+            GNNSpec spec = parseSpecFromNode(new ObjectMapper().readTree(specJson));
+            Map<String, Tensor> weights;
+            try (java.io.ByteArrayInputStream bais = new java.io.ByteArrayInputStream(weightsBytes);
+                 java.nio.channels.ReadableByteChannel ch = java.nio.channels.Channels.newChannel(bais)) {
+                weights = parseWeightsFromChannel(ch);
+            }
+
+            // Write to disk for persistence across Neo4j restarts
+            try (java.io.FileWriter fw = new java.io.FileWriter(new java.io.File(modelDir, "spec.json"))) {
+                fw.write(specJson);
+            }
+            try (java.io.FileOutputStream fos = new java.io.FileOutputStream(new java.io.File(modelDir, "weights.bin"))) {
+                fos.write(weightsBytes);
+            }
+
+            // Populate caches so inference.run works immediately without re-reading disk
+            SPEC_CACHE.put(modelDir, spec);
+            WEIGHTS_CACHE.put(modelDir, weights);
+
+            return Stream.of(new UploadModelResult(modelDir, (long) weights.size()));
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to upload model '" + modelName + "'.", e);
+        }
+    }
+
     @Procedure(name = "gnnProcedures.inference.run", mode = Mode.READ)
     @Description(
         "GNN inference for any architecture whose aggregation types are in "

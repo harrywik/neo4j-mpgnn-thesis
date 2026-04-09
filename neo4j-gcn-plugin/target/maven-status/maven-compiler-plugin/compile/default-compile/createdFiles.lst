@@ -3,6 +3,7 @@ com/thesis/gcn/GNNProcedures$NeighborSampleResult.class
 com/thesis/gcn/GNNProcedures$LayerSpec.class
 com/thesis/gcn/GNNProcedures$SampledFetchBatchResult.class
 com/thesis/gcn/GNNProcedures$Tensor.class
+com/thesis/gcn/GNNProcedures$UploadModelResult.class
 com/thesis/gcn/GNNProcedures$PartitionResult.class
 com/thesis/gcn/GNNProcedures$AggResult.class
 com/thesis/gcn/GNNProcedures$MetisGraph.class
