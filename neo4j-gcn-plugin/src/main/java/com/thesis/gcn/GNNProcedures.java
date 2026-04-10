@@ -1000,41 +1000,14 @@ public class GNNProcedures {
             }
         }
 
-        // ── Step 4: Build subgraph representation for verification ──────────
-
-        List<Long> orderedNodes = new ArrayList<>();
-        for (List<Long> hop : hopNodes) {
-            orderedNodes.addAll(hop);
-        }
-        List<List<Long>> edgePairs = new ArrayList<>();
-        for (List<Long> hop : hopNodes) {
-            for (Long srcId : hop) {
-                List<Long> nbrIds = sampledIncoming.get(srcId);
-                if (nbrIds == null) continue;
-                for (Long nbrId : nbrIds) {
-                    List<Long> pair = new ArrayList<>(2);
-                    pair.add(nbrId);
-                    pair.add(srcId);
-                    edgePairs.add(pair);
-                }
-            }
-        }
-
-        // ── Step 5: Emit predictions for seed nodes ───────────────────────────
+        // ── Step 4: Emit predictions for seed nodes ───────────────────────────
 
         List<GNNInferenceResult> results = new ArrayList<>(seedIds.size());
-        boolean first = true;
         for (Long seedId : seedIds) {
             float[] logits = currentH.get(seedId);
             if (logits == null) continue;
-            if (first) {
-                results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits),
-                        orderedNodes, edgePairs));
-                first = false;
-            } else {
-                results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits),
-                        new ArrayList<>(), new ArrayList<>()));
-            }
+            results.add(new GNNInferenceResult(seedId, argmax(logits), toDoubleList(logits),
+                    new ArrayList<>(), new ArrayList<>()));
         }
         return results.stream();
     }
