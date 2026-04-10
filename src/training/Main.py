@@ -34,7 +34,7 @@ from comparison_experiments.sampler_comparison.comparison_plots import (
 )
 from Neo4jConnection import Neo4jConnection
 from neo4j_pyg.deprecated.Neo4jNeighborSampler import Neo4jNeighborSampler
-from neo4j_pyg.models.gnn_config import (
+from neo4j_pyg.neo4j_model_interface.neo4j_gnn_requirements import (
     DualModeGNNConfig,
     GNNLayerDef,
     GenericGNN,

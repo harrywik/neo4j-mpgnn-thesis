@@ -1,7 +1,7 @@
 from .GCN import GCN
 from neo4j_pyg.neo4j_model_interface.adapters import PreAggGCNConvAdapter
 from neo4j_pyg.neo4j_model_interface.hybrid_model import HybridAggModel
-from .gnn_config import (
+from neo4j_pyg.neo4j_model_interface.neo4j_gnn_requirements import (
     ConvLayerType,
     Activation,
     GNNLayerDef,

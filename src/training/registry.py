@@ -100,7 +100,7 @@ except ImportError:
 # Models
 # ---------------------------------------------------------------------------
 from neo4j_pyg.models.GCN import GCN
-from neo4j_pyg.models.gnn_config import GenericGNN
+from neo4j_pyg.neo4j_model_interface.neo4j_gnn_requirements import GenericGNN
 
 MODELS: Dict[str, Type] = {
     "GCN": GCN,
