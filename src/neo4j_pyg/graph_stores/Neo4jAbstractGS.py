@@ -110,54 +110,12 @@ class Neo4jAbstractGS(GraphStore, ABC):
 
         return torch.tensor(seed_ids, dtype=torch.int64)
     
-    def sample_from_nodes(self, kwargs, query: str):
-        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
-            t_send = time.monotonic()
-            result = session.run(query, **kwargs)
-            t_query_sent = time.monotonic()
-
-            first = result.peek()
-            t_first_record = time.monotonic()
-
-            edges = [[r["src"], r["dst"]] for r in result] if first is not None else []
-            t_all_records = time.monotonic()
-
-        if self.measurer is not None:
-            self.measurer.log_event("topo_query_sent_ms", (t_query_sent - t_send) * 1000)
-            self.measurer.log_event("topo_first_record_ms", (t_first_record - t_query_sent) * 1000)
-            self.measurer.log_event("topo_transfer_ms", (t_all_records - t_first_record) * 1000)
-
-        t_etl_start = time.monotonic()
-        if self.measurer is not None:
-            self.measurer.log_event("start_etl", 1)
-            self.measurer.set_phase("etl")
-
-        if len(edges) == 0:
-            if self.measurer is not None:
-                self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
-                self.measurer.log_event("end_etl", 1)
-                self.measurer.set_phase("sampling")
-            empty = torch.zeros((2, 0), dtype=torch.long)
-            return torch.tensor([], dtype=torch.long), empty
-
-        edge_index_global = torch.tensor(edges, dtype=torch.long).t().contiguous()
-        unique_nodes, local_indices = torch.unique(edge_index_global, return_inverse=True)
-        edge_index_local = local_indices.view(2, -1)
-
-        if self.measurer is not None:
-            self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
-            self.measurer.log_event("end_etl", 1)
-            self.measurer.set_phase("sampling")
-
-        return unique_nodes, edge_index_local
-
-    def fetch_ordered_subgraph(self, query: str, kwargs: dict) -> dict | None:
+    def sample_from_nodes(self, query: str, kwargs: dict) -> dict | None:
         """Execute a subgraph-sampling query and return its single result record.
 
-        Used by :class:`Neo4jNeighborSampler`, whose Cypher query returns one
-        record containing ``ordered_nodes`` (global IDs in encounter order) and
-        ``edge_pairs`` (list of ``[src_id, dst_id]``), rather than one row per
-        edge as in :meth:`sample_from_nodes`.
+        Executes a Cypher query that returns a single record containing
+        ``ordered_nodes`` (global IDs in encounter order) and
+        ``edge_pairs`` (list of ``[src_id, dst_id]``).
 
         Sub-phase timings (query dispatch, first-record latency, transfer)
         are logged to ``self.measurer`` when it is set.  When the query was
@@ -171,8 +129,6 @@ class Neo4jAbstractGS(GraphStore, ABC):
             t_send = time.monotonic()
             result = session.run(query, **kwargs)
 
-            # Consume all records first — the driver only populates
-            # summary.profile after every record has been received.
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
@@ -192,7 +148,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
     def build_topo_etl(
         self, record: dict | None, fallback_seeds: torch.Tensor
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Convert a raw ``fetch_ordered_subgraph`` record into PyG tensors.
+        """Convert a raw ``sample_from_nodes`` record into PyG tensors.
 
         This is the topology ETL step: pure Python / C++ work that happens
         *after* the Neo4j round-trip completes.  Emits ``start_etl`` /

@@ -185,7 +185,7 @@ class Neo4jGraphSAINTSampler(torch.utils.data.DataLoader):
             return None
 
         t_subgraph = time.monotonic()
-        subgraph_record = self.graph_store.fetch_ordered_subgraph(
+        subgraph_record = self.graph_store.sample_from_nodes(
             self._subgraph_query, {"node_ids": node_ids}
         )
         if self.measurer is not None:
@@ -502,7 +502,7 @@ class Neo4jGraphSAINTRandomWalkSampler(Neo4jGraphSAINTSampler):
                 ``False``.
         """
         if logged:
-            record = self.graph_store.fetch_ordered_subgraph(
+            record = self.graph_store.sample_from_nodes(
                 self._walk_query, {"batch_size": self._batch_size}
             )
         else:
