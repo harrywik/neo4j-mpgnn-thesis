@@ -141,16 +141,6 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         )
 
     @cached_property
-    def _query_x_raw(self) -> str:
-        prefix = "PROFILE " if self.profile else ""
-        lf = f":{self.node_label}" if self.node_label else ""
-        return (
-            f"{prefix}UNWIND $node_ids AS nid "
-            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
-            f"RETURN nid AS id, n.{self.feature_property} AS value"
-        )
-
-    @cached_property
     def _query_sampled_gcnnorm_fetch(self) -> str:
         prefix = "PROFILE " if self.profile else ""
         return (
@@ -304,34 +294,6 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
 
         return result_map
 
-    def _get_raw_features(self, nids: List[int]) -> Dict[int, np.ndarray]:
-        if not nids:
-            return {}
-
-        with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
-            t_send = time.monotonic()
-            result = session.run(self._query_x_raw, node_ids=nids)
-            records = list(result)
-            t_all_records = time.monotonic()
-            summary = result.consume()
-
-        total_feat_fetch_ms = (t_all_records - t_send) * 1000
-        if self.measurer is not None:
-            self.measurer.log_event("remote_feature_recieved", 1)
-            self.measurer.log_event("feat_fetch_ms", total_feat_fetch_ms)
-            self._log_extra_feature_fetch_metrics(records, total_feat_fetch_ms, is_label=False, paired=False)
-        if self.profile_accumulator is not None:
-            self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
-
-        result_map: Dict[int, np.ndarray] = {}
-        if not records:
-            return result_map
-
-        feat_matrix = self._decode_feature_matrix(records, "value")
-        for i, rec in enumerate(records):
-            result_map[int(rec["id"])] = feat_matrix[i]
-        return result_map
-
     def _fetch_sampled_gcnnorm_bundle(
         self,
         node_ids: List[int],
@@ -365,7 +327,8 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_fetch_ms)
-            self._log_extra_feature_fetch_metrics(records, total_fetch_ms, is_label=False, paired=include_label)
+            self.measurer.log_event("udp_agg_ms", total_fetch_ms)
+            self.measurer.log_event("udp_records", len(records))
         if self.profile_accumulator is not None:
             self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
 
@@ -424,15 +387,4 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             ])
         return np.asarray([rec[field_name] for rec in records], dtype=np.float32)
 
-    def _log_extra_feature_fetch_metrics(
-        self,
-        records: List[object],
-        total_fetch_ms: float,
-        *,
-        is_label: bool,
-        paired: bool,
-    ) -> None:
-        if self.measurer is None or is_label:
-            return
-        self.measurer.log_event("udp_agg_ms", total_fetch_ms)
-        self.measurer.log_event("udp_records", len(records))
+
