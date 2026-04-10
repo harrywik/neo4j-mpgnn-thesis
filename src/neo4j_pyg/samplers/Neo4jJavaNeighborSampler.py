@@ -54,7 +54,7 @@ class Neo4jJavaNeighborSampler(BaseSampler):
         seeds = ns_input.node.to(torch.int64)
         seed_time = getattr(ns_input, "time", None)
 
-        record = self.graph_store.fetch_ordered_subgraph(
+        record = self.graph_store.sample_from_nodes(
             self.query,
             {
                 "seed_ids": seeds.tolist(),
