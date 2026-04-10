@@ -188,19 +188,18 @@ def _referenced_tensors(model: nn.Module, spec: dict) -> dict[str, "torch.Tensor
     return {k: state[k] for k in referenced}
 
 
-def _write_weights(path: str, tensors: dict[str, "torch.Tensor"]) -> None:
-    """Write *tensors* to a keyed binary file at *path*."""
-    with open(path, "wb") as f:
-        f.write(struct.pack("<i", len(tensors)))
-        for key, tensor in tensors.items():
-            key_bytes = key.encode("utf-8")
-            f.write(struct.pack("<i", len(key_bytes)))
-            f.write(key_bytes)
-            shape = list(tensor.shape)
-            f.write(struct.pack("<i", len(shape)))
-            if shape:
-                f.write(struct.pack(f"<{len(shape)}i", *shape))
-            f.write(tensor.detach().cpu().numpy().astype("<f4").tobytes())
+def _write_weights(f, tensors: dict[str, "torch.Tensor"]) -> None:
+    """Serialise *tensors* in the keyed binary format to file-like *f*."""
+    f.write(struct.pack("<i", len(tensors)))
+    for key, tensor in tensors.items():
+        key_bytes = key.encode("utf-8")
+        f.write(struct.pack("<i", len(key_bytes)))
+        f.write(key_bytes)
+        shape = list(tensor.shape)
+        f.write(struct.pack("<i", len(shape)))
+        if shape:
+            f.write(struct.pack(f"<{len(shape)}i", *shape))
+        f.write(tensor.detach().cpu().numpy().astype("<f4").tobytes())
 
 
 def _print_summary(spec: dict, tensors: dict, label: str) -> None:
@@ -310,7 +309,8 @@ def create_inference_spec(
     with open(os.path.join(output_dir, "spec.json"), "w") as f:
         json.dump(spec, f, indent=2)
 
-    _write_weights(os.path.join(output_dir, "weights.bin"), tensors)
+    with open(os.path.join(output_dir, "weights.bin"), "wb") as f:
+        _write_weights(f, tensors)
 
     _print_summary(spec, tensors, f"files → {os.path.abspath(output_dir)}/")
     return os.path.abspath(output_dir)
@@ -357,19 +357,8 @@ def upload_inference_spec(
 
     spec_json = json.dumps(spec, indent=2)
 
-    # Serialise weights to an in-memory bytes buffer using the same format as
-    # _write_weights so the Java parseWeightsFromChannel parser can read it.
     buf = io.BytesIO()
-    buf.write(struct.pack("<i", len(tensors)))
-    for key, tensor in tensors.items():
-        key_bytes = key.encode("utf-8")
-        buf.write(struct.pack("<i", len(key_bytes)))
-        buf.write(key_bytes)
-        data = tensor.detach().cpu().numpy()
-        shape = list(data.shape)
-        buf.write(struct.pack("<i", len(shape)))
-        buf.write(struct.pack(f"<{len(shape)}i", *shape))
-        buf.write(data.astype("<f4").tobytes())
+    _write_weights(buf, tensors)
     weights_bytes = buf.getvalue()
 
     with driver.session(**({"database": database} if database else {})) as session:
