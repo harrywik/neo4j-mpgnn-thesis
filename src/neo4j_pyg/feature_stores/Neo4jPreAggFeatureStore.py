@@ -29,10 +29,10 @@ FS_DIR = Path(__file__).resolve().parent.parent
 if str(FS_DIR) not in sys.path:
     sys.path.insert(0, str(FS_DIR))
 
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 
 
-class Neo4jPreAggFeatureStore(Neo4jAbstractFS):
+class Neo4jPreAggFeatureStore(Neo4jFS):
     """Feature store that retrieves server-side pre-aggregated node features.
 
     Instead of fetching raw features for every sampled node, this store
@@ -54,7 +54,7 @@ class Neo4jPreAggFeatureStore(Neo4jAbstractFS):
         When ``aggregation_mode="gcnNorm"``, use the improved GCN self-loop
         weight of ``2`` instead of ``1``.
     All remaining keyword arguments are forwarded verbatim to
-    :class:`Neo4jAbstractFS`.
+    :class:`Neo4jFS`.
     """
 
     def __init__(

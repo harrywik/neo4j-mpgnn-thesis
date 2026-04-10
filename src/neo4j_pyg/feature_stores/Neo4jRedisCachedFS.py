@@ -22,10 +22,10 @@ from torch_geometric.typing import FeatureTensorType
 
 from benchmarking_tools import Measurer
 from neo4j_pyg.feature_caches.Neo4jRedisCache import Neo4jRedisCache
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 
 
-class Neo4jRedisCachedFS(Neo4jAbstractFS):
+class Neo4jRedisCachedFS(Neo4jFS):
     """Feature store with L1 per-worker LRU + L2 shared Redis cache.
 
     Parameters
@@ -73,7 +73,6 @@ class Neo4jRedisCachedFS(Neo4jAbstractFS):
             key_prefix=redis_key_prefix,
             ttl_seconds=redis_ttl_seconds,
             l1_maxsize=l1_maxsize,
-            label_map=label_map,
             memory_GB=memory_GB,
         )
         super().__init__(
@@ -124,13 +123,7 @@ class Neo4jRedisCachedFS(Neo4jAbstractFS):
             records = list(session.run(all_labels_query))
 
         label_map = {rec["label"]: i for i, rec in enumerate(records)}
-        # Overwrite _labels on both the FS and the cache (they share the same
-        # dict via Neo4jAbstractFS.__init__, but set both to be safe).
         self._labels.update(label_map)
-        self._redis_cache._labels.update(label_map)
-
-    def _prefill_hot_cache(self, graph_name: str, k: int = 0, **kwargs) -> None:
-        """No-op: Redis cache warms up on-demand during training."""
 
     # ------------------------------------------------------------------
     # Vectorised hot path
