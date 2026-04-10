@@ -248,6 +248,30 @@ public class GNNProcedures {
     }
 
     /**
+     * Result of multi-hop neighbour sampling — shared between
+     * {@link #neighborSample} and {@link #runEngine}.
+     */
+    private static final class SampledSubgraph {
+        /** Nodes grouped by hop: index 0 = seeds, index 1 = hop-1 new nodes, … */
+        final List<List<Long>>      hopNodes;
+        /** nodeId → sampled incoming neighbour IDs (populated for every node whose rels were traversed). */
+        final Map<Long, List<Long>> sampledIncoming;
+        /**
+         * All encountered nodes in insertion order (seeds first, then hop-1, hop-2, …).
+         * Backed by {@link LinkedHashMap} so {@code keySet()} preserves encounter order.
+         */
+        final Map<Long, Node>       allNodes;
+
+        SampledSubgraph(List<List<Long>> hopNodes,
+                        Map<Long, List<Long>> sampledIncoming,
+                        Map<Long, Node> allNodes) {
+            this.hopNodes        = hopNodes;
+            this.sampledIncoming = sampledIncoming;
+            this.allNodes        = allNodes;
+        }
+    }
+
+    /**
      * Flat tensor storage: shape + row-major float32 data.
      * Vectors (rank-1) and matrices (rank-2) are both stored here.
      * Data stays in its native float32 precision for cache efficiency and SIMD.
@@ -423,84 +447,39 @@ public class GNNProcedures {
         RelationshipType relType = hasEdgeType ? RelationshipType.withName(edgeType) : null;
         Random rng = new Random(randomSeed == null ? 42L : randomSeed);
 
-        // Encounter-order node set mirrors pyg-lib Mapper insertion order.
-        LinkedHashSet<Long> visited = new LinkedHashSet<>();
-        List<Node> frontier = new ArrayList<>();
-
-        // Seed initialization keeps user-provided order.
-        for (Long seedId : seedIds) {
-            Node seedNode = tx.findNode(label, nodeIdKey, seedId);
-            if (seedNode == null) {
-                continue;
-            }
-            Long globalSeedId = getNodeIdValue(seedNode, nodeIdKey);
-            if (globalSeedId == null) {
-                continue;
-            }
-            frontier.add(seedNode);
-            visited.add(globalSeedId);
-        }
-
-        List<List<Long>> edgePairs = new ArrayList<>();
-        List<Long> frontierNodeIds = new ArrayList<>();
-        List<List<Long>> nodesByHop = new ArrayList<>();
-        nodesByHop.add(new ArrayList<>(visited)); // hop 0 = seeds
-
-        // Hop-wise expansion with per-hop fanout list.
         List<Long> fanouts = (numNeighbors == null) ? Collections.singletonList(-1L) : numNeighbors;
-        for (Long kObj : fanouts) {
-            long k = (kObj == null) ? -1L : kObj;
-            if (frontier.isEmpty()) {
-                break;
-            }
+        SampledSubgraph sg = sampleSubgraph(seedIds, nodeIdKey, label, relType, hasEdgeType, fanouts, rng);
 
-            List<Node> nextFrontier = new ArrayList<>();
-            LinkedHashSet<Long> nextFrontierIds = new LinkedHashSet<>();
-
-            for (Node src : frontier) {
-                Iterable<Relationship> rels = hasEdgeType
-                        ? src.getRelationships(Direction.INCOMING, relType)
-                        : src.getRelationships(Direction.INCOMING);
-
-                List<Relationship> picked = sampleRelationships(rels, k, rng, label);
-
-                Long srcId = getNodeIdValue(src, nodeIdKey);
-                if (srcId == null) {
-                    continue;
-                }
-
-                for (Relationship rel : picked) {
-                    Node nbr = rel.getStartNode();
-                    Long nbrId = getNodeIdValue(nbr, nodeIdKey);
-                    if (nbrId == null) {
-                        continue;
-                    }
-
-                    // Same orientation used by current Python ETL: [neighbor, seed/src].
+        // Derive flat edge pairs from sampledIncoming ([neighbor, src] orientation matches Python ETL).
+        List<List<Long>> edgePairs = new ArrayList<>();
+        for (List<Long> hop : sg.hopNodes) {
+            for (Long srcId : hop) {
+                List<Long> nbrIds = sg.sampledIncoming.get(srcId);
+                if (nbrIds == null) continue;
+                for (Long nbrId : nbrIds) {
                     List<Long> pair = new ArrayList<>(2);
                     pair.add(nbrId);
                     pair.add(srcId);
                     edgePairs.add(pair);
-
-                    // New-node frontier dedup in first-encounter order.
-                    if (!visited.contains(nbrId) && nextFrontierIds.add(nbrId)) {
-                        nextFrontier.add(nbr);
-                    }
                 }
             }
+        }
 
-            visited.addAll(nextFrontierIds);
-            frontier = nextFrontier;
-            frontierNodeIds = new ArrayList<>(nextFrontierIds);
-            nodesByHop.add(frontierNodeIds);
+        // Frontier = last non-empty hop layer beyond the seed layer.
+        List<Long> frontierNodeIds = new ArrayList<>();
+        for (int i = sg.hopNodes.size() - 1; i > 0; i--) {
+            if (!sg.hopNodes.get(i).isEmpty()) {
+                frontierNodeIds = sg.hopNodes.get(i);
+                break;
+            }
         }
 
         return Stream.of(
                 new NeighborSampleResult(
-                        new ArrayList<>(visited),
+                        new ArrayList<>(sg.allNodes.keySet()),
                         edgePairs,
                         Boolean.TRUE.equals(returnFrontier) ? frontierNodeIds : new ArrayList<>(),
-                        nodesByHop
+                        sg.hopNodes
                 )
         );
     }
@@ -936,51 +915,12 @@ public class GNNProcedures {
 
         // ── Step 1: Pre-fetch numHops-hop subgraph ────────────────────────────
 
-        List<List<Long>>      hopNodes        = new ArrayList<>(numHops + 1);
-        Map<Long, List<Long>> sampledIncoming = new HashMap<>();
-        Map<Long, Node>       allNodes        = new LinkedHashMap<>();
-
-        List<Long> seedLayer = new ArrayList<>();
-        for (Long sid : seedIds) {
-            Node n = tx.findNode(label, nodeIdKey, sid);
-            if (n == null) continue;
-            allNodes.put(sid, n);
-            seedLayer.add(sid);
-        }
-        hopNodes.add(seedLayer);
-
-        List<Node> frontier = new ArrayList<>(allNodes.values());
-        for (int h = 0; h < numHops; h++) {
-            List<Long> newLayer     = new ArrayList<>();
-            List<Node> nextFrontier = new ArrayList<>();
-
-            for (Node src : frontier) {
-                Long srcId = getNodeIdValue(src, nodeIdKey);
-                if (srcId == null) continue;
-
-                Iterable<Relationship> rels = hasEdgeType
-                        ? src.getRelationships(Direction.INCOMING, relType)
-                        : src.getRelationships(Direction.INCOMING);
-
-                List<Node> nbrs   = reservoirSample(rels, maxNeighbors, rng);
-                List<Long> nbrIds = new ArrayList<>(nbrs.size());
-
-                for (Node nbr : nbrs) {
-                    Long nbrId = getNodeIdValue(nbr, nodeIdKey);
-                    if (nbrId == null) continue;
-                    nbrIds.add(nbrId);
-                    if (!allNodes.containsKey(nbrId)) {
-                        allNodes.put(nbrId, nbr);
-                        newLayer.add(nbrId);
-                        nextFrontier.add(nbr);
-                    }
-                }
-                sampledIncoming.put(srcId, nbrIds);
-            }
-
-            hopNodes.add(newLayer);
-            frontier = nextFrontier;
-        }
+        SampledSubgraph sg = sampleSubgraph(
+                seedIds, nodeIdKey, label, relType, hasEdgeType,
+                Collections.nCopies(numHops, maxNeighbors), rng);
+        List<List<Long>>      hopNodes        = sg.hopNodes;
+        Map<Long, List<Long>> sampledIncoming = sg.sampledIncoming;
+        Map<Long, Node>       allNodes        = sg.allNodes;
 
         // ── Step 2: Extract raw features and in-degrees (float32) ─────────────
 
@@ -1102,6 +1042,82 @@ public class GNNProcedures {
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Multi-hop neighbour sampling shared by {@link #neighborSample} and
+     * {@link #runEngine}.
+     *
+     * <p>Uses {@link #reservoirSample} with no label filtering — correct for
+     * homogeneous graphs where every reachable node carries the same label.
+     *
+     * @param seedIds     application-level node IDs to start from
+     * @param nodeIdKey   property key holding the application-level ID
+     * @param label       Neo4j label used for seed index lookups
+     * @param relType     relationship type to traverse, or {@code null} for any
+     * @param hasEdgeType whether {@code relType} should be applied
+     * @param fanouts     max neighbours per hop ({@code -1} = unlimited); one entry per hop
+     * @param rng         RNG instance for reservoir sampling
+     */
+    private SampledSubgraph sampleSubgraph(
+            List<Long>       seedIds,
+            String           nodeIdKey,
+            Label            label,
+            RelationshipType relType,
+            boolean          hasEdgeType,
+            List<Long>       fanouts,
+            Random           rng
+    ) {
+        Map<Long, Node>       allNodes        = new LinkedHashMap<>();
+        List<List<Long>>      hopNodes        = new ArrayList<>(fanouts.size() + 1);
+        Map<Long, List<Long>> sampledIncoming = new HashMap<>();
+
+        // ── Seed layer ────────────────────────────────────────────────────────
+        List<Long> seedLayer = new ArrayList<>();
+        for (Long sid : seedIds) {
+            Node n = tx.findNode(label, nodeIdKey, sid);
+            if (n == null) continue;
+            allNodes.put(sid, n);
+            seedLayer.add(sid);
+        }
+        hopNodes.add(seedLayer);
+
+        // ── Hop-wise BFS expansion ────────────────────────────────────────────
+        List<Node> frontier = new ArrayList<>(allNodes.values());
+        for (Long kObj : fanouts) {
+            long k = (kObj == null) ? -1L : kObj;
+            List<Long> newLayer     = new ArrayList<>();
+            List<Node> nextFrontier = new ArrayList<>();
+
+            for (Node src : frontier) {
+                Long srcId = getNodeIdValue(src, nodeIdKey);
+                if (srcId == null) continue;
+
+                Iterable<Relationship> rels = hasEdgeType
+                        ? src.getRelationships(Direction.INCOMING, relType)
+                        : src.getRelationships(Direction.INCOMING);
+
+                List<Node> nbrs   = reservoirSample(rels, k, rng);
+                List<Long> nbrIds = new ArrayList<>(nbrs.size());
+
+                for (Node nbr : nbrs) {
+                    Long nbrId = getNodeIdValue(nbr, nodeIdKey);
+                    if (nbrId == null) continue;
+                    nbrIds.add(nbrId);
+                    if (!allNodes.containsKey(nbrId)) {
+                        allNodes.put(nbrId, nbr);
+                        newLayer.add(nbrId);
+                        nextFrontier.add(nbr);
+                    }
+                }
+                sampledIncoming.put(srcId, nbrIds);
+            }
+
+            hopNodes.add(newLayer);
+            frontier = nextFrontier;
+        }
+
+        return new SampledSubgraph(hopNodes, sampledIncoming, allNodes);
+    }
 
     /** Read a numeric node ID property as Long. */
     private Long getNodeIdValue(Node node, String nodeIdKey) {
