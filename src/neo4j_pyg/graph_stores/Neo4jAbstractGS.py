@@ -187,59 +187,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
             self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
 
         return records[0] if records else None
-    
-    def fetch_aggregated_features(self, query: str, kwargs: dict) -> dict[int, np.ndarray]:
-        """Execute an aggregation query and return parsed features by node id.
 
-        Used by :class:`Neo4jAggregationSampler`, whose Cypher query returns one
-        record per seed node containing the seed's global ID and its aggregated
-        feature vector.
-
-        Sub-phase timings (query dispatch, first-record latency, transfer) are
-        logged to ``self.measurer`` when it is set.  When the query was issued
-        with the ``PROFILE`` keyword and a
-        :class:`~benchmarking_tools.QueryProfileAccumulator` is attached, the
-        plan profile is accumulated for later averaging.
-
-        Returns a mapping ``{nodeId: aggregated_features}`` where each feature
-        vector is converted to ``np.float32``.
-        """
-        with self._get_driver().session(database=self.database_name, fetch_size=-1) as session:
-            t_send = time.monotonic()
-            result = session.run(query, **kwargs)
-
-            # Consume all records first — the driver only populates
-            # summary.profile after every record has been received.
-            records = list(result)
-            t_all_records = time.monotonic()
-            summary = result.consume()
-
-        # Client-side wall time: send → all records received (includes network + DB exec).
-        total_fetch_ms = (t_all_records - t_send) * 1000
-
-        if self.measurer is not None:
-            self.measurer.log_event("udp_agg_ms", total_fetch_ms)
-            self.measurer.log_event("udp_records", len(records))
-            self.measurer.log_event("agg_fetch_ms", total_fetch_ms)
-
-        if self.profile_accumulator is not None:
-            self.profile_accumulator.add(summary, "sampler", t_send, t_all_records)
-
-        pending_agg: dict[int, np.ndarray] = {}
-        for rec in records:
-            nid = int(rec["nodeId"])
-            feats = rec["aggregatedFeatures"]
-            if feats:
-                pending_agg[nid] = np.array(feats, dtype=np.float32)
-
-        return pending_agg
-
-    def fetch_aggregated_neighborhood(self, query: str, kwargs: dict) -> dict[int, np.ndarray]:
-        """Backward-compatible wrapper for aggregation queries.
-
-        Prefer :meth:`fetch_aggregated_features` for new code.
-        """
-        return self.fetch_aggregated_features(query, kwargs)
 
     def build_topo_etl(
         self, record: dict | None, fallback_seeds: torch.Tensor
