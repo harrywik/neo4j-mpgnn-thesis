@@ -149,7 +149,7 @@ class Neo4jSampler(BaseSampler):
         seed_time = getattr(ns_input, "time", None)
 
         # DB call — timing lives in the graph store.
-        record = self.graph_store.fetch_ordered_subgraph(
+        record = self.graph_store.sample_from_nodes(
             self.query, {"seed_ids": seeds.tolist()}
         )
 
