@@ -100,13 +100,10 @@ except ImportError:
 # Models
 # ---------------------------------------------------------------------------
 from neo4j_pyg.models.GCN import GCN
-from neo4j_pyg.models.GCNPostAggregation import GCNPostAggregation, MLPPostAggregation
 from neo4j_pyg.models.gnn_config import GenericGNN
 
 MODELS: Dict[str, Type] = {
     "GCN": GCN,
-    "GCNPostAggregation": GCNPostAggregation,
-    "MLPPostAggregation": MLPPostAggregation,
     "GenericGNN": GenericGNN,
 }
 
