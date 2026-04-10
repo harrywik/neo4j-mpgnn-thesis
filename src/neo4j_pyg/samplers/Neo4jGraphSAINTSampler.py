@@ -15,7 +15,7 @@ if str(_SAMPLERS_DIR) not in sys.path:
     sys.path.insert(0, str(_SAMPLERS_DIR))
 
 from neo4j_pyg.graph_stores.Neo4jAbstractGS import Neo4jAbstractGS
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 from benchmarking_tools import Measurer
 
 
@@ -71,7 +71,7 @@ class Neo4jGraphSAINTSampler(torch.utils.data.DataLoader):
     def __init__(
         self,
         graph_store: Neo4jAbstractGS,
-        feature_store: Neo4jAbstractFS,
+        feature_store: Neo4jFS,
         batch_size: int,
         num_steps: int = 1,
         sample_coverage: int = 50,
@@ -440,7 +440,7 @@ class Neo4jGraphSAINTRandomWalkSampler(Neo4jGraphSAINTSampler):
     def __init__(
         self,
         graph_store: Neo4jAbstractGS,
-        feature_store: Neo4jAbstractFS,
+        feature_store: Neo4jFS,
         batch_size: int,
         walk_length: int,
         num_steps: int = 1,

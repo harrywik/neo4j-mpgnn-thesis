@@ -30,10 +30,10 @@ FS_DIR = Path(__file__).resolve().parent.parent
 if str(FS_DIR) not in sys.path:
     sys.path.insert(0, str(FS_DIR))
 
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 
 
-class Neo4jUDPFeatureStore(Neo4jAbstractFS):
+class Neo4jUDPFeatureStore(Neo4jFS):
     """Feature store backed by the ``custom.gcn.aggregateNeighbors`` UDP.
 
     Parameters
@@ -42,7 +42,7 @@ class Neo4jUDPFeatureStore(Neo4jAbstractFS):
         The ``Neo4jAggregationSampler`` instance whose ``pending_agg`` dict
         will be consumed for each mini-batch.
     All remaining keyword arguments are forwarded verbatim to
-    :class:`Neo4jAbstractFS`.
+    :class:`Neo4jFS`.
     """
 
     def __init__(self, sampler, **kwargs):
@@ -50,7 +50,7 @@ class Neo4jUDPFeatureStore(Neo4jAbstractFS):
         self.sampler = sampler
 
     # ------------------------------------------------------------------
-    # Neo4jAbstractFS abstract methods (no-op cache)
+    # Cache overrides (no-op)
     # ------------------------------------------------------------------
 
     def _update_cached_value(self, nid: int, value: object, attr: TensorAttr, **kwargs) -> None:

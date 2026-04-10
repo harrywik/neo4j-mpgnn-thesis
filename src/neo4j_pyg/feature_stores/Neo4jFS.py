@@ -1,4 +1,4 @@
-from neo4j_pyg.feature_caches.Neo4jAbstractCache import Neo4jAbstractCache
+from neo4j_pyg.feature_caches.Neo4jCache import Neo4jCache
 from torch_geometric.data.feature_store import FeatureStore
 from torch_geometric.data.feature_store import TensorAttr
 from torch_geometric.typing import FeatureTensorType
@@ -12,21 +12,36 @@ import numpy as np
 import time
 import atexit
 from neo4j import GraphDatabase
-from abc import abstractmethod, ABC
 
-class Neo4jAbstractFS(FeatureStore, ABC):
-    """Abstract PyG FeatureStore backed by Neo4j.
+class Neo4jFS(FeatureStore):
+    """PyG FeatureStore backed by Neo4j.
 
     Handles feature/label fetching via Cypher and optional caching through a
-    :class:`~neo4j_pyg.feature_caches.Neo4jAbstractCache`.  Pass a cache
-    instance to ``cache`` to enable caching; omit it (or pass ``None``) for
-    no-cache behaviour.
-
-    Subclasses must not override ``_get_cached_value``, ``_update_cached_value``,
-    or ``_remove_cached_value`` unless they need non-standard cache routing.
+    :class:`~neo4j_pyg.feature_caches.Neo4jCache`.  Pass a cache instance to
+    ``cache`` to enable caching; omit it (or pass ``None``) for no-cache
+    behaviour.
     """
 
-    def __init__(self, driver: Driver | None = None, uri: str = None, user: str = None, pwd: str = None, cache: Neo4jAbstractCache = None, measurer: Measurer = None, database_name: str = None, dataset_name: str = "neo4j", feature_property: str = "features", target_property: str = "category", split_property_name: str = "split", split_property_type: str = "int", nodeid_property: str = "nodeId", feature_property_type: str = "f64[]", profile: bool = False, profile_accumulator: Optional[QueryProfileAccumulator] = None, node_label: str = None):
+    def __init__(
+        self,
+        driver: Driver | None = None,
+        uri: str = None,
+        user: str = None,
+        pwd: str = None,
+        cache: Neo4jCache = None,
+        measurer: Measurer = None,
+        database_name: str = None,
+        dataset_name: str = "neo4j",
+        feature_property: str = "features",
+        target_property: str = "category",
+        split_property_name: str = "split",
+        split_property_type: str = "int",
+        nodeid_property: str = "nodeId",
+        feature_property_type: str = "f64[]",
+        profile: bool = False,
+        profile_accumulator: Optional[QueryProfileAccumulator] = None,
+        node_label: str = None,
+    ):
         super().__init__()
         self.driver = driver
         self.uri = uri
@@ -48,20 +63,10 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self._labels: Dict[str, int] = {}
         self._feature_dim: Optional[int] = None
         self.t_feat_etl_start: Optional[float] = None
-        self._cache: Optional[Neo4jAbstractCache] = cache
+        self._cache: Optional[Neo4jCache] = cache
         self._current_sampled_nodes: Optional[List[int]] = None
         self._current_sampled_edge_pairs: Optional[List[List[int]]] = None
         self._current_frontier_nodes: Optional[List[int]] = None
-        if self._cache is not None:
-            self._labels = self._cache._labels
-            self.cache_size = self._cache.cache_size
-            for attr in ("hot_cache", "hot_label_cache", "cache", "label_cache"):
-                if hasattr(self._cache, attr):
-                    setattr(self, attr, getattr(self._cache, attr))
-            self._prefill_hot_cache(
-                graph_name="hot_cache_projection",
-                k=self._cache.cache_size // 3,
-            )
 
     def set_sampled_subgraph_context(
         self,
@@ -73,24 +78,6 @@ class Neo4jAbstractFS(FeatureStore, ABC):
         self._current_sampled_nodes = sampled_nodes
         self._current_sampled_edge_pairs = edge_pairs
         self._current_frontier_nodes = frontier_nodes
-
-    def _prefill_hot_cache(
-        self,
-        graph_name: str,
-        k: int = 500,
-        undirected: bool = True,
-        drop_graph: bool = True,
-    ) -> None:
-        """Fill the static hot cache with the top-K nodes ranked by PageRank."""
-        if self._cache is None:
-            return
-        if undirected is not True:
-            raise ValueError("Neo4jTwoLevelCache currently only supports undirected hot-cache prefill")
-        if drop_graph is not True:
-            raise ValueError("Neo4jTwoLevelCache currently always drops temporary hot-cache projections")
-        self._cache.prefill_hot_cache(graph_name=graph_name, k=k)
-        hot_cache = getattr(self._cache, "hot_cache", {})
-        print(f"Hot cache prefilled with {len(hot_cache)} nodes.")
 
     @cached_property
     def _query_both(self) -> str:
