@@ -24,11 +24,11 @@ from torch_geometric.data.feature_store import TensorAttr
 from torch_geometric.typing import FeatureTensorType
 
 from benchmarking_tools import Measurer
-from neo4j_pyg.feature_caches.Neo4jGPUCache import Neo4jGPUCache
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_caches.Neo4jGPUCache import Neo4jGPUCache, prefill_gpu_cache_from_neo4j
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 
 
-class Neo4jGPUCachedFS(Neo4jAbstractFS):
+class Neo4jGPUCachedFS(Neo4jFS):
     """Feature store with a GPU-resident static cache ranked by out-degree.
 
     Parameters
@@ -68,22 +68,26 @@ class Neo4jGPUCachedFS(Neo4jAbstractFS):
         reserved_gb: float = 1.0,
     ) -> None:
         cache_db = database_name if database_name else dataset_name
-        gpu_cache = Neo4jGPUCache(
-            driver=driver,
-            uri=uri,
-            user=user,
-            pwd=pwd,
+
+        # Build a driver for the prefill query if only credentials were given.
+        if driver is None and uri is not None:
+            from neo4j import GraphDatabase
+            _drv = GraphDatabase.driver(uri, auth=(user, pwd))
+        else:
+            _drv = driver
+
+        gpu_cache = prefill_gpu_cache_from_neo4j(
+            driver=_drv,
             database_name=cache_db,
             nodeid_property=nodeid_property,
             feature_property=feature_property,
             target_property=target_property,
             feature_property_type=feature_property_type,
             label_map=label_map,
-            cache_size_GB=cache_size_GB,
             device=device,
             auto_size=auto_size,
+            cache_size_GB=cache_size_GB,
             reserved_gb=reserved_gb,
-            prefill=True,
         )
         super().__init__(
             driver=driver,
@@ -110,9 +114,6 @@ class Neo4jGPUCachedFS(Neo4jAbstractFS):
             f"GPUFeatureCache: {n_cached} nodes cached "
             f"(feat_dim={feat_dim}, device={device_used})"
         )
-
-    def _prefill_hot_cache(self, graph_name: str, k: int = 500, **kwargs) -> None:
-        """No-op: GPU cache is already filled during __init__."""
 
     # ------------------------------------------------------------------
     # Vectorised hot path

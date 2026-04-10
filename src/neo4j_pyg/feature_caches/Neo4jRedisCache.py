@@ -42,7 +42,7 @@ try:
 except ImportError as exc:  # pragma: no cover
     raise ImportError("cachetools is required: pip install cachetools") from exc
 
-from neo4j_pyg.feature_caches.Neo4jAbstractCache import Neo4jAbstractCache
+from neo4j_pyg.feature_caches.Neo4jCache import Neo4jCache
 
 
 # ---------------------------------------------------------------------------
@@ -70,31 +70,24 @@ def decode_label(buf: bytes) -> int:
 # Cache class
 # ---------------------------------------------------------------------------
 
-class Neo4jRedisCache(Neo4jAbstractCache):
+class Neo4jRedisCache(Neo4jCache):
     """Two-level cache: per-worker LRU (L1) + shared Redis (L2).
 
     Parameters
     ----------
     feature_dim:
-        Number of float32 elements per node feature vector.  Required for
-        decoding raw bytes back into numpy arrays.
+        Number of float32 elements per node feature vector.
     redis_url:
-        Redis connection URL.  Use ``"unix:///tmp/redis.sock?db=0"`` for
-        Unix socket (lowest latency when Redis is on the same machine).
+        Redis connection URL.
     key_prefix:
-        Namespace prefix for all Redis keys (avoids collisions with other
-        applications sharing the same Redis instance).
+        Namespace prefix for all Redis keys.
     ttl_seconds:
         Optional TTL for every Redis key.  ``None`` means keys never expire.
     l1_maxsize:
-        Maximum number of entries in the per-worker LRU.
-        Set to 0 to disable L1.
+        Maximum number of entries in the per-worker LRU.  0 disables L1.
     memory_GB:
-        Maximum RAM to use for cached feature vectors.  When ``None`` (default)
-        the limit is computed lazily on the first ``set_many`` call by measuring
-        available system RAM at that point (after the first training batch has
-        allocated its working set) and leaving a 1 GB safety margin.  When set
-        to a float the limit is computed immediately from the given value.
+        Maximum RAM budget for cached feature vectors.  ``None`` means
+        auto-size from available RAM on first write.
     """
 
     def __init__(
@@ -104,35 +97,8 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         key_prefix: str = "fs",
         ttl_seconds: Optional[int] = None,
         l1_maxsize: int = 10_000,
-        # Neo4jAbstractCache requires these but they are not used by Redis
-        driver=None,
-        uri: Optional[str] = None,
-        user: Optional[str] = None,
-        pwd: Optional[str] = None,
-        database_name: Optional[str] = None,
-        nodeid_property: str = "nodeId",
-        feature_property: str = "features",
-        target_property: str = "category",
-        feature_property_type: str = "f32[]",
-        label_map: Optional[Dict] = None,
         memory_GB: Optional[float] = None,
     ) -> None:
-        # Do not call super().__init__() — the abstract base queries Neo4j to
-        # estimate cache size, which is not needed for Redis.  Set the required
-        # attributes manually instead.
-        self.driver = driver
-        self.uri = uri
-        self.user = user
-        self.pwd = pwd
-        self.database_name = database_name or "neo4j"
-        self.nodeid_property = nodeid_property
-        self.feature_property = feature_property
-        self.target_property = target_property
-        self.feature_property_type = feature_property_type
-        self._labels: Dict[str, int] = dict(label_map) if label_map else {}
-        self._driver = None
-        self.cache_size = 0  # not meaningful for Redis; size is managed by Redis
-
         self.feature_dim = feature_dim
         self.redis_url = redis_url
         self.key_prefix = key_prefix
@@ -349,13 +315,6 @@ class Neo4jRedisCache(Neo4jAbstractCache):
         if attr_name == "y":
             return decode_label(raw)
         raise ValueError(f"Unsupported attr_name: {attr_name!r}")
-
-    # ------------------------------------------------------------------
-    # Unused abstract methods (Redis cache has no PageRank prefill)
-    # ------------------------------------------------------------------
-
-    def prefill_hot_cache(self, graph_name: str, k: int) -> None:
-        """No-op: Redis cache is filled on-demand during training."""
 
     # ------------------------------------------------------------------
     # Pickle safety — exclude live client and L1 (L1 is per-process)

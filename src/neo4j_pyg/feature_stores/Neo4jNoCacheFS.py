@@ -9,15 +9,15 @@ FS_DIR = Path(__file__).resolve().parent.parent
 if str(FS_DIR) not in sys.path:
     sys.path.insert(0, str(FS_DIR))
 
-from neo4j_pyg.feature_stores.Neo4jAbstractFS import Neo4jAbstractFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 
 
-class Neo4jNoCacheFS(Neo4jAbstractFS):
-    """No-cache Neo4j feature store that implements :class:`Neo4jAbstractFS`.
+class Neo4jNoCacheFS(Neo4jFS):
+    """No-cache Neo4j feature store extending :class:`Neo4jFS`.
 
     Every feature request goes directly to the database — no data is retained
     between calls. All fetch logic (sorting, timing, pre-allocated arrays) is
-    inherited from :meth:`Neo4jAbstractFS._get_value_from_db`.
+    inherited from :meth:`Neo4jFS._get_value_from_db`.
     """
 
     def _get_cached_value(
