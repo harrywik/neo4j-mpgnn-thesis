@@ -6,6 +6,7 @@ com/thesis/gcn/GNNProcedures$UploadModelResult.class
 com/thesis/gcn/GNNProcedures$PartitionResult.class
 com/thesis/gcn/GNNProcedures$AggResult.class
 com/thesis/gcn/GNNProcedures$MetisGraph.class
+com/thesis/gcn/GNNProcedures$SampledSubgraph.class
 com/thesis/gcn/GNNProcedures$AggregationFn.class
 com/thesis/gcn/GNNProcedures$GNNSpec.class
 com/thesis/gcn/GNNProcedures$GNNInferenceResult.class
