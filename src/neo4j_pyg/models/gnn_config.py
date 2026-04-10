@@ -18,7 +18,7 @@ Adding a new layer type (e.g. SAGEConv):
   1. Add an entry to _DB_INFERENCE_READY / _DB_AGGREGATABLE as appropriate.
   2. Register a matching Java AggregationFn in GNNProcedures.AGGREGATION_REGISTRY.
   3. Add to CONV_AGGREGATION_MAP in create_inference_spec.py.
-  4. Implement a PreAggAdapter subclass in preagg_adapters.py if neighbor-agg
+  4. Implement a PreAggAdapter subclass in adapters.py if neighbor-agg
      support is also needed.
 """
 
@@ -60,7 +60,7 @@ class Activation(str, Enum):
 # These must stay in sync with:
 #   Java  → GNNProcedures.AGGREGATION_REGISTRY / AGG_REGISTRY_F
 #   Python → CONV_AGGREGATION_MAP in create_inference_spec.py
-#   Python → _ADAPTER_REGISTRY in preagg_adapters.py
+#   Python → _ADAPTER_REGISTRY in adapters.py
 # ---------------------------------------------------------------------------
 
 # Layers whose first-hop aggregation can be offloaded to Neo4j and later
