@@ -41,7 +41,7 @@ from neo4j_pyg.models.gnn_config import (
     InferenceGNNConfig,
     NeighborAggGNNConfig,
 )
-from neo4j_pyg.neo4j_model_interface.preagg_adapters import HybridAggModel, to_preaggregated_first_layer
+from neo4j_pyg.neo4j_model_interface.hybrid_model import HybridAggModel
 from neo4j_pyg.samplers.Neo4jGraphSAINTSampler import Neo4jGraphSAINTRandomWalkSampler
 from training.DistributedTraining import DistributedTrainer
 from training.GraphSAINTTrainer import GraphSAINTTrainer
@@ -176,8 +176,7 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
 
         model = config.build_model(in_dim)
         if wants_preagg:
-            result = to_preaggregated_first_layer(model)
-            model = result.model
+            model = HybridAggModel(model)
         return model
 
     # ------------------------------------------------------------------
@@ -196,8 +195,7 @@ def _make_model(impl_cfg: dict, dataset_cfg: dict):
         kwargs["hops"] = m_cfg["extra_kwargs"]["hops"]
     model = cls(**filter_kwargs(cls, kwargs))
     if m_cfg.get("to_preaggregated_first_layer", False):
-        result = to_preaggregated_first_layer(model)
-        model = result.model
+        model = HybridAggModel(model)
     if m_cfg.get("to_hybrid_last_hop_preaggregation", False):
         model = HybridAggModel(model)
     return model

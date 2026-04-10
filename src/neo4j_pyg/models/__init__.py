@@ -7,13 +7,8 @@ from .GCNPostAggregation import (
     gcnconv_to_linear,
     linear_to_gcnconv,
 )
-from neo4j_pyg.neo4j_model_interface.preagg_adapters import (
-    to_preaggregated_first_layer,
-    HybridAggModel,
-    PreAggResult,
-    PreAggGCNConvAdapter,
-    PreAggModelWrapper,
-)
+from neo4j_pyg.neo4j_model_interface.adapters import PreAggGCNConvAdapter
+from neo4j_pyg.neo4j_model_interface.hybrid_model import HybridAggModel
 from .gnn_config import (
     ConvLayerType,
     Activation,
@@ -33,11 +28,8 @@ __all__ = [
     "from_preaggregated",
     "gcnconv_to_linear",
     "linear_to_gcnconv",
-    "to_preaggregated_first_layer",
     "HybridAggModel",
-    "PreAggResult",
     "PreAggGCNConvAdapter",
-    "PreAggModelWrapper",
     "ConvLayerType",
     "Activation",
     "GNNLayerDef",
