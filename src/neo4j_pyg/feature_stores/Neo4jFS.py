@@ -367,7 +367,6 @@ class Neo4jFS(FeatureStore):
         if self.measurer is not None:
             self.measurer.log_event("remote_feature_recieved", 1)
             self.measurer.log_event("feat_fetch_ms", total_feat_fetch_ms)
-            self._log_extra_feature_fetch_metrics(records, total_feat_fetch_ms, is_label=is_label, paired=False)
 
         if self.profile_accumulator is not None:
             source = "feat_y" if is_label else "feat_x"
