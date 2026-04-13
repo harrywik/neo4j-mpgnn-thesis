@@ -240,10 +240,12 @@ public class GNNProcedures {
     private static class GNNSpec {
         final int              numHops;
         final List<LayerSpec>  layers;
+        final List<Long>       fanouts;
 
-        GNNSpec(int numHops, List<LayerSpec> layers) {
+        GNNSpec(int numHops, List<LayerSpec> layers, List<Long> fanouts) {
             this.numHops = numHops;
             this.layers  = layers;
+            this.fanouts = fanouts;
         }
     }
 
@@ -851,8 +853,8 @@ public class GNNProcedures {
             @Name("featureType")                                 String featureType,
             @Name("nodeLabel")                                   String nodeLabel,
             @Name("modelName")                                   String modelName,
-            @Name(value = "edgeType",        defaultValue = "")  String edgeType,
-            @Name(value = "maxNeighbors",    defaultValue = "10") Long maxNeighbors
+            @Name(value = "edgeType",        defaultValue = "")    String     edgeType,
+            @Name(value = "maxNeighbors",    defaultValue = "null") List<Long> maxNeighbors
     ) {
         if (seedIds == null || seedIds.isEmpty()) return Stream.empty();
         try {
@@ -904,7 +906,7 @@ public class GNNProcedures {
             String              featureType,
             String              nodeLabel,
             String              edgeType,
-            long                maxNeighbors
+            List<Long>          maxNeighbors
     ) {
         int numHops = spec.numHops;
 
@@ -914,10 +916,13 @@ public class GNNProcedures {
         Random           rng         = new Random(42L);
 
         // ── Step 1: Pre-fetch numHops-hop subgraph ────────────────────────────
+        // Use caller-supplied fanouts if provided, otherwise fall back to spec.
+
+        List<Long> fanouts = (maxNeighbors != null && !maxNeighbors.isEmpty())
+                ? maxNeighbors : spec.fanouts;
 
         SampledSubgraph sg = sampleSubgraph(
-                seedIds, nodeIdKey, label, relType, hasEdgeType,
-                Collections.nCopies(numHops, maxNeighbors), rng);
+                seedIds, nodeIdKey, label, relType, hasEdgeType, fanouts, rng);
         List<List<Long>>      hopNodes        = sg.hopNodes;
         Map<Long, List<Long>> sampledIncoming = sg.sampledIncoming;
         Map<Long, Node>       allNodes        = sg.allNodes;
@@ -1441,7 +1446,17 @@ public class GNNProcedures {
                     n.path("weight").asText(null),
                     n.path("bias").asText(null)));
         }
-        return new GNNSpec(numHops, layers);
+        JsonNode mnNode = root.path("max_neighbors");
+        List<Long> fanouts;
+        if (mnNode.isArray()) {
+            fanouts = new ArrayList<>();
+            for (JsonNode el : mnNode) fanouts.add(el.asLong(-1L));
+        } else if (!mnNode.isMissingNode()) {
+            fanouts = Collections.nCopies(numHops, mnNode.asLong(10L));
+        } else {
+            fanouts = Collections.nCopies(numHops, 10L);
+        }
+        return new GNNSpec(numHops, layers, fanouts);
     }
 
     // ── weights.bin parsers ───────────────────────────────────────────────────

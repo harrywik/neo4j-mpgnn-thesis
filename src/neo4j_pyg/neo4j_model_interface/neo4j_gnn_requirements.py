@@ -25,7 +25,7 @@ Adding a new layer type (e.g. SAGEConv):
 from __future__ import annotations
 
 from enum import Enum
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, model_validator
 
@@ -187,7 +187,7 @@ class NeighborAggGNNConfig(BaseModel):
 
     layers: List[GNNLayerDef]
     num_classes: int
-    max_neighbors: int = 10
+    max_neighbors: Union[int, List[int]] = 10
 
     @model_validator(mode="after")
     def _check_first_layer(self) -> NeighborAggGNNConfig:
@@ -233,7 +233,7 @@ class InferenceGNNConfig(BaseModel):
     num_classes: int
     model_name: str = "experiment_gcn"
     num_hops: Optional[int] = None
-    max_neighbors: int = 10
+    max_neighbors: Union[int, List[int]] = 10
 
     @model_validator(mode="after")
     def _check_all_layers(self) -> InferenceGNNConfig:
@@ -276,7 +276,7 @@ class DualModeGNNConfig(BaseModel):
     num_classes: int
     model_name: str = "experiment_gcn"
     num_hops: Optional[int] = None
-    max_neighbors: int = 10
+    max_neighbors: Union[int, List[int]] = 10
 
     @model_validator(mode="after")
     def _check_dual_mode(self) -> DualModeGNNConfig:
