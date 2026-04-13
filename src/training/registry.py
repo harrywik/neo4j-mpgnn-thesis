@@ -15,14 +15,14 @@ from typing import Any, Dict, Type
 # ---------------------------------------------------------------------------
 # Feature stores
 # ---------------------------------------------------------------------------
-from neo4j_pyg.feature_stores.Neo4jNoCacheFS import Neo4jNoCacheFS
+from neo4j_pyg.feature_stores.Neo4jFS import Neo4jFS
 from neo4j_pyg.feature_stores.Neo4jCachedFS import Neo4jCachedFS
 from neo4j_pyg.feature_stores.Neo4jPreAggFeatureStore import Neo4jPreAggFeatureStore
 from neo4j_pyg.feature_stores.Neo4jGPUCachedFS import Neo4jGPUCachedFS
 from neo4j_pyg.feature_stores.Neo4jRedisCachedFS import Neo4jRedisCachedFS
 
 FEATURE_STORES: Dict[str, Type] = {
-    "Neo4jNoCacheFS": Neo4jNoCacheFS,
+    "Neo4jFS": Neo4jFS,
     "Neo4jCachedFS": Neo4jCachedFS,
     "Neo4jPreAggFeatureStore": Neo4jPreAggFeatureStore,
     "Neo4jUDPFeatureStore": Neo4jPreAggFeatureStore,  # backward-compat alias

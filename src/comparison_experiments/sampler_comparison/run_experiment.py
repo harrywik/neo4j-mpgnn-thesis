@@ -31,7 +31,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from neo4j_pyg.models import GCN
-from neo4j_pyg.feature_stores import Neo4jNoCacheFS
+from neo4j_pyg.feature_stores import Neo4jFS
 from neo4j_pyg.graph_stores import Neo4jSingleGS
 from neo4j_pyg.samplers import (
     Neo4jEdgeModeSampler,
@@ -261,7 +261,7 @@ def main() -> None:
         password = os.environ["PASSWORD"]
         driver = Neo4jConnection(uri, user, password).get_driver()
 
-        neo4j_feature_store = Neo4jNoCacheFS(
+        neo4j_feature_store = Neo4jFS(
             driver,
             database_name=dataset_cfg["database"],
             dataset_name=dataset_cfg["dataset"],
@@ -319,7 +319,7 @@ def main() -> None:
             measurer.write_to_configresult("model", {"name": "GCN", "args": model_args})
             measurer.write_to_configresult("num_neighbors", num_neighbors)
             # Attach the per-run measurer to the shared graph/feature stores so
-            # that Neo4jSingleGS.sample_from_nodes and Neo4jNoCacheFS._get_tensor
+            # that Neo4jSingleGS.sample_from_nodes and Neo4jFS._get_tensor
             # can log sub-phase timings without holding a direct reference.
             if neo4j_graph_store is not None:
                 neo4j_graph_store.measurer = measurer

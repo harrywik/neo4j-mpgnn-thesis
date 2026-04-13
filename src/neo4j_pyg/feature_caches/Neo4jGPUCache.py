@@ -10,8 +10,9 @@ Cache size is either:
 - Fixed via ``cache_size_GB``  (default, no CUDA required), or
 - Auto-sized from available GPU memory when ``auto_size=True``.
 
-The cache itself has no DB dependency.  Use :func:`prefill_gpu_cache_from_neo4j`
-to populate it from a Neo4j driver, then pass the result to the feature store.
+The cache itself has no DB dependency.  Use :meth:`load` to populate it
+(e.g. from a Neo4j query ranked by out-degree), then pass the result to
+the feature store.
 
 References
 ----------
@@ -25,14 +26,16 @@ from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import torch
-
-from neo4j import Driver
+from neo4j import GraphDatabase
 
 from neo4j_pyg.feature_caches.Neo4jCache import Neo4jCache
 
 
 class Neo4jGPUCache(Neo4jCache):
     """Static GPU-resident feature cache.
+
+    ``static = True``: this tier is pre-loaded before training and is never
+    updated at runtime.  :class:`TieredCache` will not write through to it.
 
     Parameters
     ----------
@@ -48,6 +51,8 @@ class Neo4jGPUCache(Neo4jCache):
         GPU memory reserved for model/activations (only used when
         ``auto_size=True``).  Default: 1 GB.
     """
+
+    static = True
 
     def __init__(
         self,
@@ -147,7 +152,7 @@ class Neo4jGPUCache(Neo4jCache):
         """No-op: static cache is not updated at runtime."""
 
     def delete(self, key) -> None:
-        """No-op: static cache cannot be modified after prefill."""
+        """No-op: static cache cannot be modified after load."""
 
     def clear(self) -> None:
         self.cached_features = None
@@ -209,6 +214,87 @@ class Neo4jGPUCache(Neo4jCache):
     # Pickle safety (DataLoader workers)
     # ------------------------------------------------------------------
 
+    # ------------------------------------------------------------------
+    # Prefill from Neo4j (top-K nodes by out-degree)
+    # ------------------------------------------------------------------
+
+    def fill_from_neo4j(
+        self,
+        uri: str,
+        user: str,
+        pwd: str,
+        database: str,
+        nodeid_property: str = "nodeId",
+        feature_property: str = "features",
+        target_property: str = "category",
+        label_map: Optional[Dict[str, int]] = None,
+        **kwargs,
+    ) -> None:
+        """Populate the GPU cache with top-K nodes ranked by out-degree.
+
+        Creates a temporary driver from *uri*/*user*/*pwd*, queries Neo4j,
+        then closes the driver.  The cache is pickle-safe after this call
+        because no driver reference is retained.
+        """
+        labels: Dict[str, int] = dict(label_map) if label_map else {}
+
+        def _normalize_feature(raw) -> np.ndarray:
+            if isinstance(raw, (bytes, bytearray, memoryview)):
+                return np.frombuffer(bytes(raw), dtype=np.float32).copy()
+            return np.asarray(raw, dtype=np.float32)
+
+        def _normalize_label(raw) -> int:
+            if raw is None:
+                return 0
+            if isinstance(raw, str):
+                if raw not in labels:
+                    labels[raw] = len(labels)
+                return labels[raw]
+            return int(raw)
+
+        query = (
+            f"MATCH (n)-[r]->()\n"
+            f"WITH n, count(r) AS out_deg\n"
+            f"ORDER BY out_deg DESC\n"
+            f"LIMIT $limit\n"
+            f"RETURN n.{nodeid_property} AS id,\n"
+            f"       n.{feature_property} AS feature,\n"
+            f"       n.{target_property}  AS label"
+        )
+
+        nids_list: List[int] = []
+        feats_list: List[np.ndarray] = []
+        labels_list: List[int] = []
+
+        driver = GraphDatabase.driver(uri, auth=(user, pwd))
+        try:
+            with driver.session(database=database) as session:
+                for record in session.run(query, limit=100_000):
+                    raw_feat = record["feature"]
+                    if raw_feat is None:
+                        continue
+                    feat = _normalize_feature(raw_feat)
+
+                    if self._feat_dim is None:
+                        self._feat_dim = feat.shape[0]
+                        self.cache_size = self.compute_capacity(self._feat_dim)
+
+                    nids_list.append(int(record["id"]))
+                    feats_list.append(feat)
+                    labels_list.append(_normalize_label(record["label"]))
+
+                    if len(nids_list) >= self.cache_size:
+                        break
+        finally:
+            driver.close()
+
+        if nids_list:
+            self.load(
+                nids_list,
+                np.stack(feats_list, axis=0),
+                np.array(labels_list, dtype=np.int64),
+            )
+
     def __getstate__(self):
         state = self.__dict__.copy()
         if state.get("cached_features") is not None:
@@ -223,87 +309,3 @@ class Neo4jGPUCache(Neo4jCache):
             self.cached_features = self.cached_features.to(self.device)
         if self.cached_labels is not None:
             self.cached_labels = self.cached_labels.to(self.device)
-
-
-# ---------------------------------------------------------------------------
-# Factory: populate a GPU cache from Neo4j
-# ---------------------------------------------------------------------------
-
-def prefill_gpu_cache_from_neo4j(
-    driver: Driver,
-    database_name: str,
-    nodeid_property: str = "nodeId",
-    feature_property: str = "features",
-    target_property: str = "category",
-    feature_property_type: str = "f64[]",
-    label_map: Optional[Dict[str, int]] = None,
-    device: str = "cuda",
-    auto_size: bool = False,
-    cache_size_GB: float = 0.5,
-    reserved_gb: float = 1.0,
-) -> Neo4jGPUCache:
-    """Create and populate a :class:`Neo4jGPUCache` from Neo4j out-degree ranking."""
-    cache = Neo4jGPUCache(
-        device=device,
-        auto_size=auto_size,
-        cache_size_GB=cache_size_GB,
-        reserved_gb=reserved_gb,
-    )
-
-    labels: Dict[str, int] = dict(label_map) if label_map else {}
-
-    def _normalize_feature(raw) -> np.ndarray:
-        if isinstance(raw, (bytes, bytearray, memoryview)):
-            return np.frombuffer(bytes(raw), dtype=np.float32).copy()
-        return np.asarray(raw, dtype=np.float32)
-
-    def _normalize_label(raw) -> int:
-        if raw is None:
-            return 0
-        if isinstance(raw, str):
-            if raw not in labels:
-                labels[raw] = len(labels)
-            return labels[raw]
-        return int(raw)
-
-    out_degree_query = (
-        f"MATCH (n)-[r]->()\n"
-        f"WITH n, count(r) AS out_deg\n"
-        f"ORDER BY out_deg DESC\n"
-        f"LIMIT $limit\n"
-        f"RETURN n.{nodeid_property} AS id,\n"
-        f"       n.{feature_property} AS feature,\n"
-        f"       n.{target_property}  AS label"
-    )
-
-    initial_limit = 100_000
-    nids_list: List[int] = []
-    feats_list: List[np.ndarray] = []
-    labels_list: List[int] = []
-
-    with driver.session(database=database_name) as session:
-        for record in session.run(out_degree_query, limit=initial_limit):
-            raw_feat = record["feature"]
-            if raw_feat is None:
-                continue
-            feat = _normalize_feature(raw_feat)
-
-            if cache._feat_dim is None:
-                cache._feat_dim = feat.shape[0]
-                cache.cache_size = cache.compute_capacity(cache._feat_dim)
-
-            nids_list.append(int(record["id"]))
-            feats_list.append(feat)
-            labels_list.append(_normalize_label(record["label"]))
-
-            if len(nids_list) >= cache.cache_size:
-                break
-
-    if nids_list:
-        cache.load(
-            nids_list,
-            np.stack(feats_list, axis=0),
-            np.array(labels_list, dtype=np.int64),
-        )
-
-    return cache

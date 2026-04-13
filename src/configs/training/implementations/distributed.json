@@ -1,7 +1,7 @@
 {
   "_comment": "Distributed Data Parallel training. Works on CPU (gloo) and GPU (nccl).",
   "feature_store": {
-    "class_name": "Neo4jNoCacheFS",
+    "class_name": "Neo4jFS",
     "connection_mode": "uri"
   },
   "graph_store": {

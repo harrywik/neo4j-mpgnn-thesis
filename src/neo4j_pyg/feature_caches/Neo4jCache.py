@@ -11,7 +11,12 @@ class Neo4jCache(ABC):
 
     Key format is ``(attr_name, node_id)`` where ``attr_name`` is ``"x"``
     (features) or ``"y"`` (labels).
+
+    ``static = True`` signals to :class:`TieredCache` that this tier should
+    not be written to during write-through or promotion.
     """
+
+    static: bool = False
 
     @abstractmethod
     def get(self, key: Any) -> Optional[Any]:
@@ -29,8 +34,6 @@ class Neo4jCache(ABC):
     def clear(self) -> None:
         ...
 
-    # -- Convenience (non-abstract, built on primitives) --
-
     def get_many(self, keys: Iterable[Any]) -> Dict[Any, Any]:
         """Return ``{key: value}`` for all cached keys.
 
@@ -46,15 +49,12 @@ class Neo4jCache(ABC):
         for k, v in items.items():
             self.set(k, v)
 
-    def __getitem__(self, key: Any) -> Any:
-        v = self.get(key)
-        if v is None:
-            raise KeyError(key)
-        return v
+    def fill_from_neo4j(self, uri: str, user: str, pwd: str, **kwargs) -> None:
+        """Pre-fill the cache from Neo4j.
 
-    def __setitem__(self, key: Any, value: Any) -> None:
-        self.set(key, value)
+        Default is a no-op — caches that support eager prefill override this.
+        :class:`TieredCache` propagates the call to every tier.
+        """
 
     def __contains__(self, key: Any) -> bool:
         return self.get(key) is not None
-

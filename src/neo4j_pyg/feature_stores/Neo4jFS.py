@@ -149,20 +149,25 @@ class Neo4jFS(FeatureStore):
         n = len(node_ids)
         nid_to_pos: Dict[int, int] = {nid: i for i, nid in enumerate(node_ids)}
 
-        # Check per-attr caches (LRU in CachedFS; always-miss in NoCacheFS).
+        # Batch cache lookup — backends override get_many for efficiency (MGET etc.).
         cached_x: Dict[int, object] = {}
         cached_y: Dict[int, object] = {}
         missing: List[int] = []
 
-        for nid in node_ids:
-            xc = self._get_cached_value(nid, x_attr)
-            yc = self._get_cached_value(nid, y_attr)
-            if xc is not None:
-                cached_x[nid] = xc
-            if yc is not None:
-                cached_y[nid] = yc
-            if xc is None or yc is None:
-                missing.append(nid)
+        if self._cache is not None:
+            keys = [("x", nid) for nid in node_ids] + [("y", nid) for nid in node_ids]
+            hits = self._cache.get_many(keys)
+            for nid in node_ids:
+                xc = hits.get(("x", nid))
+                yc = hits.get(("y", nid))
+                if xc is not None:
+                    cached_x[nid] = xc
+                if yc is not None:
+                    cached_y[nid] = yc
+                if xc is None or yc is None:
+                    missing.append(nid)
+        else:
+            missing = node_ids
 
         if self.measurer is not None:
             self.measurer.log_event("cache_hit", len(cached_x) + len(cached_y))
@@ -198,9 +203,12 @@ class Neo4jFS(FeatureStore):
             feat_out[pos_array] = feat_matrix
             y_out[pos_array] = y_array
 
-            for i, nid in enumerate(fetched_nids):
-                self._update_cached_value(nid, feat_matrix[i], x_attr)
-                self._update_cached_value(nid, int(y_array[i]), y_attr)
+            if self._cache is not None:
+                to_cache = {}
+                for i, nid in enumerate(fetched_nids):
+                    to_cache[("x", nid)] = feat_matrix[i]
+                    to_cache[("y", nid)] = int(y_array[i])
+                self._cache.set_many(to_cache)
         else:
             # All nodes cached — no DB call, ETL starts immediately.
             self.t_feat_etl_start = time.monotonic()
@@ -305,12 +313,17 @@ class Neo4jFS(FeatureStore):
         missing_indices = []
         is_label = (attr.attr_name == "y")
 
-        for nid in node_ids:
-            cached = self._get_cached_value(nid, attr)
-            if cached is not None:
-                data_map[nid] = cached
-            else:
-                missing_indices.append(nid)
+        if self._cache is not None:
+            keys = [(attr.attr_name, nid) for nid in node_ids]
+            hits = self._cache.get_many(keys)
+            for nid in node_ids:
+                v = hits.get((attr.attr_name, nid))
+                if v is not None:
+                    data_map[nid] = v
+                else:
+                    missing_indices.append(nid)
+        else:
+            missing_indices = node_ids
 
         if self.measurer is not None:
             self.measurer.log_event("cache_hit", len(data_map))
@@ -321,9 +334,9 @@ class Neo4jFS(FeatureStore):
 
         if missing_indices:
             fetched = self._get_value_from_db(missing_indices, attr)
-            for nid, val in fetched.items():
-                data_map[nid] = val
-                self._update_cached_value(nid, val, attr)
+            data_map.update(fetched)
+            if self._cache is not None and fetched:
+                self._cache.set_many({(attr.attr_name, nid): val for nid, val in fetched.items()})
 
         ordered_list = [data_map[i] for i in node_ids]
         if is_label:
