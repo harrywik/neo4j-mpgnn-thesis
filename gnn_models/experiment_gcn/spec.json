@@ -1,6 +1,9 @@
 {
   "num_hops": 2,
-  "max_neighbors": 10,
+  "max_neighbors": [
+    10,
+    5
+  ],
   "layers": [
     {
       "op": "aggregate",

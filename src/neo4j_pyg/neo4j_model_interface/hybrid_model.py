@@ -60,8 +60,6 @@ class HybridAggModel(nn.Module):
         if not use_hybrid:
             return self.inner(x, edge_index)
 
-        # Fallback: derive target_mask from aggregated_neighbors when caller
-        # does not supply it (backward-compatible path).
         if target_mask is None:
             target_mask = aggregated_neighbors.abs().sum(dim=1) > 0
 
