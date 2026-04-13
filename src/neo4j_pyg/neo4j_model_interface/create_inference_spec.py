@@ -48,7 +48,7 @@ import io
 import json
 import os
 import struct
-from typing import Callable, Optional
+from typing import Callable, List, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -151,7 +151,7 @@ def _build_spec(
     *,
     activation: str,
     num_hops: Optional[int],
-    max_neighbors: int,
+    max_neighbors: Union[int, List[int]],
 ) -> dict:
     """Return the spec dict for *model* without touching disk or Neo4j."""
     children = list(model.named_children())
@@ -161,9 +161,21 @@ def _build_spec(
         layers.extend(_ops_for_module(name, module, is_last, activation, children, i))
 
     agg_count = sum(1 for op in layers if op.get("op") == "aggregate")
+    resolved_hops = num_hops if num_hops is not None else agg_count
+
+    if isinstance(max_neighbors, int):
+        fanouts = [max_neighbors] * resolved_hops
+    else:
+        fanouts = list(max_neighbors)
+        if len(fanouts) != resolved_hops:
+            raise ValueError(
+                f"max_neighbors has {len(fanouts)} entries but the model has "
+                f"{resolved_hops} aggregate op(s). They must match."
+            )
+
     return {
-        "num_hops": num_hops if num_hops is not None else agg_count,
-        "max_neighbors": max_neighbors,
+        "num_hops": resolved_hops,
+        "max_neighbors": fanouts,
         "layers": layers,
     }
 
@@ -268,7 +280,7 @@ def create_inference_spec(
     base_dir: Optional[str] = None,
     activation: str = "relu",
     num_hops: Optional[int] = None,
-    max_neighbors: int = 10,
+    max_neighbors: Union[int, List[int]] = 10,
 ) -> str:
     """
     Inspect *model* and write ``spec.json`` + ``weights.bin`` to a directory.
@@ -327,7 +339,7 @@ def upload_inference_spec(
     *,
     activation: str = "relu",
     num_hops: Optional[int] = None,
-    max_neighbors: int = 10,
+    max_neighbors: Union[int, List[int]] = 10,
     database: Optional[str] = None,
 ) -> None:
     """
