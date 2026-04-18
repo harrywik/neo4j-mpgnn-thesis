@@ -5,17 +5,31 @@ import threading
 def find_neo4j_process() -> psutil.Process | None:
     """Scan the process table for the Neo4j JVM process.
 
-    Returns a psutil.Process handle for the first process whose command line
-    contains 'org.neo4j', or None if Neo4j is not running.
+    On some Linux packaging (e.g. Debian/apt on GCP), Neo4j is started by a
+    lightweight NeoBoot launcher (org.neo4j.server.startup.NeoBoot, -Xmx128m)
+    which then spawns the real database JVM
+    (com.neo4j.server.enterprise.Neo4jEnterprise, -Xms/-Xmx=32 GB+).
+    Returning the launcher gives ~0 % CPU readings.
+
+    Strategy: collect all candidate processes and return the one with the
+    largest RSS — the real server will always dwarf the bootstrap wrapper.
     """
+    candidates: list[tuple[int, psutil.Process]] = []  # (rss_bytes, proc)
     for proc in psutil.process_iter(["pid", "name", "cmdline"]):
         try:
             cmdline = " ".join(proc.info["cmdline"] or [])
             if "org.neo4j" in cmdline or "com.neo4j" in cmdline:
-                return proc
+                try:
+                    rss = proc.memory_info().rss
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    rss = 0
+                candidates.append((rss, proc))
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
-    return None
+    if not candidates:
+        return None
+    candidates.sort(key=lambda t: t[0], reverse=True)
+    return candidates[0][1]
 
 
 def _sample_process_cpu(proc: psutil.Process) -> float:
