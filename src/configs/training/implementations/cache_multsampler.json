@@ -3,7 +3,7 @@
     "class_name": "Neo4jCachedFS",
     "connection_mode": "uri",
     "extra_kwargs": {
-      "cache_size_GB": 0.02
+      "cache_size_GB": 10
     }
   },
   "graph_store": {
@@ -11,7 +11,7 @@
     "connection_mode": "uri"
   },
   "sampler": {
-    "class_name": "Neo4jNeighborSampler",
+    "class_name": "Neo4jSampler",
     "num_neighbors": [10, 5]
   },
   "model": {

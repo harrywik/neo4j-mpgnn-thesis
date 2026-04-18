@@ -291,7 +291,7 @@ class Neo4jFS(FeatureStore):
         else:
             for i, rec in enumerate(records):
                 fetched_nids.append(rec["id"])
-                y_array[i] = int(rec["label"])
+                y_array[i] = -1 if rec["label"] is None else int(rec["label"])
 
         if self.measurer is not None:
             self.measurer.log_event("feat_x_etl_parse_ms", (time.monotonic() - t_etl) * 1000)
