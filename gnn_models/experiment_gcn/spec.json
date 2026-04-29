@@ -4,6 +4,7 @@
     10,
     5
   ],
+  "sampler": "neighbor_uniform",
   "layers": [
     {
       "op": "aggregate",
