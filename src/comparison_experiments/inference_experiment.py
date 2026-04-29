@@ -47,6 +47,15 @@ from neo4j_pyg.neo4j_model_interface.create_inference_spec import (
     create_inference_spec,
     validate_model_for_db_inference,
 )
+from neo4j_pyg.neo4j_model_interface.cypher_inference import (
+    CypherInferencePrepared,
+    OptimizedCypherInferencePrepared,
+    build_cypher_inference_query,
+    build_optimized_cypher_inference_query,
+    materialize_float_features,
+    parse_weights_bin,
+    run_cypher_inference,
+)
 from neo4j_pyg.samplers.Neo4jSampler import Neo4jSampler
 from training.Main import (
     _build_common_kwargs,
@@ -469,8 +478,211 @@ def run_in_db_java(
 
 
 # ---------------------------------------------------------------------------
-# Subgraph verification
+# Strategy: in_db_cypher
 # ---------------------------------------------------------------------------
+
+def run_in_db_cypher(
+    test_ids: list[int],
+    cfg: dict,
+    driver,
+    *,
+    prepared: CypherInferencePrepared,
+) -> tuple[dict[int, int], dict[str, Any]]:
+    """Run GNN inference as a single combined Cypher query per batch.
+
+    No plugin procedures are used.  The query was pre-assembled from spec.json
+    and weights.bin by _prepare_cypher_inference (called once per experiment).
+
+    Returns (preds, metrics) matching the shape of run_in_db_java.
+    """
+    batch_size = cfg["dataset"].get("inference_batch_size", 256)
+    preds, metrics = run_cypher_inference(
+        driver,
+        prepared.database,
+        prepared.query,
+        prepared.static_params,
+        test_ids,
+        batch_size,
+    )
+    return preds, metrics
+
+
+def _prepare_cypher_inference(cfg: dict, driver) -> CypherInferencePrepared:
+    """Build the CypherInferencePrepared object (called once per experiment).
+
+    Steps
+    -----
+    1. Locate spec.json + weights.bin under NEO4J_GNN_MODEL_DIR/<model_name>/.
+    2. Materialise a float64 sibling property if features are stored as byte[].
+    3. Assemble the combined Cypher query and static parameter map.
+    """
+    import json as _json
+    import os as _os
+
+    ds  = cfg["dataset"]
+    mdl = cfg["model"]
+    gnn_model_dir = _os.environ.get("NEO4J_GNN_MODEL_DIR", "")
+    model_name    = mdl.get("model_name", "experiment_gcn")
+    if not gnn_model_dir:
+        raise RuntimeError(
+            "NEO4J_GNN_MODEL_DIR must be set for the in_db_cypher strategy."
+        )
+
+    model_dir    = _os.path.join(gnn_model_dir, model_name)
+    spec_path    = _os.path.join(model_dir, "spec.json")
+    weights_path = _os.path.join(model_dir, "weights.bin")
+
+    if not _os.path.exists(spec_path) or not _os.path.exists(weights_path):
+        raise FileNotFoundError(
+            f"spec.json / weights.bin not found under {model_dir}. "
+            "Run the in_db_java strategy first (or call create_inference_spec) "
+            "to export the model artifacts."
+        )
+
+    with open(spec_path) as f:
+        spec = _json.load(f)
+    spec.setdefault("sampler", "neighbor_uniform")
+
+    weights = parse_weights_bin(weights_path)
+
+    feature_prop      = ds["feature_property"]
+    feature_prop_type = ds.get("feature_property_type", "f64[]")
+    database          = cfg["train_ds"]["database_name"]
+    node_label        = ds["node_label"]
+    nodeid_prop       = ds["nodeid_property"]
+
+    # Pure Cypher cannot decode little-endian float32 byte[] arrays.
+    # Materialise a f64[] sibling property once; cost is not in per-batch timing.
+    if feature_prop_type == "byte[]":
+        float_prop = feature_prop + "_floats"
+        materialize_float_features(
+            driver,
+            database=database,
+            node_label=node_label,
+            nodeid_prop=nodeid_prop,
+            byte_prop=feature_prop,
+            float_prop=float_prop,
+        )
+        feature_prop_for_query = float_prop
+    else:
+        feature_prop_for_query = feature_prop
+
+    query, static_params = build_cypher_inference_query(
+        spec,
+        weights,
+        node_label=node_label,
+        edge_type=ds.get("edge_type", ""),
+        nodeid_prop=nodeid_prop,
+        feature_prop=feature_prop_for_query,
+    )
+
+    return CypherInferencePrepared(
+        query=query,
+        static_params=static_params,
+        database=database,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Strategy: in_db_cypher_opt  (optimised Cypher — vector_distance linear blocks)
+# ---------------------------------------------------------------------------
+
+def run_in_db_cypher_opt(
+    test_ids: list[int],
+    cfg: dict,
+    driver,
+    *,
+    prepared: OptimizedCypherInferencePrepared,
+) -> tuple[dict[int, int], dict[str, Any]]:
+    """Run optimised GNN inference (vector_distance linear blocks, all in DB).
+
+    Identical call path to run_in_db_cypher — only the prebuilt query differs.
+    """
+    batch_size = cfg["dataset"].get("inference_batch_size", 256)
+    preds, metrics = run_cypher_inference(
+        driver,
+        prepared.database,
+        prepared.query,
+        prepared.static_params,
+        test_ids,
+        batch_size,
+    )
+    return preds, metrics
+
+
+def _prepare_optimized_cypher_inference(
+    cfg: dict,
+    driver,
+) -> OptimizedCypherInferencePrepared:
+    """Build the OptimizedCypherInferencePrepared object (called once per experiment).
+
+    Identical to _prepare_cypher_inference but calls
+    build_optimized_cypher_inference_query which uses vector_distance linear
+    blocks instead of reduce loops.  No model node write step required.
+    """
+    import json as _json
+    import os as _os
+
+    ds  = cfg["dataset"]
+    mdl = cfg["model"]
+    gnn_model_dir = _os.environ.get("NEO4J_GNN_MODEL_DIR", "")
+    model_name    = mdl.get("model_name", "experiment_gcn")
+    if not gnn_model_dir:
+        raise RuntimeError(
+            "NEO4J_GNN_MODEL_DIR must be set for the in_db_cypher_opt strategy."
+        )
+
+    model_dir    = _os.path.join(gnn_model_dir, model_name)
+    spec_path    = _os.path.join(model_dir, "spec.json")
+    weights_path = _os.path.join(model_dir, "weights.bin")
+
+    if not _os.path.exists(spec_path) or not _os.path.exists(weights_path):
+        raise FileNotFoundError(
+            f"spec.json / weights.bin not found under {model_dir}. "
+            "Run the in_db_java strategy first (or call create_inference_spec) "
+            "to export the model artifacts."
+        )
+
+    with open(spec_path) as f:
+        spec = _json.load(f)
+    spec.setdefault("sampler", "neighbor_uniform")
+
+    weights = parse_weights_bin(weights_path)
+
+    feature_prop      = ds["feature_property"]
+    feature_prop_type = ds.get("feature_property_type", "f64[]")
+    database          = cfg["train_ds"]["database_name"]
+    node_label        = ds["node_label"]
+    nodeid_prop       = ds["nodeid_property"]
+
+    if feature_prop_type == "byte[]":
+        float_prop = feature_prop + "_floats"
+        materialize_float_features(
+            driver,
+            database=database,
+            node_label=node_label,
+            nodeid_prop=nodeid_prop,
+            byte_prop=feature_prop,
+            float_prop=float_prop,
+        )
+        feature_prop_for_query = float_prop
+    else:
+        feature_prop_for_query = feature_prop
+
+    opt_query, static_params = build_optimized_cypher_inference_query(
+        spec,
+        weights,
+        node_label=node_label,
+        edge_type=ds.get("edge_type", ""),
+        nodeid_prop=nodeid_prop,
+        feature_prop=feature_prop_for_query,
+    )
+
+    return OptimizedCypherInferencePrepared(
+        query=opt_query,
+        static_params=static_params,
+        database=database,
+    )
 
 def verify_subgraph_match(
     seed_ids: list[int],
@@ -737,11 +949,35 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
     spec_exported = False
     all_results: dict[int, dict] = {}
 
-    # Fetch Neo4j test node IDs (used by neighborhood_sampling and in_db_java)
+    # Fetch Neo4j test node IDs (used by neighborhood_sampling, in_db_java, in_db_cypher, in_db_cypher_opt)
     neo4j_test_pool: list[int] = []
-    if "neighborhood_sampling" in strategies or "in_db_java" in strategies:
+    if any(s in strategies for s in ("neighborhood_sampling", "in_db_java", "in_db_cypher", "in_db_cypher_opt")):
         neo4j_test_pool = graph_store.get_split(split="test").tolist()
         print(f"\nNeo4j test pool: {len(neo4j_test_pool)} nodes")
+
+    # --- Pre-build the combined Cypher query (in_db_cypher) ---
+    prepared_cypher: CypherInferencePrepared | None = None
+    if "in_db_cypher" in strategies:
+        print("\nPreparing in_db_cypher strategy...")
+        try:
+            prepared_cypher = _prepare_cypher_inference(cfg, driver)
+            print("  Combined Cypher query assembled successfully.")
+        except Exception as exc:
+            print(f"  WARNING: in_db_cypher setup failed: {exc}")
+            traceback.print_exc()
+            strategies = [s for s in strategies if s != "in_db_cypher"]
+
+    # --- Pre-build the optimised Cypher query (in_db_cypher_opt) ---
+    prepared_cypher_opt: OptimizedCypherInferencePrepared | None = None
+    if "in_db_cypher_opt" in strategies:
+        print("\nPreparing in_db_cypher_opt strategy (vector_distance linear blocks)...")
+        try:
+            prepared_cypher_opt = _prepare_optimized_cypher_inference(cfg, driver)
+            print("  Optimised Cypher query assembled (vector_distance DOT linear blocks).")
+        except Exception as exc:
+            print(f"  WARNING: in_db_cypher_opt setup failed: {exc}")
+            traceback.print_exc()
+            strategies = [s for s in strategies if s != "in_db_cypher_opt"]
 
     pyg_test_pool_size = len(pyg_loader.test_node_indices()) if pyg_loader else 0
     if pyg_loader:
@@ -754,7 +990,7 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
     for N, nbr_runs in zip(node_counts, nbr_runs_list):
         # Check if strategies have enough test nodes
         neo4j_skip = (
-            any(s in strategies for s in ("neighborhood_sampling", "in_db_java"))
+            any(s in strategies for s in ("neighborhood_sampling", "in_db_java", "in_db_cypher", "in_db_cypher_opt"))
             and N > len(neo4j_test_pool)
         )
         pyg_skip = "full_graph" in strategies and pyg_loader and N > pyg_test_pool_size
@@ -764,12 +1000,14 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
 
         run_data: dict[str, list] = {s: [] for s in strategies}
         agreement_data: list[float] = []
+        jc_agreement_data: list[float] = []
+        co_agreement_data: list[float] = []
 
         for run_i in range(int(nbr_runs)):
             # Sample N Neo4j test nodes (same for neighborhood_sampling and in_db_java)
             neo4j_test_ids: list[int] = []
             neo4j_labels: dict[int, int] = {}
-            if "neighborhood_sampling" in strategies or "in_db_java" in strategies:
+            if any(s in strategies for s in ("neighborhood_sampling", "in_db_java", "in_db_cypher", "in_db_cypher_opt")):
                 rng = random.Random(run_i * 10007 + N)
                 neo4j_test_ids = rng.sample(neo4j_test_pool, N)
                 neo4j_labels = fetch_labels(neo4j_test_ids, cfg, driver)
@@ -801,6 +1039,18 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                         )
                         acc = compute_accuracy(preds, neo4j_labels)
 
+                    elif strategy == "in_db_cypher":
+                        preds, metrics = run_in_db_cypher(
+                            neo4j_test_ids, cfg, driver, prepared=prepared_cypher
+                        )
+                        acc = compute_accuracy(preds, neo4j_labels)
+
+                    elif strategy == "in_db_cypher_opt":
+                        preds, metrics = run_in_db_cypher_opt(
+                            neo4j_test_ids, cfg, driver, prepared=prepared_cypher_opt
+                        )
+                        acc = compute_accuracy(preds, neo4j_labels)
+
                     else:
                         print(f"  Unknown strategy '{strategy}', skipping.")
                         continue
@@ -814,13 +1064,36 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                     traceback.print_exc()
 
             # Compare neighborhood_sampling vs in_db_java predictions
-            ns_preds = run_preds.get("neighborhood_sampling")
+            ns_preds   = run_preds.get("neighborhood_sampling")
             java_preds = run_preds.get("in_db_java")
             if ns_preds is not None and java_preds is not None:
                 common = set(ns_preds) & set(java_preds)
                 if common:
                     agree = sum(1 for nid in common if ns_preds[nid] == java_preds[nid])
                     agreement_data.append(agree / len(common))
+
+            # Compare in_db_java vs in_db_cypher (argmax should be identical;
+            # any difference reflects float32 vs float64 precision divergence)
+            java_preds2  = run_preds.get("in_db_java")
+            cypher_preds = run_preds.get("in_db_cypher")
+            if java_preds2 is not None and cypher_preds is not None:
+                common_jc = set(java_preds2) & set(cypher_preds)
+                if common_jc:
+                    agree_jc = sum(
+                        1 for nid in common_jc if java_preds2[nid] == cypher_preds[nid]
+                    )
+                    jc_agreement_data.append(agree_jc / len(common_jc))
+
+            # Compare in_db_cypher vs in_db_cypher_opt (sanity: same argmax expected)
+            cypher_preds2  = run_preds.get("in_db_cypher")
+            opt_preds      = run_preds.get("in_db_cypher_opt")
+            if cypher_preds2 is not None and opt_preds is not None:
+                common_co = set(cypher_preds2) & set(opt_preds)
+                if common_co:
+                    agree_co = sum(
+                        1 for nid in common_co if cypher_preds2[nid] == opt_preds[nid]
+                    )
+                    co_agreement_data.append(agree_co / len(common_co))
 
         agg_by_strategy = {s: _agg(run_data[s]) for s in strategies if run_data[s]}
         if agreement_data:
@@ -829,12 +1102,30 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
             agg_by_strategy["_ns_vs_java_agreement"] = {
                 "mean": mean_agr, "ci95": ci_agr,
             }
+        if jc_agreement_data:
+            mean_jc = float(np.mean(jc_agreement_data)) * 100
+            ci_jc   = _ci95(jc_agreement_data) * 100
+            agg_by_strategy["_java_vs_cypher_agreement"] = {
+                "mean": mean_jc, "ci95": ci_jc,
+            }
+        if co_agreement_data:
+            mean_co = float(np.mean(co_agreement_data)) * 100
+            ci_co   = _ci95(co_agreement_data) * 100
+            agg_by_strategy["_cypher_vs_opt_agreement"] = {
+                "mean": mean_co, "ci95": ci_co,
+            }
         all_results[N] = agg_by_strategy
         print_table(N, nbr_runs, agg_by_strategy)
 
         if agreement_data:
             print(f"  neighborhood_sampling vs in_db_java agreement: "
                   f"{mean_agr:.1f}% ±{ci_agr:.1f}%")
+        if jc_agreement_data:
+            print(f"  in_db_java vs in_db_cypher agreement: "
+                  f"{mean_jc:.1f}% ±{ci_jc:.1f}%")
+        if co_agreement_data:
+            print(f"  in_db_cypher vs in_db_cypher_opt agreement: "
+                  f"{mean_co:.1f}% ±{ci_co:.1f}%")
 
     print_scaling_summary(all_results)
 
@@ -904,10 +1195,26 @@ def main() -> None:
                         help="Path to inference model config (src/configs/inference/models/*.json)")
     parser.add_argument("--output_dir", default="experiment_results/inference_comparison",
                         help="Directory to write run_N_DATE folders into (default: experiment_results/inference_comparison)")
+    parser.add_argument(
+        "--fast",
+        action="store_true",
+        default=False,
+        help=(
+            "Skip the slow unoptimised in_db_cypher strategy. "
+            "Use this for quick runs; omit it (or pass --slow) when you need "
+            "the full baseline comparison including in_db_cypher."
+        ),
+    )
     args = parser.parse_args()
 
     cfg = load_all_configs(args.dataset, args.model)
 
+    if args.fast:
+        before = cfg["model"].get("strategies", [])
+        cfg["model"]["strategies"] = [s for s in before if s != "in_db_cypher"]
+        if "in_db_cypher" in before:
+            print("[--fast] Skipping in_db_cypher (unoptimised). "
+                  "Remove --fast to include it.")
     uri      = os.environ.get("URI", "")
     user     = os.environ.get("USERNAME", "")
     password = os.environ.get("PASSWORD", "")
