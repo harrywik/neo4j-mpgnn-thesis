@@ -15,7 +15,7 @@
   "default_hidden_dim2": 128,
   "lr": 1e-3,
   "batch_size": 512,
-  "max_epochs": 20,
+  "max_epochs": 1,
   "patience": 5,
   "min_delta": 0.001,
   "shuffle": true,

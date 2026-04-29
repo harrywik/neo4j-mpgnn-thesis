@@ -152,6 +152,7 @@ def _build_spec(
     activation: str,
     num_hops: Optional[int],
     max_neighbors: Union[int, List[int]],
+    sampler: str = "neighbor_uniform",
 ) -> dict:
     """Return the spec dict for *model* without touching disk or Neo4j."""
     children = list(model.named_children())
@@ -176,6 +177,7 @@ def _build_spec(
     return {
         "num_hops": resolved_hops,
         "max_neighbors": fanouts,
+        "sampler": sampler,
         "layers": layers,
     }
 
@@ -281,6 +283,7 @@ def create_inference_spec(
     activation: str = "relu",
     num_hops: Optional[int] = None,
     max_neighbors: Union[int, List[int]] = 10,
+    sampler: str = "neighbor_uniform",
 ) -> str:
     """
     Inspect *model* and write ``spec.json`` + ``weights.bin`` to a directory.
@@ -315,7 +318,7 @@ def create_inference_spec(
     output_dir = os.path.join(base_dir, model_name)
     os.makedirs(output_dir, exist_ok=True)
 
-    spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors)
+    spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors, sampler=sampler)
     tensors = _referenced_tensors(model, spec)
 
     with open(os.path.join(output_dir, "spec.json"), "w") as f:
@@ -340,6 +343,7 @@ def upload_inference_spec(
     activation: str = "relu",
     num_hops: Optional[int] = None,
     max_neighbors: Union[int, List[int]] = 10,
+    sampler: str = "neighbor_uniform",
     database: Optional[str] = None,
 ) -> None:
     """
@@ -364,7 +368,7 @@ def upload_inference_spec(
     """
     validate_model_for_db_inference(model)
 
-    spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors)
+    spec    = _build_spec(model, activation=activation, num_hops=num_hops, max_neighbors=max_neighbors, sampler=sampler)
     tensors = _referenced_tensors(model, spec)
 
     spec_json = json.dumps(spec, indent=2)

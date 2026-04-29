@@ -1,0 +1,20 @@
+{
+  "dataset_name": "arxiv",
+  "training_dataset_config": "arxiv",
+  "training_implementation_config": "baseline_neo4j",
+  "node_label": "Paper",
+  "edge_type": "CITES",
+  "feature_property": "feature_vector",
+  "feature_property_type": "byte[]",
+  "target_property": "subject",
+  "nodeid_property": "id",
+  "split_property_name": "split",
+  "split_property_type": "str",
+  "feature_dim": 128,
+  "nbr_classes": 40,
+  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "nbr_runs":    [200, 200, 150, 100, 60, 40, 30, 20, 15, 10, 5, 3, 3],
+  "inference_batch_size": 256,
+  "num_neighbors": [10, 5],
+  "num_hops": 2
+}

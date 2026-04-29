@@ -13,6 +13,7 @@ INFERENCE_DATASET ?= cora
 INFERENCE_MODEL ?= gcn
 INFERENCE_OUTPUT ?= results/inference_comparison
 INFERENCE_RESULTS ?=  # path to an existing results JSON for re-plotting
+INFERENCE_FLAGS ?=    # extra flags, e.g. --fast
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
@@ -37,6 +38,9 @@ help:
 	@echo "  make compare_datasets IMPL_CMP=baseline_pyg DATASETS_CMP=\"cora arxiv\" [NBR_RUNS=3]"
 	@echo "Compare inference strategies:"
 	@echo "  make inference_experiment [INFERENCE_DATASET=cora] [INFERENCE_MODEL=gcn] [INFERENCE_OUTPUT=results/inference_comparison]"
+	@echo "  INFERENCE_DATASET variants: cora (default)  cora_quick (3 runs)  cora_thorough (high-rep)  arxiv  products  papers100M"
+	@echo "  INFERENCE_MODEL variants:   gcn (default, Cora)  gcn_arxiv  gcn_products  gcn_papers100M"
+	@echo "  INFERENCE_FLAGS=--fast  skips the slow unoptimised in_db_cypher strategy"
 	@echo "Re-plot from existing results JSON:"
 	@echo "  make inference_plots INFERENCE_RESULTS=results/inference_comparison/cora_GCN_....json"
 
@@ -112,6 +116,8 @@ inference_experiment:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.inference_experiment \
 		--dataset src/configs/inference/datasets/$(INFERENCE_DATASET).json \
 		--model   src/configs/inference/models/$(INFERENCE_MODEL).json \
+		--output_dir $(INFERENCE_OUTPUT) \
+		$(INFERENCE_FLAGS)
 
 inference_plots:
 	@if [ -z "$(INFERENCE_RESULTS)" ]; then \

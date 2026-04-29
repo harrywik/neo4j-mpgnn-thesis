@@ -115,20 +115,32 @@ def plot_latency_per_node(results: dict, output_dir: Path) -> None:
     data = _extract(results, "total_time_s")
     fig, ax = plt.subplots(figsize=(8, 5))
 
+    all_means_ms: list[float] = []
     for i, (strat, (ns, means, cis)) in enumerate(data.items()):
         ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        # convert seconds → milliseconds
-        means_ms = means * 1000; cis_ms = cis * 1000
+        means_ms = means * 1000
+        cis_ms   = cis   * 1000
+        all_means_ms.extend(means_ms.tolist())
         color = _color(i)
         ax.plot(ns, means_ms, label=_label(strat), color=color,
                 linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, np.maximum(means_ms - cis_ms, 1e-6), means_ms + cis_ms,
-                        alpha=0.18, color=_lighten(color))
+        # Clip the lower CI bound to half the local mean so bands never
+        # collapse to near-zero and distort the log axis.
+        lower = np.maximum(means_ms - cis_ms, means_ms * 0.5)
+        upper = means_ms + cis_ms
+        ax.fill_between(ns, lower, upper, alpha=0.18, color=_lighten(color))
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
     ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
-    ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
+    # Use '%g' so tick labels like 10, 100, 1000 render cleanly without
+    # trailing zeros or scientific-notation "0" artefacts from ScalarFormatter.
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:g}"))
+
+    # Anchor the bottom of the y-axis just below the smallest mean value.
+    if all_means_ms:
+        ax.set_ylim(bottom=min(all_means_ms) * 0.4)
+
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Total inference time (ms)", fontsize=11)
     ax.set_title("Total inference latency vs N (± 95 % CI)", fontsize=12)
@@ -140,28 +152,61 @@ def plot_latency_per_node(results: dict, output_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# 3. Accuracy vs N
+# 3. Accuracy bar chart at the largest N
 # ---------------------------------------------------------------------------
 
 def plot_accuracy(results: dict, output_dir: Path) -> None:
-    data = _extract(results, "accuracy")
-    fig, ax = plt.subplots(figsize=(8, 4))
+    """Bar chart of mean accuracy (± 95 % CI) at the largest measured N."""
+    all_ns = sorted(int(n) for n in results)
+    if not all_ns:
+        return
+    max_n = all_ns[-1]
+    max_n_str = str(max_n)
 
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means) * 100; cis = np.array(cis) * 100
-        color = _color(i)
-        ax.plot(ns, means, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, means - cis, means + cis,
-                        alpha=0.18, color=_lighten(color))
+    by_strat = results[max_n_str]
+    # Collect only real strategies (skip internal _agreement keys)
+    strategies = [s for s in by_strat if not s.startswith("_")]
 
-    ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
-    ax.set_xlabel("N (number of seed nodes)", fontsize=11)
+    means, cis, labels, colors = [], [], [], []
+    for i, strat in enumerate(strategies):
+        entry = by_strat[strat].get("accuracy", {})
+        mean = entry.get("mean")
+        if mean is None:
+            continue
+        means.append(mean * 100)
+        cis.append((entry.get("ci95") or 0.0) * 100)
+        labels.append(strat)
+        colors.append(_color(i))
+
+    if not means:
+        return
+
+    fig, ax = plt.subplots(figsize=(max(6, len(means) * 1.4), 5))
+    x = np.arange(len(means))
+    bars = ax.bar(
+        x, means, yerr=cis, capsize=5,
+        color=colors, edgecolor="#333333", linewidth=0.6,
+        error_kw={"ecolor": "#333333", "capsize": 5, "elinewidth": 1.3},
+    )
+
+    # Value labels above each bar
+    for bar, mean, ci in zip(bars, means, cis):
+        ax.text(
+            bar.get_x() + bar.get_width() / 2,
+            bar.get_height() + ci + 0.8,
+            f"{mean:.1f}%",
+            ha="center", va="bottom", fontsize=9, fontweight="bold",
+        )
+
+    # y-axis: start just below the minimum so bars don't look cut off
+    y_min = max(0.0, min(means) - max(cis) - 8)
+    ax.set_ylim(y_min, min(100, max(means) + max(cis) + 8))
+
+    ax.set_xticks(x)
+    ax.set_xticklabels([_label(s) for s in labels], fontsize=10, rotation=15, ha="right")
     ax.set_ylabel("Accuracy (%)", fontsize=11)
-    ax.set_title("Inference accuracy vs N (± 95 % CI)", fontsize=12)
-    ax.legend(fontsize=10)
-    ax.grid(True, which="both", linestyle="--", alpha=0.3)
+    ax.set_title(f"Inference accuracy at N = {max_n} (± 95 % CI)", fontsize=12)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "inference_accuracy.png", dpi=150)
     plt.close(fig)
@@ -336,8 +381,42 @@ def plot_speedup(results: dict, output_dir: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Master entry point
+# 8. ms / node vs N  (scaling efficiency)
 # ---------------------------------------------------------------------------
+
+def plot_ms_per_node_scaling(results: dict, output_dir: Path) -> None:
+    """Line chart of ms-per-node vs N for each strategy (log-log).
+
+    A flat line means perfectly linear scaling; an upward slope indicates
+    super-linear overhead as batch size grows (e.g. larger subgraphs).
+    """
+    data = _extract(results, "ms_per_node")
+    fig, ax = plt.subplots(figsize=(8, 5))
+
+    all_means: list[float] = []
+    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
+        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
+        all_means.extend(means.tolist())
+        color = _color(i)
+        ax.plot(ns, means, label=_label(strat), color=color,
+                linewidth=2, marker=_MARKERS[i], markersize=6)
+        lower = np.maximum(means - cis, means * 0.5)
+        ax.fill_between(ns, lower, means + cis, alpha=0.18, color=_lighten(color))
+
+    ax.set_xscale("log", base=2)
+    ax.set_yscale("log")
+    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:g}"))
+    if all_means:
+        ax.set_ylim(bottom=min(all_means) * 0.4)
+    ax.set_xlabel("N (number of seed nodes)", fontsize=11)
+    ax.set_ylabel("Latency per node (ms / node)", fontsize=11)
+    ax.set_title("Inference latency per node vs N (± 95 % CI)", fontsize=12)
+    ax.legend(fontsize=10)
+    ax.grid(True, which="both", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_dir / "inference_ms_per_node.png", dpi=150)
+    plt.close(fig)
 
 def plot_all(results_json_path: str | Path, output_dir: Path | None = None) -> Path:
     """Generate all inference experiment plots from a results JSON file.
@@ -368,10 +447,12 @@ def plot_all(results_json_path: str | Path, output_dir: Path | None = None) -> P
 
     plot_latency_per_node(results, output_dir)
     plot_accuracy(results, output_dir)
+    plot_ms_per_node_scaling(results, output_dir)
 
     plots = [
         "inference_latency_per_node.png",
         "inference_accuracy.png",
+        "inference_ms_per_node.png",
     ]
     for p in plots:
         print(f"  {p}")
