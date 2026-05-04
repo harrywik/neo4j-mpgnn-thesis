@@ -1,0 +1,246 @@
+{
+  "PyG graphSAGE sampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7830000235783089,
+      "final_validation_accuracy": 0.7670000230286608,
+      "throughput_samples_per_s": 5479.264087289822,
+      "time_to_best_accuracy_s": 1.5737202764488756,
+      "training_time_s": 2.3007620870601384,
+      "avg_batch_nodes": 355.90250000000003,
+      "avg_batch_edges": 569.8125,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0007245434215292335,
+      "training_mean_s": 0.003007225679983902,
+      "sampling_overhead_fraction": 0.1941573534320845,
+      "batch_nodes_cv": 0.09364392227780022,
+      "epochs_to_best_accuracy": 59.5,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.003820994636089688,
+      "final_validation_accuracy": 0.006708204114905913,
+      "throughput_samples_per_s": 122.95611948480162,
+      "time_to_best_accuracy_s": 0.2995808165550346,
+      "training_time_s": 0.05274877970180031,
+      "avg_batch_nodes": 0.6505261996412905,
+      "avg_batch_edges": 1.6080623692299063,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 1.7570107417239755e-05,
+      "training_mean_s": 7.230553053334246e-05,
+      "sampling_overhead_fraction": 0.0011825851861091779,
+      "batch_nodes_cv": 0.005185973271194016,
+      "epochs_to_best_accuracy": 11.80889495253472,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "Neo4j (Cypher) graphSAGE sampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.782600023631831,
+      "final_validation_accuracy": 0.7668000230989342,
+      "throughput_samples_per_s": 71.67283769558807,
+      "time_to_best_accuracy_s": 142.94093081466855,
+      "training_time_s": 175.80501932329497,
+      "avg_batch_nodes": 355.74305555555554,
+      "avg_batch_edges": 570.0527777777777,
+      "remote_feature_total_s": 162.04314375435933,
+      "sampling_mean_s": 0.15619125641753068,
+      "training_mean_s": 0.0041358146463365605,
+      "sampling_overhead_fraction": 0.9742032208465959,
+      "batch_nodes_cv": 0.09466011843654269,
+      "epochs_to_best_accuracy": 72.6,
+      "feature_fetch_overhead_fraction": 0.9217157839392781,
+      "topo_etl_ms": 0.63538812323446,
+      "feat_x_etl_ms": 1.6580132944749066
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.005730619686491668,
+      "final_validation_accuracy": 0.006013318643523002,
+      "throughput_samples_per_s": 0.4251495848125607,
+      "time_to_best_accuracy_s": 22.794291258680854,
+      "training_time_s": 1.0457973182520883,
+      "avg_batch_nodes": 1.289165589312201,
+      "avg_batch_edges": 1.7821500054639845,
+      "remote_feature_total_s": 1.1645059419471002,
+      "sampling_mean_s": 0.001343757107935674,
+      "training_mean_s": 0.0001044875029578152,
+      "sampling_overhead_fraction": 0.0006425040415839223,
+      "batch_nodes_cv": 0.005110377644247891,
+      "epochs_to_best_accuracy": 11.412274094149685,
+      "feature_fetch_overhead_fraction": 0.002120021422607532,
+      "topo_etl_ms": 0.015964293482732768,
+      "feat_x_etl_ms": 0.050099370902000756
+    }
+  },
+  "Neo4j (Java) graphSAGE sampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7816000235118123,
+      "final_validation_accuracy": 0.774600023302616,
+      "throughput_samples_per_s": 72.76938254579477,
+      "time_to_best_accuracy_s": 143.615871910844,
+      "training_time_s": 173.15313334674573,
+      "avg_batch_nodes": 353.89750000000004,
+      "avg_batch_edges": 569.103888888889,
+      "remote_feature_total_s": 160.36327872117982,
+      "sampling_mean_s": 0.15359100373604126,
+      "training_mean_s": 0.004145869252582391,
+      "sampling_overhead_fraction": 0.9737167414588299,
+      "batch_nodes_cv": 0.09292235774626426,
+      "epochs_to_best_accuracy": 73.8,
+      "feature_fetch_overhead_fraction": 0.9261485479990483,
+      "topo_etl_ms": 0.6834531861172495,
+      "feat_x_etl_ms": 1.6606438089237439
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.005499090904180205,
+      "final_validation_accuracy": 0.003800000127053777,
+      "throughput_samples_per_s": 0.32211832323949263,
+      "time_to_best_accuracy_s": 23.1956010341147,
+      "training_time_s": 0.7655615378049097,
+      "avg_batch_nodes": 0.5926809902239453,
+      "avg_batch_edges": 0.807135615144422,
+      "remote_feature_total_s": 0.5526271041419549,
+      "sampling_mean_s": 0.0011725003042836577,
+      "training_mean_s": 9.405570716495034e-05,
+      "sampling_overhead_fraction": 0.0005504056647656743,
+      "batch_nodes_cv": 0.0016559663893724753,
+      "epochs_to_best_accuracy": 11.931470990619722,
+      "feature_fetch_overhead_fraction": 0.004171054744491312,
+      "topo_etl_ms": 0.014797796301401557,
+      "feat_x_etl_ms": 0.058277217356030586
+    }
+  },
+  "PyG GraphSAINT sampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.748,
+      "final_validation_accuracy": 0.7392,
+      "throughput_samples_per_s": 3552.90313756431,
+      "time_to_best_accuracy_s": 2.287096107797697,
+      "training_time_s": 3.5574845377355815,
+      "avg_batch_nodes": 1599.5622222222223,
+      "avg_batch_edges": 5476.274666666666,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 0.0013866890800288982,
+      "training_mean_s": 0.0056159079494989585,
+      "sampling_overhead_fraction": 0.1984923031447813,
+      "batch_nodes_cv": 0.011888313759411781,
+      "epochs_to_best_accuracy": 54.4,
+      "feature_fetch_overhead_fraction": 0.0
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.005440588203494182,
+      "final_validation_accuracy": 0.007959899496852966,
+      "throughput_samples_per_s": 209.11626075858445,
+      "time_to_best_accuracy_s": 0.9677968837701824,
+      "training_time_s": 0.18873405924448083,
+      "avg_batch_nodes": 1.0076571041312516,
+      "avg_batch_edges": 4.912334407726596,
+      "remote_feature_total_s": 0.0,
+      "sampling_mean_s": 8.51539618289652e-05,
+      "training_mean_s": 0.0003509839914586985,
+      "sampling_overhead_fraction": 0.015017189944759526,
+      "batch_nodes_cv": 0.00034349585563496824,
+      "epochs_to_best_accuracy": 24.8443152451421,
+      "feature_fetch_overhead_fraction": 0.0
+    }
+  },
+  "Neo4j GraphSAINT sampler": {
+    "n_runs_completed": 10,
+    "num_epochs_in_plot": 90,
+    "scalar_means": {
+      "best_validation_accuracy": 0.7662000230341752,
+      "final_validation_accuracy": 0.7570000227494929,
+      "throughput_samples_per_s": 86.58209316176205,
+      "time_to_best_accuracy_s": 105.00615635896102,
+      "training_time_s": 145.5493444499094,
+      "avg_batch_nodes": 1663.8522222222223,
+      "avg_batch_edges": 5607.358666666667,
+      "remote_feature_total_s": 109.8732087190263,
+      "sampling_mean_s": 0.05639607150718157,
+      "training_mean_s": 0.006484571137155096,
+      "sampling_overhead_fraction": 0.8968044417007214,
+      "batch_nodes_cv": 0.010342057620678658,
+      "epochs_to_best_accuracy": 64.1,
+      "feature_fetch_overhead_fraction": 0.7549054078000511,
+      "topo_etl_ms": 1.2564836568502789,
+      "feat_x_etl_ms": 3.1694597453283877
+    },
+    "scalar_stds": {
+      "best_validation_accuracy": 0.002749545485323386,
+      "final_validation_accuracy": 0.007224956970995282,
+      "throughput_samples_per_s": 1.083340529115601,
+      "time_to_best_accuracy_s": 29.07423885167294,
+      "training_time_s": 1.8156938200623995,
+      "avg_batch_nodes": 0.7224028833870667,
+      "avg_batch_edges": 6.36033792098629,
+      "remote_feature_total_s": 1.3070831244368462,
+      "sampling_mean_s": 0.001626384513876377,
+      "training_mean_s": 0.00015109975905451092,
+      "sampling_overhead_fraction": 0.00365695400779467,
+      "batch_nodes_cv": 0.00016894113753054124,
+      "epochs_to_best_accuracy": 17.79016582272352,
+      "feature_fetch_overhead_fraction": 0.004583593305769014,
+      "topo_etl_ms": 0.04645355025431869,
+      "feat_x_etl_ms": 0.1420896888990022
+    }
+  },
+  "pairwise_distribution_stats": {
+    "PyG graphSAGE sampler vs Neo4j (Cypher) graphSAGE sampler": {
+      "js_divergence": 0.000146,
+      "kl_a_to_b": 0.000583,
+      "kl_b_to_a": 0.000583,
+      "n_nodes_tested": 1664,
+      "n_nodes_significant": 0,
+      "pct_nodes_significant": 0.0
+    },
+    "PyG graphSAGE sampler vs Neo4j (Java) graphSAGE sampler": {
+      "js_divergence": 0.002329,
+      "kl_a_to_b": 0.010158,
+      "kl_b_to_a": 0.009114,
+      "n_nodes_tested": 1664,
+      "n_nodes_significant": 145,
+      "pct_nodes_significant": 8.71
+    },
+    "Neo4j (Cypher) graphSAGE sampler vs Neo4j (Java) graphSAGE sampler": {
+      "js_divergence": 0.002332,
+      "kl_a_to_b": 0.010192,
+      "kl_b_to_a": 0.009089,
+      "n_nodes_tested": 1664,
+      "n_nodes_significant": 146,
+      "pct_nodes_significant": 8.77
+    }
+  },
+  "pairwise_edge_distribution_stats": {
+    "PyG graphSAGE sampler vs Neo4j (Cypher) graphSAGE sampler": {
+      "js_divergence": 0.000179,
+      "kl_a_to_b": 0.000716,
+      "kl_b_to_a": 0.000716,
+      "n_edges_tested": 2702,
+      "n_edges_significant": 0,
+      "pct_edges_significant": 0.0
+    },
+    "PyG graphSAGE sampler vs Neo4j (Java) graphSAGE sampler": {
+      "js_divergence": 0.004612,
+      "kl_a_to_b": 0.020523,
+      "kl_b_to_a": 0.017954,
+      "n_edges_tested": 2702,
+      "n_edges_significant": 386,
+      "pct_edges_significant": 14.29
+    },
+    "Neo4j (Cypher) graphSAGE sampler vs Neo4j (Java) graphSAGE sampler": {
+      "js_divergence": 0.004686,
+      "kl_a_to_b": 0.020938,
+      "kl_b_to_a": 0.018164,
+      "n_edges_tested": 2702,
+      "n_edges_significant": 395,
+      "pct_edges_significant": 14.62
+    }
+  }
+}
