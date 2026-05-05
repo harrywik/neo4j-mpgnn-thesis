@@ -42,6 +42,8 @@ experiment_results/sampler_comparison
 !**/measurements.csv
 *.csv
 .env
+**/node_visit_counts.json
+**/edge_visit_counts.json
 notes
 data/ogbn-products/ogbn_products
 data/ogbn-papers100M/ogbn_papers100M

@@ -34,11 +34,9 @@ from neo4j_pyg.models import GCN
 from neo4j_pyg.feature_stores import Neo4jNoCacheFS
 from neo4j_pyg.graph_stores import Neo4jSingleGS
 from neo4j_pyg.samplers import (
-    Neo4jEdgeModeSampler,
-    Neo4jNeighborSampler,
     Neo4jSampler,
     Neo4jGraphSAINTRandomWalkSampler,
-    OldNeighborSampler,
+    Neo4jJavaNeighborSampler
 )
 from Neo4jConnection import Neo4jConnection
 from training.Training import Trainer, put_nodeLoader_args_map
@@ -114,6 +112,12 @@ def _build_registry(
             "neo4j",
             lambda gs, nn, nl=node_label, rt=rel_type: OldNeighborSampler(
                 gs, num_neighbors=nn, node_label=nl, rel_type=rt
+            ),
+        ),
+        "Neo4jJavaNeighborSampler": RunSpec(
+            "neo4j",
+            lambda gs, nn, p=profile, nl=node_label, rt=rel_type: Neo4jJavaNeighborSampler(
+                gs, num_neighbors=nn, profile=p, node_label=nl, rel_type=rt
             ),
         ),
         "Neo4jGraphSAINTRandomWalkSampler": RunSpec("graphsaint_neo4j", None),
@@ -213,8 +217,18 @@ def main() -> None:
     max_epochs: int = config["max_epochs"]
     batch_size: int = config["batch_size"]
     num_neighbors: list[int] = config["num_neighbors"]
-    sampler_names: list[str] = config["samplers"]
     drop_last: bool = config.get("drop_last")
+
+    # Samplers may be plain strings or [name, plot_label] pairs.
+    sampler_names: list[str] = []
+    sampler_labels: dict[str, str] = {}
+    for entry in config["samplers"]:
+        if isinstance(entry, (list, tuple)):
+            name, label = entry[0], entry[1]
+        else:
+            name = label = entry
+        sampler_names.append(name)
+        sampler_labels[name] = label
     profile: bool = config.get("profile", False)
 
     SAMPLER_REGISTRY = _build_registry(
@@ -362,11 +376,11 @@ def main() -> None:
                     # once and reused across all runs of this comparison.
                     save_dir=str(experiment_dir),
                 )
-                eval_sampler = Neo4jNeighborSampler(
+                eval_sampler = Neo4jSampler(
                     neo4j_graph_store,
                     num_neighbors=num_neighbors,
-                    node_label=dataset_cfg["node_label"],
-                    rel_type=dataset_cfg["rel_type"],
+                    # node_label=dataset_cfg["node_label"],
+                    # rel_type=dataset_cfg["rel_type"],
                     profile=profile,
                 )
                 trainer = GraphSAINTTrainer(
@@ -422,7 +436,7 @@ def main() -> None:
     # Comparison plots
     # ------------------------------------------------------------------
     print("\nGenerating comparison plots ...")
-    plot_comparison(experiment_dir, sampler_names, num_runs)
+    plot_comparison(experiment_dir, sampler_names, num_runs, sampler_labels=sampler_labels)
 
     # Remove per-run data directories — the aggregated plots are all we need.
     for sampler_name in sampler_names:

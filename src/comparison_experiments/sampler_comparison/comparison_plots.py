@@ -170,6 +170,7 @@ def aggregate_runs(
             "feat_y_query_sent_ms", "feat_y_first_record_ms",
             "feat_y_transfer_ms", "feat_y_etl_ms",
             "network_baseline_ms",
+            "avg_feat_bytes",
         ):
             _collect(key, metrics.get(key))
 
@@ -262,22 +263,12 @@ def plot_accuracy_vs_epochs(
         ci = 1.96 * yerr / np.sqrt(n)
         ax.fill_between(x, y - ci, y + ci, alpha=0.35, color=_lighten(color))
 
-        best_epoch = data["scalar_means"].get("epochs_to_best_accuracy")
-        if best_epoch is not None:
-            epoch_int = int(round(best_epoch))
-            ax.axvline(x=best_epoch, color=color, linestyle="--", linewidth=1.2, alpha=0.8)
-            ax.text(
-                best_epoch, 0.02, f"{epoch_int}",
-                color=color, fontsize=7, ha="center", va="bottom",
-                transform=ax.get_xaxis_transform(),
-            )
-
     ax.set_title("Validation accuracy vs epochs")
     ax.set_xlabel("Epoch")
     ax.set_ylabel("Validation accuracy")
     ax.set_ylim(0.0, 1.0)
     ax.xaxis.set_major_locator(mticker.MaxNLocator(integer=True))
-    ax.legend(fontsize=9)
+    ax.legend(fontsize=9, loc="lower right")
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_dir / "accuracy_epochs.png", dpi=150)
@@ -533,6 +524,129 @@ def plot_latency_breakdown(agg: dict[str, dict], out_dir: Path) -> None:
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(out_dir / "comparison_latency_breakdown.png", dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Thesis-level training time decomposition stacked bar
+# ---------------------------------------------------------------------------
+
+# Segment definitions for plot_time_decomposition_stacked.
+# key field:
+#   str       → look up that key directly in scalar_means (value already in ms)
+#   list[str] → sum all listed keys from scalar_means (values in ms)
+#   "_training_ms" → training_mean_s * 1000
+#   "_other_ms"    → max(0, total_ms - sum of all other explicit segments)
+_DECOMP_SEGMENTS: list[tuple[str, str | list[str], str]] = [
+    ("Subgraph query (DB+RTT)",  "topo_first_record_ms",                                        "#2166AC"),
+    ("Subgraph transfer",         "topo_transfer_ms",                                            "#6BAED6"),
+    ("Feature query (DB+RTT)",    ["feat_x_first_record_ms", "feat_y_first_record_ms"],          "#E6550D"),
+    ("Feature transfer",          ["feat_x_transfer_ms",    "feat_y_transfer_ms"],               "#FD8D3C"),
+    ("Deserialization (ETL)",     ["topo_etl_ms", "feat_x_etl_ms", "feat_y_etl_ms"],            "#74C476"),
+    ("GNN compute (fwd+bwd+opt)", "_training_ms",                                                "#E45756"),
+    ("Other / unaccounted",       "_other_ms",                                                   "#BDBDBD"),
+]
+
+
+def _decomp_values(sm: dict) -> list[float]:
+    """Return the ms value for every segment in _DECOMP_SEGMENTS from scalar_means *sm*.
+
+    The final "Other / unaccounted" segment is computed as the remainder after
+    subtracting all explicit segments from the total (sampling + training) time.
+    """
+    total_ms = (
+        (sm.get("sampling_mean_s") or 0.0) + (sm.get("training_mean_s") or 0.0)
+    ) * 1000.0
+
+    vals: list[float] = []
+    explicit_sum = 0.0
+    for _label, key, _color in _DECOMP_SEGMENTS:
+        if key == "_training_ms":
+            v = (sm.get("training_mean_s") or 0.0) * 1000.0
+        elif key == "_other_ms":
+            v = max(0.0, total_ms - explicit_sum)
+        elif isinstance(key, list):
+            v = sum(sm.get(k) or 0.0 for k in key)
+        else:
+            v = sm.get(key) or 0.0
+        if key != "_other_ms":
+            explicit_sum += v
+        vals.append(v)
+    return vals
+
+
+def plot_time_decomposition_stacked(
+    group_data: dict[str, dict],
+    output_path: "Path",
+    title: str = "Training time decomposition per batch",
+) -> None:
+    """Stacked bar chart of mean batch time split into thesis-level segments.
+
+    Parameters
+    ----------
+    group_data:
+        Mapping from group name (implementation, dataset, …) to the dict
+        returned by ``aggregate_runs()``.  Only ``scalar_means`` is used.
+    output_path:
+        Full path (including filename) where the PNG is saved.
+    title:
+        Plot title.
+
+    Segments (bottom to top):
+        Subgraph query (DB+RTT), Subgraph transfer,
+        Feature query (DB+RTT), Feature transfer,
+        Deserialization (ETL), GNN compute (fwd+bwd+opt), Other / unaccounted.
+
+    Note: forward, backward, and optimizer steps are not timed individually
+    and are therefore shown as a single "GNN compute" segment.
+    """
+    names = list(group_data.keys())
+    if not names:
+        return
+
+    seg_labels = [s[0] for s in _DECOMP_SEGMENTS]
+    seg_colors = [s[2] for s in _DECOMP_SEGMENTS]
+
+    # values[seg_idx][group_idx]
+    values: list[list[float]] = [[] for _ in _DECOMP_SEGMENTS]
+    for name in names:
+        sm = group_data[name]["scalar_means"]
+        seg_vals = _decomp_values(sm)
+        for i, v in enumerate(seg_vals):
+            values[i].append(v)
+
+    x = np.arange(len(names))
+    fig, ax = plt.subplots(figsize=(max(7, len(names) * 2.2), 5.5))
+
+    bottoms = np.zeros(len(names))
+    for seg_vals, label, color in zip(values, seg_labels, seg_colors):
+        seg_arr = np.array(seg_vals)
+        ax.bar(x, seg_arr, bottom=bottoms, label=label, color=color, width=0.55)
+        for xi, (bot, val) in enumerate(zip(bottoms, seg_arr)):
+            if val >= 1.5:
+                ax.text(
+                    xi, bot + val / 2, f"{val:.1f}",
+                    ha="center", va="center",
+                    fontsize=6.5,
+                    color="white" if val > 5 else "black",
+                )
+        bottoms += seg_arr
+
+    # Total label on top of each bar
+    for xi, total in enumerate(bottoms):
+        if total > 0:
+            ax.text(xi, total + 0.5, f"{total:.1f} ms", ha="center", va="bottom", fontsize=7.5)
+
+    ax.set_xticks(x)
+    ax.set_xticklabels(names, rotation=15, ha="right", fontsize=9)
+    ax.set_title(title)
+    ax.set_ylabel("ms per batch")
+    note = "* GNN compute bundles forward, backward, and optimizer steps (not individually timed)"
+    ax.annotate(note, xy=(0, -0.18), xycoords="axes fraction", fontsize=6.5, color="#555555")
+    ax.legend(fontsize=7.5, loc="upper right", framealpha=0.85)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
     plt.close(fig)
 
 
@@ -1236,6 +1350,73 @@ def write_summary(
         json.dump(summary, f, indent=2)
     print(f"  Summary JSON: {out_path}")
 
+    # Also persist the epoch / time series arrays so plots can be regenerated
+    # later without re-running the experiment.
+    series: dict[str, Any] = {}
+    for name, data in agg.items():
+        series[name] = {
+            "epoch_mean": data["epoch_mean"].tolist(),
+            "epoch_std":  data["epoch_std"].tolist(),
+            "time_grid":  data["time_grid"].tolist(),
+            "time_mean":  data["time_mean"].tolist(),
+            "time_std":   data["time_std"].tolist(),
+            "n_runs":     data["n_runs"],
+            "scalar_means": data["scalar_means"],
+            "scalar_stds":  data["scalar_stds"],
+        }
+    series_path = out_dir / "aggregated_series.json"
+    with open(series_path, "w") as f:
+        json.dump(series, f)
+    print(f"  Series JSON:  {series_path}")
+
+
+def load_aggregated_series(experiment_dir: Path) -> dict[str, dict]:
+    """Load the aggregated series saved by :func:`write_summary`.
+
+    Returns a dict in the same shape as the ``agg`` dict used internally by
+    :func:`plot_comparison`, so it can be passed directly to any plot function.
+    """
+    series_path = experiment_dir / "aggregated_series.json"
+    if not series_path.exists():
+        raise FileNotFoundError(
+            f"No aggregated_series.json found in {experiment_dir}. "
+            "Re-run the experiment to generate it."
+        )
+    with open(series_path) as f:
+        raw = json.load(f)
+
+    agg: dict[str, dict] = {}
+    for name, d in raw.items():
+        agg[name] = {
+            "epoch_mean":    np.array(d["epoch_mean"]),
+            "epoch_std":     np.array(d["epoch_std"]),
+            "time_grid":     np.array(d["time_grid"]),
+            "time_mean":     np.array(d["time_mean"]),
+            "time_std":      np.array(d["time_std"]),
+            "n_runs":        d["n_runs"],
+            "scalar_means":  d["scalar_means"],
+            "scalar_stds":   d["scalar_stds"],
+            "node_visit_counts": {},
+            "edge_visit_counts": {},
+        }
+    return agg
+
+
+def replot_accuracy(experiment_dir: Path) -> None:
+    """Regenerate accuracy plots from ``aggregated_series.json`` in-place.
+
+    Useful for tweaking plot appearance without re-running the full experiment.
+    """
+    agg = load_aggregated_series(experiment_dir)
+    dir_accuracy = experiment_dir / "accuracy"
+    dir_accuracy.mkdir(exist_ok=True)
+    plot_accuracy_vs_epochs(agg, dir_accuracy)
+    plot_accuracy_vs_time(agg, dir_accuracy)
+    plot_epoch_to_best_acc(agg, dir_accuracy)
+    plot_best_val_acc(agg, dir_accuracy)
+    plot_throughput(agg, dir_accuracy)
+    print(f"Accuracy plots regenerated in {dir_accuracy}")
+
 
 # ---------------------------------------------------------------------------
 # Entry point
@@ -1245,15 +1426,21 @@ def plot_comparison(
     experiment_dir: Path,
     sampler_names: list[str],
     num_runs: int,
+    sampler_labels: dict[str, str] | None = None,
 ) -> None:
     """Aggregate all runs and generate all comparison plots.
 
     Args:
         experiment_dir: Top-level directory for this comparison run
             (e.g. ``experiment_results/sampler_comparison/comparison_0/``).
-        sampler_names: Ordered list of sampler labels to include.
+        sampler_names: Ordered list of internal sampler names (used as
+            directory names on disk).
         num_runs: Number of runs per sampler.
+        sampler_labels: Optional mapping from internal sampler name to the
+            human-readable label used in plot legends and axes.  Falls back
+            to the internal name when not provided.
     """
+    _labels = sampler_labels or {}
     agg: dict[str, dict] = {}
     for name in sampler_names:
         sampler_dir = experiment_dir / name
@@ -1264,8 +1451,9 @@ def plot_comparison(
         if data["n_runs"] == 0:
             print(f"  WARNING: No completed runs found for {name} — skipping.")
             continue
-        agg[name] = data
-        print(f"  Aggregated {data['n_runs']} runs for {name}.")
+        label = _labels.get(name, name)
+        agg[label] = data
+        print(f"  Aggregated {data['n_runs']} runs for {name} (label: {label!r}).")
 
     if not agg:
         print("No data to plot.")

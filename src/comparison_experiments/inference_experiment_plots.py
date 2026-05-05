@@ -40,6 +40,10 @@ _STRATEGY_LABELS = {
 
 _MARKERS = ["o", "s", "^", "D", "v"]
 
+# Integer formatter for the N (seed-node count) x-axis so ticks render as
+# "1, 2, 4, ..." rather than "1.0, 2.0, 4.0, ...".
+_N_FMT = mticker.FuncFormatter(lambda x, _: str(int(x)))
+
 
 def _color(i: int) -> str:
     return _COLORS[i % len(_COLORS)]
@@ -95,7 +99,7 @@ def plot_throughput_scaling(results: dict, output_dir: Path) -> None:
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     ax.yaxis.set_major_formatter(mticker.ScalarFormatter())
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Throughput (nodes / s)", fontsize=11)
@@ -132,7 +136,7 @@ def plot_latency_per_node(results: dict, output_dir: Path) -> None:
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     # Use '%g' so tick labels like 10, 100, 1000 render cleanly without
     # trailing zeros or scientific-notation "0" artefacts from ScalarFormatter.
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:g}"))
@@ -233,7 +237,7 @@ def plot_memory(results: dict, output_dir: Path) -> None:
                         alpha=0.18, color=_lighten(color))
 
     ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Peak memory (MB)", fontsize=11)
     ax.set_title("Python-side peak memory vs N (± 95 % CI)", fontsize=12)
@@ -278,7 +282,7 @@ def plot_batch_latency(results: dict, output_dir: Path) -> None:
         color_idx += 1
 
     ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Batch latency (ms)", fontsize=11)
     ax.set_title("Per-batch latency P50 / P95 vs N (± 95 % CI)", fontsize=12)
@@ -369,7 +373,7 @@ def plot_speedup(results: dict, output_dir: Path) -> None:
 
     ax.axhline(1.0, color="#888888", linewidth=1.2, linestyle="--", label="Baseline (neighborhood_sampling)")
     ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Throughput ratio vs neighborhood_sampling", fontsize=11)
     ax.set_title("Relative speedup over neighborhood sampling", fontsize=12)
@@ -405,7 +409,7 @@ def plot_ms_per_node_scaling(results: dict, output_dir: Path) -> None:
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
-    ax.xaxis.set_major_formatter(mticker.ScalarFormatter())
+    ax.xaxis.set_major_formatter(_N_FMT)
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:g}"))
     if all_means:
         ax.set_ylim(bottom=min(all_means) * 0.4)

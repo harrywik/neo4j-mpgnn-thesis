@@ -31,7 +31,10 @@ import matplotlib.ticker as mticker
 import numpy as np
 import pandas as pd
 
-from comparison_experiments.sampler_comparison.comparison_plots import aggregate_runs
+from comparison_experiments.sampler_comparison.comparison_plots import (
+    aggregate_runs,
+    plot_time_decomposition_stacked,
+)
 import pandas as pd
 
 # ---------------------------------------------------------------------------
@@ -660,5 +663,13 @@ def plot_all_comparisons(
     plot_comparison_subphase_latency(impl_data, impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_bar(impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_timeline(impl_dirs, output_dir)
+    try:
+        plot_time_decomposition_stacked(
+            impl_data,
+            output_dir / "comparison_time_decomposition.png",
+            title="Training time decomposition per batch — implementations",
+        )
+    except Exception as e:
+        print(f"  Warning: time decomposition plot failed: {e}")
 
     print(f"  Comparison plots written to: {output_dir}")

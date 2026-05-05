@@ -20,6 +20,7 @@ from .measurements_plots import (
     plot_all_operator_profiles,
     plot_end_to_end_latency,
     plot_driver_time_breakdown,
+    plot_training_time_decomposition,
 )
 from .QueryProfileAccumulator import QueryProfileAccumulator
 
@@ -141,6 +142,11 @@ class Measurer:
             plot_subphase_latency_waterfall(csv_path, summary)
         except Exception as e:
             print(f"Warning: Failed to plot subphase latency: {e}")
+
+        try:
+            plot_training_time_decomposition(summary, output_dir=csv_path.parent)
+        except Exception as e:
+            print(f"Warning: Failed to plot training time decomposition: {e}")
 
         try:
             prof_path = csv_path.with_name("train_profile.prof")
