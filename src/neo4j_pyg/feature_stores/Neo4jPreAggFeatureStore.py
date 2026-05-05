@@ -337,6 +337,7 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         raw_ids = [int(nid) for nid in (record["rawNodeIds"] or [])]
         raw_features = record["rawNodeFeatures"] or []
         feature_map: Dict[int, np.ndarray] = {}
+        raw_matrix: Optional[np.ndarray] = None
         if raw_ids:
             raw_matrix = self._decode_packed_feature_rows(raw_features)
             for i, nid in enumerate(raw_ids):
@@ -357,10 +358,16 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         preagg_map: Dict[int, np.ndarray] = {}
         target_ids_out = [int(nid) for nid in (record["targetNodeIds"] or [])]
         aggregated_features = record["aggregatedFeatures"] or []
+        agg_matrix: Optional[np.ndarray] = None
         if target_ids_out:
             agg_matrix = self._decode_packed_feature_rows(aggregated_features)
             for i, nid in enumerate(target_ids_out):
                 preagg_map[nid] = agg_matrix[i]
+
+        if self.measurer is not None:
+            raw_bytes = int(raw_matrix.nbytes) if raw_matrix is not None else 0
+            agg_bytes = int(agg_matrix.nbytes) if agg_matrix is not None else 0
+            self.measurer.log_event("feat_bytes", raw_bytes + agg_bytes)
 
         return feature_map, label_map, preagg_map
 

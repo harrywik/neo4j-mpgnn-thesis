@@ -1,7 +1,7 @@
 {
   "profile": false,
-  "num_runs": 1,
-  "max_epochs": 10,
+  "num_runs": 3,
+  "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
   "lr": 1e-3,
@@ -16,9 +16,8 @@
   "graphsaint_batch_size": 1000,
   "walk_length": 2,
   "num_steps": 5,
-  "sample_coverage": 200,
+  "sample_coverage": 100,
   "samplers": [
-    "Neo4jGraphSAINTRandomWalkSampler",
-    "Neo4jSampler" 
+    ["Neo4jSampler",                       "Neo4j (Cypher) graphSAGE sampler"]
   ]
 }
