@@ -96,7 +96,7 @@ class Neo4jSampler(BaseSampler):
             // 4. pyg-lib "take all" rule (Case 1 in _sample).
             WITH i, src, visited, edges,
                 CASE
-                    WHEN {k} < 0 OR (false = false AND {k} >= size(cand_rels))
+                    WHEN {k} < 0 OR {k} >= size(cand_rels)
                     THEN cand_rels
                     ELSE apoc.coll.randomItems(cand_rels, {k}, false)
                 END AS picked_rels
@@ -122,7 +122,7 @@ class Neo4jSampler(BaseSampler):
                     END
                 ) AS next_frontier
 
-            // 9. return the next frontier, visited and edges
+            // 8. return the next frontier, visited and edges
             RETURN
                 next_frontier,
                 visited + next_frontier AS next_visited,
@@ -136,7 +136,7 @@ class Neo4jSampler(BaseSampler):
             """)
 
         q.append(f"""
-        // 11. return edge pairs and nodes grouped by hop distance from seeds
+        // 9. return edge pairs and nodes grouped by hop distance from seeds
         RETURN
             edges AS edge_pairs,
             [hop IN nodes_by_hop | [n IN hop | n.{self.nodeid_property}]] AS nodes_by_hop
