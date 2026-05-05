@@ -1,0 +1,345 @@
+{
+  "config": {
+    "dataset_name": "papers100M",
+    "training_dataset_config": "papers100M",
+    "training_implementation_config": "baseline_neo4j",
+    "node_label": "Paper",
+    "edge_type": "CITES",
+    "feature_property": "feature_vector",
+    "feature_property_type": "byte[]",
+    "target_property": "subject",
+    "nodeid_property": "id",
+    "split_property_name": "split",
+    "split_property_type": "str",
+    "feature_dim": 128,
+    "nbr_classes": 172,
+    "node_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128
+    ],
+    "nbr_runs": [
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3,
+      3
+    ],
+    "inference_batch_size": 256,
+    "num_neighbors": [
+      10,
+      5
+    ],
+    "num_hops": 2
+  },
+  "model": {
+    "model_class": "GCN",
+    "hidden_dim1": 256,
+    "hidden_dim2": 128,
+    "checkpoint_path": null,
+    "model_name": "experiment_gcn_papers100M",
+    "strategies": [
+      "neighborhood_sampling",
+      "in_db_java",
+      "in_db_cypher_opt"
+    ]
+  },
+  "results": {
+    "1": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.0,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.11197402079900105,
+          "ci95": 0.20342920349524377
+        },
+        "ms_per_node": {
+          "mean": 111.97402079900105,
+          "ci95": 203.42920349524377
+        },
+        "throughput_nodes_per_s": {
+          "mean": 82.84439907246696,
+          "ci95": 78.63512636889077
+        },
+        "peak_memory_mb": {
+          "mean": 0.03388086954752604,
+          "ci95": 0.003185167406785439
+        },
+        "p50_batch_ms": {
+          "mean": 12.051334604620934,
+          "ci95": 18.22637177395626
+        },
+        "p95_batch_ms": {
+          "mean": 12.051334604620934,
+          "ci95": 18.22637177395626
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "2": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.5,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.09249599402149518,
+          "ci95": 0.1447356146515736
+        },
+        "ms_per_node": {
+          "mean": 46.24799701074759,
+          "ci95": 72.36780732578681
+        },
+        "throughput_nodes_per_s": {
+          "mean": 114.2078337970445,
+          "ci95": 154.7471751864259
+        },
+        "peak_memory_mb": {
+          "mean": 0.04478041330973307,
+          "ci95": 0.02336554973834236
+        },
+        "p50_batch_ms": {
+          "mean": 2.5040367618203163,
+          "ci95": 0.5295843984607445
+        },
+        "p95_batch_ms": {
+          "mean": 2.5040367618203163,
+          "ci95": 0.5295843984607445
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "4": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.5,
+          "ci95": 0.2829016319029166
+        },
+        "total_time_s": {
+          "mean": 0.008907044616838297,
+          "ci95": 0.0014190247423009486
+        },
+        "ms_per_node": {
+          "mean": 2.226761154209574,
+          "ci95": 0.35475618557523714
+        },
+        "throughput_nodes_per_s": {
+          "mean": 455.63160937929416,
+          "ci95": 78.96131011211376
+        },
+        "peak_memory_mb": {
+          "mean": 0.05529371897379557,
+          "ci95": 0.02490679872342288
+        },
+        "p50_batch_ms": {
+          "mean": 2.09074467420578,
+          "ci95": 0.09757821034510762
+        },
+        "p95_batch_ms": {
+          "mean": 2.09074467420578,
+          "ci95": 0.09757821034510762
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "8": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.25,
+          "ci95": 0.1414508159514583
+        },
+        "total_time_s": {
+          "mean": 0.009835020018120607,
+          "ci95": 0.0021673821052462083
+        },
+        "ms_per_node": {
+          "mean": 1.229377502265076,
+          "ci95": 0.27092276315577607
+        },
+        "throughput_nodes_per_s": {
+          "mean": 834.9034787887305,
+          "ci95": 188.42012343304478
+        },
+        "peak_memory_mb": {
+          "mean": 0.07361253102620442,
+          "ci95": 0.03267861624606984
+        },
+        "p50_batch_ms": {
+          "mean": 2.135719327876965,
+          "ci95": 0.10287348531220196
+        },
+        "p95_batch_ms": {
+          "mean": 2.135719327876965,
+          "ci95": 0.10287348531220196
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "16": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.14583333333333334,
+          "ci95": 0.10803484520180412
+        },
+        "total_time_s": {
+          "mean": 0.10162187367677689,
+          "ci95": 0.17063804042039588
+        },
+        "ms_per_node": {
+          "mean": 6.351367104798555,
+          "ci95": 10.664877526274742
+        },
+        "throughput_nodes_per_s": {
+          "mean": 751.8888667223946,
+          "ci95": 680.0332736576868
+        },
+        "peak_memory_mb": {
+          "mean": 0.15247186024983725,
+          "ci95": 0.02609615016264836
+        },
+        "p50_batch_ms": {
+          "mean": 11.471785760174194,
+          "ci95": 17.61390919540194
+        },
+        "p95_batch_ms": {
+          "mean": 11.471785760174194,
+          "ci95": 17.61390919540194
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "32": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.2708333333333333,
+          "ci95": 0.08899418676395543
+        },
+        "total_time_s": {
+          "mean": 0.021932807750999928,
+          "ci95": 0.003177642892616706
+        },
+        "ms_per_node": {
+          "mean": 0.6854002422187477,
+          "ci95": 0.09930134039427206
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1474.0936533848628,
+          "ci95": 200.18139412077107
+        },
+        "peak_memory_mb": {
+          "mean": 0.28401851654052734,
+          "ci95": 0.061957372311226055
+        },
+        "p50_batch_ms": {
+          "mean": 2.9470091685652733,
+          "ci95": 0.3891947519253174
+        },
+        "p95_batch_ms": {
+          "mean": 2.9470091685652733,
+          "ci95": 0.3891947519253174
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "64": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.2760416666666667,
+          "ci95": 0.09738129347797987
+        },
+        "total_time_s": {
+          "mean": 0.030608444940298796,
+          "ci95": 0.0019161565140458044
+        },
+        "ms_per_node": {
+          "mean": 0.4782569521921687,
+          "ci95": 0.029939945531965693
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2095.2415496668473,
+          "ci95": 132.46748665094668
+        },
+        "peak_memory_mb": {
+          "mean": 0.5242312749226888,
+          "ci95": 0.04034093207860441
+        },
+        "p50_batch_ms": {
+          "mean": 2.911804554363092,
+          "ci95": 0.12159066920046425
+        },
+        "p95_batch_ms": {
+          "mean": 2.911804554363092,
+          "ci95": 0.12159066920046425
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    },
+    "128": {
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.3125,
+          "ci95": 0.008840675996966144
+        },
+        "total_time_s": {
+          "mean": 0.1214288209254543,
+          "ci95": 0.13657992286973825
+        },
+        "ms_per_node": {
+          "mean": 0.9486626634801117,
+          "ci95": 1.06703064741983
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1812.7185625080372,
+          "ci95": 1295.4965398597255
+        },
+        "peak_memory_mb": {
+          "mean": 0.9523048400878906,
+          "ci95": 0.012871221697445999
+        },
+        "p50_batch_ms": {
+          "mean": 3.5867594803373017,
+          "ci95": 0.25088294286553814
+        },
+        "p95_batch_ms": {
+          "mean": 3.5867594803373017,
+          "ci95": 0.25088294286553814
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    }
+  }
+}

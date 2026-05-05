@@ -277,6 +277,9 @@ class Neo4jFS(FeatureStore):
 
         feat_matrix = self._decode_feature_matrix(records, "feature")
 
+        if self.measurer is not None:
+            self.measurer.log_event("feat_bytes", feat_matrix.nbytes)
+
         fetched_nids: List[int] = []
         y_array = np.empty(len(records), dtype=np.int64)
 

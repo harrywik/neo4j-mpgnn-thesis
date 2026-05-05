@@ -141,7 +141,10 @@ def plot_all_dataset_comparisons(
     dataset_dirs: dict[str, Path], output_dir: Path, nbr_runs: int
 ) -> None:
     """Aggregate runs for each dataset and generate combined dataset comparison plots."""
-    from comparison_experiments.sampler_comparison.comparison_plots import aggregate_runs
+    from comparison_experiments.sampler_comparison.comparison_plots import (
+        aggregate_runs,
+        plot_time_decomposition_stacked,
+    )
 
     dataset_data: dict[str, dict] = {}
     for dataset_name, dataset_dir in dataset_dirs.items():
@@ -160,5 +163,13 @@ def plot_all_dataset_comparisons(
 
     plot_dataset_phase_summary(dataset_data, output_dir)
     plot_dataset_throughput(dataset_data, output_dir)
+    try:
+        plot_time_decomposition_stacked(
+            dataset_data,
+            output_dir / "dataset_comparison_time_decomposition.png",
+            title="Training time decomposition per batch — datasets",
+        )
+    except Exception as e:
+        print(f"  Warning: time decomposition plot failed: {e}")
 
     print(f"  Dataset comparison plots written to: {output_dir}")

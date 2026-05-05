@@ -13,7 +13,7 @@ INFERENCE_DATASET ?= cora
 INFERENCE_MODEL ?= gcn
 INFERENCE_OUTPUT ?= results/inference_comparison
 INFERENCE_RESULTS ?=  # path to an existing results JSON for re-plotting
-INFERENCE_FLAGS ?=    # extra flags, e.g. --fast
+INFERENCE_FLAGS ?=    # extra flags, e.g. --fast or --strategies neighborhood_sampling in_db_java
 DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 	cache_neo4j_cora cache_neo4j_arxiv
 
@@ -21,7 +21,10 @@ DATASET_TARGETS := cache_multsampler_cora cache_multsampler_arxiv \
 #   make build-plugin NEO4J_PLUGINS_DIR=/var/lib/neo4j/plugins
 NEO4J_PLUGINS_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_PLUGINS_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp
+# GNN model artifact directory — must match server.jvm.additional=-DNEO4J_GNN_MODEL_DIR in neo4j.conf
+NEO4J_GNN_MODEL_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_GNN_MODEL_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
+
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M add_float_features_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp
 
 help:
 	@echo "Usage: make <implementation> [DATASET=cora]"
@@ -37,10 +40,13 @@ help:
 	@echo "Compare one implementation across datasets:"
 	@echo "  make compare_datasets IMPL_CMP=baseline_pyg DATASETS_CMP=\"cora arxiv\" [NBR_RUNS=3]"
 	@echo "Compare inference strategies:"
+	@echo "  make add_float_features_papers100M   add feature_vector_floats to all Paper nodes (one-time, resumable)"
+	@echo ""
 	@echo "  make inference_experiment [INFERENCE_DATASET=cora] [INFERENCE_MODEL=gcn] [INFERENCE_OUTPUT=results/inference_comparison]"
 	@echo "  INFERENCE_DATASET variants: cora (default)  cora_quick (3 runs)  cora_thorough (high-rep)  arxiv  products  papers100M"
 	@echo "  INFERENCE_MODEL variants:   gcn (default, Cora)  gcn_arxiv  gcn_products  gcn_papers100M"
 	@echo "  INFERENCE_FLAGS=--fast  skips the slow unoptimised in_db_cypher strategy"
+	@echo "  INFERENCE_FLAGS=\"--strategies neighborhood_sampling in_db_java\"  run only the listed strategies"
 	@echo "Re-plot from existing results JSON:"
 	@echo "  make inference_plots INFERENCE_RESULTS=results/inference_comparison/cora_GCN_....json"
 
@@ -113,7 +119,7 @@ compare_datasets:
 		--nbr_runs $(NBR_RUNS)
 
 inference_experiment:
-	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.inference_experiment \
+	@NEO4J_GNN_MODEL_DIR=$(NEO4J_GNN_MODEL_DIR) PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.inference_experiment \
 		--dataset src/configs/inference/datasets/$(INFERENCE_DATASET).json \
 		--model   src/configs/inference/models/$(INFERENCE_MODEL).json \
 		--output_dir $(INFERENCE_OUTPUT) \
@@ -137,6 +143,9 @@ ingest_products:
 
 ingest_papers100M:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-papers100M/ingest.py
+
+add_float_features_papers100M:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-papers100M/add_float_features.py
 
 summarise:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) src/benchmarking_tools/summarise.py

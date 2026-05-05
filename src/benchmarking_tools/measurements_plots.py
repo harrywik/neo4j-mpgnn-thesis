@@ -608,7 +608,7 @@ def plot_subphase_latency_waterfall(csv_path: Path, summary: dict, output_dir: P
     ax.set_yticklabels(ylabels, fontsize=9)
     ax.invert_yaxis()
     ax.set_xlabel("mean ms per batch (cumulative timeline)")
-    ax.set_title("Sub-phase latency breakdown\n"
+    ax.set_title("Sample-fetch phases breakdown\n"
                  "DB startup | DB exec+serialize | Network+driver recv | Python ETL")
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
@@ -1329,6 +1329,138 @@ def generate_avg_measurements_json(run_dirs: list[Path], output_dir: Path) -> No
         json.dump(out, f, indent=2)
 
 
+# ---------------------------------------------------------------------------
+# Training time decomposition — single-run and aggregated
+# ---------------------------------------------------------------------------
+
+# Mirror of _DECOMP_SEGMENTS in comparison_plots.py.  Kept here to avoid
+# a cross-package import from benchmarking_tools into comparison_experiments.
+# label, key_spec, color
+#   key_spec: str       → direct scalar_means key (ms)
+#             list[str] → sum of listed keys (ms)
+#             "_training_ms"  → training_mean_s * 1000
+#             "_other_ms"     → max(0, total - explicit_sum)
+_DECOMP_SEGS = [
+    ("Subgraph query (DB+RTT)",  "topo_first_record_ms",                                     "#2166AC"),
+    ("Subgraph transfer",         "topo_transfer_ms",                                         "#6BAED6"),
+    ("Feature query (DB+RTT)",    ["feat_x_first_record_ms", "feat_y_first_record_ms"],       "#E6550D"),
+    ("Feature transfer",          ["feat_x_transfer_ms",     "feat_y_transfer_ms"],           "#FD8D3C"),
+    ("Deserialization (ETL)",     ["topo_etl_ms", "feat_x_etl_ms", "feat_y_etl_ms"],         "#74C476"),
+    ("GNN compute (fwd+bwd+opt)", "_training_ms",                                             "#E45756"),
+    ("Other / unaccounted",       "_other_ms",                                                "#BDBDBD"),
+]
+
+
+def _summary_metrics_to_sm(metrics: dict) -> dict:
+    """Translate a single-run ``summary['metrics']`` dict into the scalar_means
+    format expected by ``_decomp_seg_values``."""
+    sm: dict[str, float] = {}
+    sp = metrics.get("sampling_phase_time_s") or {}
+    tp = metrics.get("training_phase_time_s") or {}
+    sm["sampling_mean_s"] = float(sp.get("mean_s") or 0.0) if isinstance(sp, dict) else 0.0
+    sm["training_mean_s"] = float(tp.get("mean_s") or 0.0) if isinstance(tp, dict) else 0.0
+    for key in (
+        "topo_first_record_ms", "topo_transfer_ms", "topo_etl_ms",
+        "feat_x_first_record_ms", "feat_x_transfer_ms", "feat_x_etl_ms",
+        "feat_y_first_record_ms", "feat_y_transfer_ms", "feat_y_etl_ms",
+    ):
+        v = metrics.get(key)
+        if isinstance(v, (int, float)):
+            sm[key] = float(v)
+    return sm
+
+
+def _avg_metrics_to_sm(avg_metrics: dict) -> dict:
+    """Translate the flat ``avg_metrics`` dict from ``plot_aggregated_folder``
+    (dotted keys for nested stats) into scalar_means format."""
+    sm: dict[str, float] = {}
+    sm["sampling_mean_s"] = float(avg_metrics.get("sampling_phase_time_s.mean_s") or 0.0)
+    sm["training_mean_s"] = float(avg_metrics.get("training_phase_time_s.mean_s") or 0.0)
+    for key in (
+        "topo_first_record_ms", "topo_transfer_ms", "topo_etl_ms",
+        "feat_x_first_record_ms", "feat_x_transfer_ms", "feat_x_etl_ms",
+        "feat_y_first_record_ms", "feat_y_transfer_ms", "feat_y_etl_ms",
+    ):
+        v = avg_metrics.get(key)
+        if v is not None:
+            sm[key] = float(v)
+    return sm
+
+
+def _decomp_seg_values(sm: dict) -> list[float]:
+    total_ms = ((sm.get("sampling_mean_s") or 0.0) + (sm.get("training_mean_s") or 0.0)) * 1000.0
+    vals: list[float] = []
+    explicit_sum = 0.0
+    for _label, key, _color in _DECOMP_SEGS:
+        if key == "_training_ms":
+            v = (sm.get("training_mean_s") or 0.0) * 1000.0
+        elif key == "_other_ms":
+            v = max(0.0, total_ms - explicit_sum)
+        elif isinstance(key, list):
+            v = sum(sm.get(k) or 0.0 for k in key)
+        else:
+            v = sm.get(key) or 0.0
+        if key != "_other_ms":
+            explicit_sum += v
+        vals.append(v)
+    return vals
+
+
+def plot_training_time_decomposition(
+    summary: dict,
+    output_dir: Path | None = None,
+    label: str = "this run",
+) -> None:
+    """Stacked bar chart of training time decomposition for a single run.
+
+    Reads segment values from ``summary['metrics']`` (the dict written to
+    ``measurements.json`` by ``Measurer.summarize``).  Saved as
+    ``time_decomposition.png`` next to the CSV (or in *output_dir* if given).
+
+    Note: forward, backward, and optimizer are bundled in the
+    ``training_phase_time_s`` timer and shown as a single "GNN compute" segment.
+    """
+    metrics = summary.get("metrics", {})
+    sm = _summary_metrics_to_sm(metrics)
+    seg_vals = _decomp_seg_values(sm)
+
+    total_ms = sum(seg_vals)
+    if total_ms <= 0:
+        return
+
+    seg_labels = [s[0] for s in _DECOMP_SEGS]
+    seg_colors = [s[2] for s in _DECOMP_SEGS]
+
+    fig, ax = plt.subplots(figsize=(5, 5.5))
+    bottom = 0.0
+    for val, lbl, color in zip(seg_vals, seg_labels, seg_colors):
+        if val <= 0:
+            bottom += val
+            continue
+        ax.bar(0, val, bottom=bottom, label=lbl, color=color, width=0.55)
+        if val >= 1.5:
+            ax.text(0, bottom + val / 2, f"{val:.1f} ms",
+                    ha="center", va="center", fontsize=7.5,
+                    color="white" if val > 5 else "black")
+        bottom += val
+
+    ax.text(0, total_ms + 0.5, f"{total_ms:.1f} ms total",
+            ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks([0])
+    ax.set_xticklabels([label], fontsize=9)
+    ax.set_title("Training time decomposition per batch")
+    ax.set_ylabel("ms per batch")
+    note = "* GNN compute bundles forward, backward, and optimizer steps"
+    ax.annotate(note, xy=(0, -0.12), xycoords="axes fraction", fontsize=6.5, color="#555555")
+    ax.legend(fontsize=7.5, loc="upper right", framealpha=0.85)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    out_dir = output_dir or Path(".")
+    fig.savefig(out_dir / "time_decomposition.png", dpi=150)
+    plt.close(fig)
+
+
 def plot_aggregated_folder(parent_dir: Path) -> None:
     """Generate averaged plots + ``measurements.json`` from all run_N subfolders.
 
@@ -1453,6 +1585,16 @@ def plot_aggregated_folder(parent_dir: Path) -> None:
     # 11. CPU timeline averaged across runs
     # ------------------------------------------------------------------
     _plot_avg_cpu_timeline(run_dirs, parent_dir)
+
+    # ------------------------------------------------------------------
+    # 12. Training time decomposition stacked bar (averaged)
+    # ------------------------------------------------------------------
+    try:
+        sm = _avg_metrics_to_sm(avg_metrics)
+        avg_summary = {"metrics": {}}
+        _plot_avg_time_decomposition(sm, n_runs, metric_vals, parent_dir)
+    except Exception as e:
+        print(f"  Warning: avg time decomposition plot failed: {e}")
 
     print(f"  Averaged plots written to: {parent_dir}")
 
@@ -1937,4 +2079,60 @@ def _plot_avg_phase_summary_ci(
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "avg_phase_summary.png", dpi=150)
+    plt.close(fig)
+
+
+def _plot_avg_time_decomposition(
+    sm: dict,
+    n_runs: int,
+    metric_vals: dict[str, list[float]],
+    output_dir: Path,
+) -> None:
+    """Averaged training time decomposition stacked bar with 95 % CI error bar on total."""
+    seg_vals = _decomp_seg_values(sm)
+    total_ms = sum(seg_vals)
+    if total_ms <= 0:
+        return
+
+    seg_labels = [s[0] for s in _DECOMP_SEGS]
+    seg_colors = [s[2] for s in _DECOMP_SEGS]
+
+    # CI on total batch time = sampling + training
+    s_vals = metric_vals.get("sampling_phase_time_s.mean_s", [])
+    t_vals = metric_vals.get("training_phase_time_s.mean_s", [])
+    combined = [
+        (s + t) * 1000
+        for s, t in zip(s_vals, t_vals)
+    ] if s_vals and t_vals else []
+    total_ci = _ci95(combined) if len(combined) > 1 else 0.0
+
+    fig, ax = plt.subplots(figsize=(5, 5.5))
+    bottom = 0.0
+    for val, lbl, color in zip(seg_vals, seg_labels, seg_colors):
+        if val <= 0:
+            bottom += val
+            continue
+        ax.bar(0, val, bottom=bottom, label=lbl, color=color, width=0.55)
+        if val >= 1.5:
+            ax.text(0, bottom + val / 2, f"{val:.1f} ms",
+                    ha="center", va="center", fontsize=7.5,
+                    color="white" if val > 5 else "black")
+        bottom += val
+
+    ax.errorbar(0, total_ms, yerr=total_ci, fmt="none",
+                ecolor="#333333", capsize=5, linewidth=1.4)
+    ax.text(0, total_ms + max(total_ci, 0.5) + 0.5,
+            f"{total_ms:.1f} ± {total_ci:.1f} ms",
+            ha="center", va="bottom", fontsize=8)
+
+    ax.set_xticks([0])
+    ax.set_xticklabels([f"avg of {n_runs} run{'s' if n_runs != 1 else ''}"], fontsize=9)
+    ax.set_title("Training time decomposition per batch – averaged across runs")
+    ax.set_ylabel("ms per batch")
+    note = "* GNN compute bundles forward, backward, and optimizer steps"
+    ax.annotate(note, xy=(0, -0.12), xycoords="axes fraction", fontsize=6.5, color="#555555")
+    ax.legend(fontsize=7.5, loc="upper right", framealpha=0.85)
+    ax.grid(axis="y", linestyle="--", alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(output_dir / "avg_time_decomposition.png", dpi=150)
     plt.close(fig)

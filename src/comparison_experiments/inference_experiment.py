@@ -152,6 +152,18 @@ def _checkpoint_path(cfg: dict) -> Path:
     return _CHECKPOINT_DIR / f"{ds_name}_{model_class}.pt"
 
 
+def _gnn_model_dir(cfg: dict) -> Path:
+    """Deterministic spec/weights directory derived from dataset + model config.
+
+    Used as a fallback when NEO4J_GNN_MODEL_DIR is not set, so the caller never
+    needs to supply the path explicitly — it is inferred from the same names
+    already used to key the training checkpoint.
+    """
+    ds_name = cfg["dataset"].get("dataset_name", "dataset")
+    model_class = cfg["model"].get("model_class", "model")
+    return _CHECKPOINT_DIR.parent / "inference_spec" / f"{ds_name}_{model_class}"
+
+
 def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None:
     # 1. Explicit checkpoint in config takes priority
     explicit = cfg["model"].get("checkpoint_path")
@@ -400,23 +412,22 @@ def run_in_db_java(
     """Returns (preds, metrics, spec_exported_flag)."""
     ds = cfg["dataset"]
     mdl = cfg["model"]
-    gnn_model_dir = os.environ.get("NEO4J_GNN_MODEL_DIR", "")
+    _env_dir = os.environ.get("NEO4J_GNN_MODEL_DIR", "")
+    gnn_model_dir: Path = Path(_env_dir) if _env_dir else _gnn_model_dir(cfg)
     model_name = mdl.get("model_name", "experiment_gcn")
 
     if not spec_exported:
-        if not gnn_model_dir:
-            raise RuntimeError(
-                "NEO4J_GNN_MODEL_DIR must be set to use the in_db_java strategy."
-            )
         from neo4j_pyg.neo4j_model_interface.create_inference_spec import create_inference_spec
         # Use num_neighbors from inference config for Java procedure max_neighbors
         num_neighbors = ds.get("num_neighbors", ds.get("max_neighbors", 10))
+        gnn_model_dir.mkdir(parents=True, exist_ok=True)
         create_inference_spec(
             model,
             model_name,
-            base_dir=gnn_model_dir,
+            base_dir=str(gnn_model_dir),
             max_neighbors=num_neighbors,
         )
+        print(f"Exported inference spec to {gnn_model_dir}")
         spec_exported = True
 
     batch_size = ds.get("inference_batch_size", 256)
@@ -1205,11 +1216,26 @@ def main() -> None:
             "the full baseline comparison including in_db_cypher."
         ),
     )
+    parser.add_argument(
+        "--strategies",
+        nargs="+",
+        metavar="STRATEGY",
+        default=None,
+        help=(
+            "Explicit list of inference strategies to run, overriding the model "
+            "config. Valid values: neighborhood_sampling, full_graph, in_db_java, "
+            "in_db_cypher, in_db_cypher_opt. "
+            "Example: --strategies neighborhood_sampling in_db_java"
+        ),
+    )
     args = parser.parse_args()
 
     cfg = load_all_configs(args.dataset, args.model)
 
-    if args.fast:
+    if args.strategies is not None:
+        cfg["model"]["strategies"] = args.strategies
+        print(f"[--strategies] Running: {', '.join(args.strategies)}")
+    elif args.fast:
         before = cfg["model"].get("strategies", [])
         cfg["model"]["strategies"] = [s for s in before if s != "in_db_cypher"]
         if "in_db_cypher" in before:
@@ -1225,9 +1251,24 @@ def main() -> None:
     train_or_load(model, cfg, graph_store, feature_store, training_sampler)
     model.eval()
 
+    # Pre-export inference spec so verify_subgraph_match can call the Java
+    # procedure even before run_in_db_java has had a chance to export it.
+    strategies = cfg["model"].get("strategies", ["full_graph", "neighborhood_sampling", "in_db_java"])
+    if "in_db_java" in strategies:
+        _env_dir = os.environ.get("NEO4J_GNN_MODEL_DIR", "")
+        _pre_model_dir: Path = Path(_env_dir) if _env_dir else _gnn_model_dir(cfg)
+        _pre_model_name = cfg["model"].get("model_name", "experiment_gcn")
+        _pre_spec = _pre_model_dir / _pre_model_name / "spec.json"
+        if not _pre_spec.exists():
+            from neo4j_pyg.neo4j_model_interface.create_inference_spec import create_inference_spec
+            _pre_model_dir.mkdir(parents=True, exist_ok=True)
+            _pre_num_neighbors = cfg["dataset"].get("num_neighbors", cfg["dataset"].get("max_neighbors", 10))
+            create_inference_spec(model, _pre_model_name, base_dir=str(_pre_model_dir), max_neighbors=_pre_num_neighbors)
+            print(f"Pre-exported inference spec to {_pre_model_dir}")
+
     # Quick sanity check: sampling procedure and inference procedure agree
     subgraph_verification = None
-    if "in_db_java" in cfg["model"].get("strategies", ["full_graph", "neighborhood_sampling", "in_db_java"]):
+    if "in_db_java" in strategies:
         test_pool = graph_store.get_split(split="test").tolist()
         verify_seeds = random.sample(test_pool, min(4, len(test_pool)))
         print(f"\nVerifying subgraph match on {len(verify_seeds)} seed nodes...")

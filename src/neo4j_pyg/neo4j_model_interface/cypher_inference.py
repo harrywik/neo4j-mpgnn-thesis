@@ -28,13 +28,7 @@ import time
 import tracemalloc
 from dataclasses import dataclass
 from typing import Any, Callable
-
 import numpy as np
-
-
-# ---------------------------------------------------------------------------
-# 1. Weights binary parser  (mirrors Java parseWeightsFromChannel)
-# ---------------------------------------------------------------------------
 
 def parse_weights_bin(path: str) -> dict[str, np.ndarray]:
     """Parse weights.bin written by create_inference_spec._write_weights.
@@ -63,10 +57,6 @@ def parse_weights_bin(path: str) -> dict[str, np.ndarray]:
             result[key] = data.reshape(dims) if dims else data
     return result
 
-
-# ---------------------------------------------------------------------------
-# 2. Sampler registry
-# ---------------------------------------------------------------------------
 
 @dataclass
 class SamplerCtx:
@@ -148,11 +138,6 @@ SAMPLER_REGISTRY: dict[str, Callable[[SamplerCtx], str]] = {
     "neighbor_uniform": _build_neighbor_uniform_sampler,
 }
 
-
-# ---------------------------------------------------------------------------
-# 3. Init block  (h_map, in_degrees, adj from sampler output)
-# ---------------------------------------------------------------------------
-
 def _build_init_block(ctx: SamplerCtx) -> str:
     """Emit the Cypher block that builds the three maps consumed by layer blocks.
 
@@ -180,10 +165,6 @@ WITH ordered_nodes, edges, nodes_by_hop,
         ]
     ) AS adj"""
 
-
-# ---------------------------------------------------------------------------
-# 4. Aggregation-template registry
-# ---------------------------------------------------------------------------
 
 def _build_gcn_norm_block(active_level: int, feat_dim: int, nid: str) -> str:
     """GCN-normalised aggregation with self-loop.
@@ -270,10 +251,6 @@ AGG_REGISTRY: dict[str, Callable[[int, int, str], str]] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# 5. Linear / relu / tanh layer templates
-# ---------------------------------------------------------------------------
-
 def _build_linear_block(
     last_agg_level: int,
     layer_idx: int,
@@ -352,10 +329,6 @@ WITH ordered_nodes, edges, nodes_by_hop, adj, in_degrees,
     ) AS h_map"""
 
 
-# ---------------------------------------------------------------------------
-# 6. Final argmax block
-# ---------------------------------------------------------------------------
-
 def _build_argmax_block() -> str:
     return """\
 WITH h_map, $seed_ids AS _seeds
@@ -368,10 +341,6 @@ RETURN _sid AS nodeId,
     ) AS predictedClass"""
 
 
-# ---------------------------------------------------------------------------
-# 7. Prepared inference state
-# ---------------------------------------------------------------------------
-
 @dataclass
 class CypherInferencePrepared:
     """Pre-built artefacts for the in_db_cypher strategy.  Built once per experiment."""
@@ -379,10 +348,6 @@ class CypherInferencePrepared:
     static_params: dict[str, Any]
     database: str
 
-
-# ---------------------------------------------------------------------------
-# 8. Query builder
-# ---------------------------------------------------------------------------
 
 def build_cypher_inference_query(
     spec: dict,
@@ -515,10 +480,6 @@ def _next_linear_in_dim(
     return 0
 
 
-# ---------------------------------------------------------------------------
-# 9. Feature property materializer  (byte[] → f64[])
-# ---------------------------------------------------------------------------
-
 def materialize_float_features(
     driver,
     *,
@@ -527,28 +488,46 @@ def materialize_float_features(
     nodeid_prop: str,
     byte_prop: str,
     float_prop: str,
-    batch_size: int = 500,
+    batch_size: int = 5_000,
 ) -> int:
     """Decode a packed float32 byte[] node property to a sibling f64[] property.
 
-    Cora stores features as little-endian IEEE-754 float32 packed in a byte[]
-    (``feature_property_type: "byte[]"``).  Pure Cypher cannot decode this, so
-    we do it in Python and write the f64[] back in batches.
+    Pure Cypher cannot decode little-endian IEEE-754 float32 packed in a byte[],
+    so we do it in Python and write the f64[] back in batches.
 
     This is a *one-time* setup step; cost is reported separately from per-batch
-    inference timing.  Nodes that already have ``float_prop`` set are skipped.
+    inference timing.  Nodes that already have ``float_prop`` set are skipped,
+    so the function is safe to call repeatedly and resumes after interruptions.
 
-    Returns the number of nodes updated.
+    Each batch uses an independent session (no long-lived cursor), which prevents
+    connection timeouts on large graphs (e.g. papers100M with 111 M nodes).
+
+    Returns the number of nodes updated in this call.
     """
+    # #region agent log
+    import json as _jl, time as _tl
+    _dbg_log = "/tmp/debug-e38654.log"
+    def _log(msg, data=None):
+        entry = {"sessionId": "e38654", "runId": "post-fix-2", "hypothesisId": "H-D2",
+                 "location": "cypher_inference.py:materialize_float_features",
+                 "message": msg, "data": data or {}, "timestamp": int(_tl.time() * 1000)}
+        with open(_dbg_log, "a") as _f: _f.write(_jl.dumps(entry) + "\n")
+    # #endregion
+
     print(
         f"  [cypher] Materialising float features "
         f"'{byte_prop}' → '{float_prop}' on :{node_label}…"
     )
 
+    # Each iteration fetches one batch of up to batch_size un-materialised nodes
+    # using a fresh session, then immediately writes the decoded floats back.
+    # Because the SET marks each node (float_prop no longer NULL), the next
+    # LIMIT query naturally advances to the remaining un-processed nodes.
     fetch_q = (
         f"MATCH (n:{node_label}) "
         f"WHERE n.{byte_prop} IS NOT NULL AND n.{float_prop} IS NULL "
-        f"RETURN n.{nodeid_prop} AS nid, n.{byte_prop} AS raw"
+        f"RETURN n.{nodeid_prop} AS nid, n.{byte_prop} AS raw "
+        f"LIMIT $limit"
     )
     set_q = (
         f"UNWIND $rows AS row "
@@ -557,34 +536,39 @@ def materialize_float_features(
     )
 
     updated = 0
-    batch: list[dict] = []
+    # #region agent log
+    _log("materialize_start", {"batch_size": batch_size, "node_label": node_label,
+                                "byte_prop": byte_prop, "float_prop": float_prop})
+    # #endregion
+    while True:
+        with driver.session(database=database) as session:
+            records = session.run(fetch_q, limit=batch_size).data()
 
-    with driver.session(database=database, fetch_size=-1) as session:
-        result = session.run(fetch_q)
-        for record in result:
-            raw: bytes = bytes(record["raw"])
-            n_floats = len(raw) // 4
-            floats = list(struct.unpack_from(f"<{n_floats}f", raw))
-            batch.append({"nid": record["nid"], "floats": floats})
+        if not records:
+            break
 
-            if len(batch) >= batch_size:
-                with driver.session(database=database) as ws:
-                    ws.run(set_q, rows=batch)
-                updated += len(batch)
-                batch = []
+        batch = [
+            {
+                "nid": rec["nid"],
+                "floats": list(struct.unpack_from(f"<{len(bytes(rec['raw'])) // 4}f", bytes(rec["raw"]))),
+            }
+            for rec in records
+        ]
 
-    if batch:
         with driver.session(database=database) as ws:
             ws.run(set_q, rows=batch)
+
         updated += len(batch)
+        # #region agent log
+        if updated <= batch_size:
+            _log("first_batch_ok", {"nodes_written": updated})
+        # #endregion
+        if updated % 100_000 == 0:
+            print(f"  [cypher] Progress: {updated:,} nodes materialised…")
 
     print(f"  [cypher] Materialised {updated} nodes.")
     return updated
 
-
-# ---------------------------------------------------------------------------
-# 10. Inference driver
-# ---------------------------------------------------------------------------
 
 def run_cypher_inference(
     driver,
@@ -646,33 +630,7 @@ def run_cypher_inference(
     return preds, metrics
 
 
-# ===========================================================================
-# OPTIMIZED CYPHER INFERENCE  —  vector_distance linear blocks
-#
-# Identical to in_db_cypher but replaces the interpreted reduce(...) inner
-# loop inside every linear block with vector_distance(vector(..., FLOAT32),
-# vector(..., FLOAT32), DOT).
-#
-# vector_distance(a, b, DOT) = -(a · b)  (compiled JVM primitive-float code,
-# available since Neo4j 2025.10).
-#
-# h_out[i] = W[i] · h + b[i]
-#           = b[i] - vector_distance(vector(h, d, FLOAT32),
-#                                    vector(W_row_i, d, FLOAT32), DOT)
-#
-# The outer list-comprehension [_oi IN range(0, out_dim-1) | ...] still runs
-# in Cypher, but each iteration dispatches one compiled-JVM call instead of
-# a ~1433-step interpreted reduce loop.
-#
-# Aggregation blocks (gcn_norm, mean) compute weighted sums over neighbours
-# and are unchanged; after the first linear layer the feature dimension
-# drops to 64 so subsequent aggregations are cheap regardless.
-# ===========================================================================
-
-# ---------------------------------------------------------------------------
-# 11. vector_distance-based linear block
-# ---------------------------------------------------------------------------
-
+# optimized cypher uses vector distance
 def _build_vd_linear_block(
     last_agg_level: int,
     layer_idx: int,
@@ -717,10 +675,6 @@ WITH ordered_nodes, edges, nodes_by_hop, adj, in_degrees,
         ])
     ) AS h_map"""
 
-
-# ---------------------------------------------------------------------------
-# 12. Prepared state and query builder for the optimised strategy
-# ---------------------------------------------------------------------------
 
 @dataclass
 class OptimizedCypherInferencePrepared:
