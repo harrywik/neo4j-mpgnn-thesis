@@ -28,7 +28,6 @@ import time
 import tracemalloc
 from dataclasses import dataclass
 from typing import Any, Callable
-
 import numpy as np
 
 def parse_weights_bin(path: str) -> dict[str, np.ndarray]:
@@ -57,7 +56,6 @@ def parse_weights_bin(path: str) -> dict[str, np.ndarray]:
             data = np.frombuffer(f.read(4 * total), dtype="<f4").copy()
             result[key] = data.reshape(dims) if dims else data
     return result
-
 
 
 @dataclass
@@ -139,7 +137,6 @@ WITH next_frontier AS frontier,
 SAMPLER_REGISTRY: dict[str, Callable[[SamplerCtx], str]] = {
     "neighbor_uniform": _build_neighbor_uniform_sampler,
 }
-
 
 def _build_init_block(ctx: SamplerCtx) -> str:
     """Emit the Cypher block that builds the three maps consumed by layer blocks.
@@ -633,7 +630,7 @@ def run_cypher_inference(
     return preds, metrics
 
 
-# optimiZed cypher uses vector distance
+# optimized cypher uses vector distance
 def _build_vd_linear_block(
     last_agg_level: int,
     layer_idx: int,

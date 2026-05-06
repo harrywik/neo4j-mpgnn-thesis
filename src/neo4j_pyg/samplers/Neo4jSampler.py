@@ -84,59 +84,52 @@ class Neo4jSampler(BaseSampler):
         for k in self.num_neighbors:
             q.append(f"""
             CALL (frontier, visited, edges, nodes_by_hop) {{
+                // 2. process frontier nodes in stable index order.
+                UNWIND range(0, size(frontier)-1) AS i
+                WITH i, frontier[i] AS src, visited, edges
 
-            // 2. process frontier nodes in stable index order.
-            UNWIND range(0, size(frontier)-1) AS i
-            WITH i, frontier[i] AS src, visited, edges
+                // 3. match the neighbors
+                MATCH (src){edge_pat}(neighbor{nbr_label})
+                WITH i, src, visited, edges, collect(r) AS cand_rels
 
-            // 3. match the neighbors
-            MATCH (src){edge_pat}(neighbor{nbr_label})
-            WITH i, src, visited, edges, collect(r) AS cand_rels
-
-            // 4. pyg-lib "take all" rule (Case 1 in _sample).
-            WITH i, src, visited, edges,
-                CASE
-                    WHEN {k} < 0 OR (false = false AND {k} >= size(cand_rels))
-                    THEN cand_rels
-                    ELSE apoc.coll.randomItems(cand_rels, {k}, false)
-                END AS picked_rels
-
-            // 5. build the neighbour list and edge list for this src.
-            WITH i, visited, edges,
-                [rel IN picked_rels | {nbr_expr}] AS picked_nbrs,
-                [rel IN picked_rels | [{edge_src_expr}, {edge_dst_expr}]] AS new_edges
-            ORDER BY i
-
-            // 6. aggregate across all src nodes — back to a single row.
-            WITH visited, edges,
-                apoc.coll.flatten(collect(picked_nbrs)) AS picked_nbrs,
-                apoc.coll.flatten(collect(new_edges)) AS new_edges
-
-            // 7. filter revisited + deduplicate next frontier
-            WITH visited, edges, new_edges,
-                apoc.coll.toSet(
+                // 4. sample
+                WITH i, visited, edges,
                     CASE
-                        WHEN {expand_revisited_s}
-                        THEN picked_nbrs
-                        ELSE [n IN picked_nbrs WHERE NOT n IN visited]
-                    END
-                ) AS next_frontier
+                        WHEN {k} < 0 OR {k} >= size(cand_rels) THEN cand_rels
+                        ELSE apoc.coll.randomItems(cand_rels, {k}, false)
+                    END AS picked_rels
 
-            // 9. return the next frontier, visited and edges
-            RETURN
-                next_frontier,
-                visited + next_frontier AS next_visited,
-                edges + new_edges AS next_edges,
-                nodes_by_hop + [next_frontier] AS next_nodes_by_hop
+                // 5. build the neighbour list and edge list for this src.
+                WITH i, visited, edges,
+                    [rel IN picked_rels | {nbr_expr}] AS p_nbrs,
+                    [rel IN picked_rels | [{edge_src_expr}, {edge_dst_expr}]] AS n_edges
+                ORDER BY i
+
+                // 6. aggregate across all src nodes — back to a single row.
+                WITH visited, edges,
+                    apoc.coll.flatten(collect(p_nbrs)) AS all_nbrs,
+                    apoc.coll.flatten(collect(n_edges)) AS n_edges_flat
+
+                // 7. filter revisited + deduplicate next frontier
+                WITH visited, edges, n_edges_flat,
+                    apoc.coll.toSet(
+                        CASE
+                            WHEN {expand_revisited_s} THEN all_nbrs
+                            ELSE [n IN all_nbrs WHERE NOT n IN visited]
+                        END
+                    ) AS next_f
+
+                // 8. return the next frontier, visited and edges
+                RETURN 
+                    next_f AS frontier,
+                    visited + next_f AS visited,
+                    edges + n_edges_flat AS edges,
+                    nodes_by_hop + [next_f] AS nodes_by_hop
             }}
-            WITH next_frontier AS frontier,
-                next_visited AS visited,
-                next_edges AS edges,
-                next_nodes_by_hop AS nodes_by_hop
             """)
 
         q.append(f"""
-        // 11. return edge pairs and nodes grouped by hop distance from seeds
+        // 9. return edge pairs and nodes grouped by hop distance from seeds
         RETURN
             edges AS edge_pairs,
             [hop IN nodes_by_hop | [n IN hop | n.{self.nodeid_property}]] AS nodes_by_hop
