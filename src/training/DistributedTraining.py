@@ -194,10 +194,14 @@ class DistributedTrainer:
         _BURST_BATCHES = self.measurer.cpu_burst_batches if self.measurer is not None else 0
         burst_handle = None
         if (epoch == 0 or epoch == 1) and _BURST_BATCHES > 0:
-            burst_handle = start_cpu_burst(self.measurer)
+            burst_handle = start_cpu_burst(
+                self.measurer,
+                period_s=self.measurer.cpu_burst_period_ms / 1000.0,
+                max_samples=self.measurer.cpu_burst_max_samples,
+            )
 
         for batch_idx in range(nbr_batches):
-            self._set_phase("sampling")
+            self._set_phase("db_wait")
             self._log("start_batch_fetch", 1)
             batch = next(it)
             self._log("end_batch_fetch", 1)

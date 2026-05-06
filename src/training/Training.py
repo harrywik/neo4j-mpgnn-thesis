@@ -252,10 +252,14 @@ class Trainer:
         _BURST_BATCHES = self.measurer.cpu_burst_batches
         burst_handle = None
         if (epoch == 0 or epoch == 1) and _BURST_BATCHES > 0:
-            burst_handle = start_cpu_burst(self.measurer)
+            burst_handle = start_cpu_burst(
+                self.measurer,
+                period_s=self.measurer.cpu_burst_period_ms / 1000.0,
+                max_samples=self.measurer.cpu_burst_max_samples,
+            )
 
         for batch_idx in range(nbr_batches):
-            self.measurer.set_phase("sampling")
+            self.measurer.set_phase("db_wait")
             self.measurer.log_event("start_batch_fetch", 1)
             batch = next(it)
             self.measurer.log_event("end_batch_fetch", 1)
@@ -296,7 +300,7 @@ class Trainer:
             stop_event.set()
             thread.join(timeout=0.5)
 
-        self.measurer.set_phase("idle")                    
+        self.measurer.set_phase("idle")
                 
 
     def train(self, max_epochs: int) -> None:

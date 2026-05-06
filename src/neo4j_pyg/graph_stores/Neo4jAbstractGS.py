@@ -129,9 +129,15 @@ class Neo4jAbstractGS(GraphStore, ABC):
             t_send = time.monotonic()
             result = session.run(query, **kwargs)
 
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("db_wait")
 
         # Client-side wall time: send → all records received (includes network + DB exec).
         total_topo_fetch_ms = (t_all_records - t_send) * 1000
@@ -168,7 +174,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
             if self.measurer is not None:
                 self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
                 self.measurer.log_event("end_etl", 1)
-                self.measurer.set_phase("sampling")
+                self.measurer.set_phase("db_wait")
             empty = torch.zeros(0, dtype=torch.long)
             return fallback_seeds, empty, empty
 
@@ -195,7 +201,7 @@ class Neo4jAbstractGS(GraphStore, ABC):
         if self.measurer is not None:
             self.measurer.log_event("topo_etl_ms", (time.monotonic() - t_etl_start) * 1000)
             self.measurer.log_event("end_etl", 1)
-            self.measurer.set_phase("sampling")
+            self.measurer.set_phase("db_wait")
 
         return ordered_global_ids, row, col
 

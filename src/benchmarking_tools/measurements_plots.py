@@ -786,36 +786,157 @@ def plot_cpu_utilization(csv_path: Path, df: pd.DataFrame, output_dir: Path | No
     plt.close(fig)
 
 
-def plot_cpu_bar(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
-    """Bar chart of average CPU utilization: Python/C++ vs Neo4j.
+def _phase_cpu_pct(
+    df: pd.DataFrame,
+    cpu_event: str,
+    phase_pairs: list[tuple[str, str]],
+) -> dict[str, float]:
+    """Return mean CPU % per phase, derived from cumulative CPU-time samples.
 
-    Uses the coarse CPU samples (``python_cpu_coarse`` / ``neo4j_cpu_coarse``)
-    logged every few seconds during training.  Saves as ``cpu_bar.png``.
-    No-op if no coarse CPU data exists in *df*.
+    For each phase defined by a ``(start_event, end_event)`` pair, collect
+    all ``cpu_event`` samples whose timestamp falls inside that phase's spans,
+    compute Δcpu / Δwall for each consecutive pair inside the span, and
+    average across all such pairs.
+
+    Returns a dict mapping phase name to mean CPU %.
+    Phase names are taken from the start_event string (prefix before ``_``
+    is stripped to get a human label).
     """
-    py_vals = pd.to_numeric(
+    cpu_rows = df[df["Event"] == cpu_event][["Time", "Value"]].copy()
+    if cpu_rows.empty:
+        return {}
+
+    cpu_rows["t"]   = pd.to_numeric(cpu_rows["Time"],  errors="coerce")
+    cpu_rows["cpu"] = pd.to_numeric(cpu_rows["Value"], errors="coerce")
+    cpu_rows = cpu_rows.dropna(subset=["t", "cpu"]).sort_values("t")
+    cpu_t   = cpu_rows["t"].to_numpy(dtype=np.float64)
+    cpu_val = cpu_rows["cpu"].to_numpy(dtype=np.float64)
+
+    result: dict[str, float] = {}
+    for start_ev, end_ev in phase_pairs:
+        starts = pd.to_numeric(
+            df.loc[df["Event"] == start_ev, "Time"], errors="coerce"
+        ).dropna().to_numpy(dtype=np.float64)
+        ends = pd.to_numeric(
+            df.loc[df["Event"] == end_ev, "Time"], errors="coerce"
+        ).dropna().to_numpy(dtype=np.float64)
+        n = min(len(starts), len(ends))
+        if n == 0:
+            continue
+        all_pcts: list[float] = []
+        for s, e in zip(starts[:n], ends[:n]):
+            if e <= s:
+                continue
+            mask = (cpu_t >= s) & (cpu_t <= e)
+            idx = np.where(mask)[0]
+            if len(idx) < 2:
+                continue
+            sub_t   = cpu_t[idx]
+            sub_cpu = cpu_val[idx]
+            dt_wall = np.diff(sub_t)
+            dt_cpu  = np.diff(sub_cpu)
+            valid   = dt_wall > 0
+            if not valid.any():
+                continue
+            all_pcts.extend((dt_cpu[valid] / dt_wall[valid] * 100.0).tolist())
+        if all_pcts:
+            label = start_ev.replace("start_", "").replace("_", " ").title()
+            result[label] = float(np.mean(all_pcts))
+    return result
+
+
+def plot_cpu_bar(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
+    """Bar chart of mean CPU utilization per phase for Python and Neo4j.
+
+    Primary source: the per-batch burst cumulative samples
+    (``python_cpu_time_s`` / ``neo4j_cpu_time_s``).  For each of the four
+    phases (DB wait, Deserialise, ETL, Training) the mean CPU % is derived
+    from Δcpu / Δwall inside that phase's boundary events.
+
+    Fallback: if no burst cumulative data exists, uses the coarse
+    ``python_cpu_coarse`` / ``neo4j_cpu_coarse`` samples (one bar per
+    process, no phase breakdown).
+
+    Saves as ``cpu_bar.png``.
+    """
+    _PHASE_PAIRS = [
+        ("start_batch_fetch",      "end_batch_fetch"),
+        ("start_deserialise",      "end_deserialise"),
+        ("start_etl",              "end_etl"),
+        ("start_batch_processing", "end_batch_processing"),
+    ]
+    _PHASE_COLORS = {
+        "Batch Fetch":         "#FFAAAA",
+        "Deserialise":         "#FFD09A",
+        "Etl":                 "#A8DDB5",
+        "Batch Processing":    "#DDD0F5",
+    }
+
+    py_burst = df[df["Event"] == "python_cpu_time_s"]
+    if not py_burst.empty:
+        py_phase = _phase_cpu_pct(df, "python_cpu_time_s", _PHASE_PAIRS)
+        neo_phase = _phase_cpu_pct(df, "neo4j_cpu_time_s", _PHASE_PAIRS)
+
+        if not py_phase and not neo_phase:
+            return
+
+        all_phases = list(py_phase.keys() or neo_phase.keys())
+        py_vals  = [py_phase.get(p, 0.0)  for p in all_phases]
+        neo_vals = [neo_phase.get(p, 0.0) for p in all_phases]
+        colors   = [_PHASE_COLORS.get(p, "#CCCCCC") for p in all_phases]
+
+        x = np.arange(len(all_phases))
+        width = 0.35
+        fig, ax = plt.subplots(figsize=(max(6, len(all_phases) * 1.8), 4))
+        bars_py  = ax.bar(x - width / 2, py_vals,  width, label="Python / C++", color="#4C78A8")
+        bars_neo = ax.bar(x + width / 2, neo_vals, width, label="Neo4j",        color="#F58518")
+
+        all_vals = py_vals + neo_vals
+        top = max(all_vals, default=1.0)
+        for bars, vals in [(bars_py, py_vals), (bars_neo, neo_vals)]:
+            for bar, val in zip(bars, vals):
+                if val > 0:
+                    ax.text(
+                        bar.get_x() + bar.get_width() / 2,
+                        bar.get_height() + top * 0.015,
+                        f"{val:.0f}%",
+                        ha="center", va="bottom", fontsize=8,
+                    )
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(all_phases, fontsize=9)
+        ax.set_ylabel("Mean CPU utilization (%)")
+        ax.set_title("Average CPU utilization by phase and component")
+        ax.set_ylim(0, top * 1.3)
+        ax.legend(fontsize=9)
+        ax.grid(axis="y", linestyle="--", alpha=0.3)
+        fig.tight_layout()
+        out = (output_dir or csv_path.parent) / "cpu_bar.png"
+        fig.savefig(out, dpi=150)
+        plt.close(fig)
+        return
+
+    # Fallback: coarse samples (one bar per process, no phase breakdown)
+    py_coarse = pd.to_numeric(
         df.loc[df["Event"] == "python_cpu_coarse", "Value"], errors="coerce"
     ).dropna()
-
-    neo_vals = pd.to_numeric(
+    neo_coarse = pd.to_numeric(
         df.loc[df["Event"] == "neo4j_cpu_coarse", "Value"], errors="coerce"
     ).dropna()
 
-    if py_vals.empty:
+    if py_coarse.empty:
         return
 
     labels = ["Python / C++"]
-    means = [float(py_vals.mean())]
-    colors = ["#4C78A8"]
-
-    if not neo_vals.empty:
+    means  = [float(py_coarse.mean())]
+    colors_fb = ["#4C78A8"]
+    if not neo_coarse.empty:
         labels.append("Neo4j")
-        means.append(float(neo_vals.mean()))
-        colors.append("#F58518")
+        means.append(float(neo_coarse.mean()))
+        colors_fb.append("#F58518")
 
     fig, ax = plt.subplots(figsize=(max(4, len(labels) * 1.8), 4))
-    bars = ax.bar(labels, means, color=colors, width=0.5)
-
+    bars = ax.bar(labels, means, color=colors_fb, width=0.5)
     for bar, val in zip(bars, means):
         ax.text(
             bar.get_x() + bar.get_width() / 2,
@@ -823,9 +944,8 @@ def plot_cpu_bar(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = Non
             f"{val:.1f}%",
             ha="center", va="bottom", fontsize=9,
         )
-
     ax.set_ylabel("Mean CPU utilization (%)")
-    ax.set_title("Average CPU utilization by component")
+    ax.set_title("Average CPU utilization by component (coarse)")
     ax.set_ylim(0, max(means) * 1.25)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
@@ -834,107 +954,147 @@ def plot_cpu_bar(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = Non
     plt.close(fig)
 
 
-def plot_cpu_timeline(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
-    """Timeline of CPU utilization from intensive per-batch burst samples.
+def _cpu_pct_from_cumulative(
+    t: np.ndarray, cpu_s: np.ndarray, smooth_window_s: float = 0.020
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """Derive CPU % from consecutive cumulative-time pairs.
 
-    Plots two lines (Python/C++ and Neo4j) over wall time for the epochs
-    covered by the burst monitor.  Background colour reflects the training
-    phase: light blue for sampling (DB I/O), light green for ETL (Python
-    assembly), light orange for GNN training.
+    Returns ``(t_mid, raw_pct, smooth_pct)`` where *t_mid* is the midpoint
+    wall time of each consecutive pair, *raw_pct* is the instantaneous
+    Dcpu / Dwall x 100, and *smooth_pct* is a boxcar-smoothed version using
+    a window of *smooth_window_s* seconds.
 
-    Uses the six event names: ``python_cpu_sampling``, ``python_cpu_etl``,
-    ``python_cpu_training``, ``neo4j_cpu_sampling``, ``neo4j_cpu_etl``,
-    ``neo4j_cpu_training``.
-
-    Saves as ``cpu_timeline.png``.  No-op if no intensive CPU data exists.
+    Pairs where Dwall <= 0 or cpu is NaN are dropped.
     """
-    py_samp  = df[df["Event"] == "python_cpu_sampling"][["Time", "Value"]].copy()
-    py_etl   = df[df["Event"] == "python_cpu_etl"][["Time", "Value"]].copy()
-    py_train = df[df["Event"] == "python_cpu_training"][["Time", "Value"]].copy()
-    neo_samp  = df[df["Event"] == "neo4j_cpu_sampling"][["Time", "Value"]].copy()
-    neo_etl   = df[df["Event"] == "neo4j_cpu_etl"][["Time", "Value"]].copy()
-    neo_train = df[df["Event"] == "neo4j_cpu_training"][["Time", "Value"]].copy()
+    if len(t) < 2:
+        empty = np.empty(0)
+        return empty, empty, empty
 
-    py_all  = pd.concat([py_samp, py_etl, py_train], ignore_index=True)
-    neo_all = pd.concat([neo_samp, neo_etl, neo_train], ignore_index=True)
+    dt_wall = np.diff(t)
+    dt_cpu  = np.diff(cpu_s)
+    valid   = (dt_wall > 0) & np.isfinite(dt_cpu)
+    t_mid   = ((t[:-1] + t[1:]) / 2)[valid]
+    raw     = (dt_cpu[valid] / dt_wall[valid]) * 100.0
 
-    if py_all.empty:
+    # Boxcar smooth: compute average over a rolling time window.
+    smooth = np.empty_like(raw)
+    half   = smooth_window_s / 2.0
+    for i in range(len(t_mid)):
+        mask = np.abs(t_mid - t_mid[i]) <= half
+        smooth[i] = raw[mask].mean()
+
+    return t_mid, raw, smooth
+
+
+def plot_cpu_timeline(csv_path: Path, df: pd.DataFrame, output_dir: Path | None = None) -> None:
+    """Timeline of CPU utilization from the per-batch burst cumulative samples.
+
+    Reads ``python_cpu_time_s`` and ``neo4j_cpu_time_s`` rows (cumulative
+    CPU seconds) written by the new burst sampler and derives CPU % offline
+    as Dcpu / Dwall x 100, which avoids the 10 ms jiffy-quantisation
+    artefacts of the old per-tick ``cpu_percent`` approach.
+
+    Renders:
+    * A faint scatter of raw per-sample % values.
+    * A 20 ms boxcar-smoothed line on top.
+    * Four background phase bands (db_wait, deserialise, etl, training)
+      derived from boundary events with the precedence rule:
+      ``training > etl > deserialise > db_wait``.
+
+    Saves as ``cpu_timeline.png``.  No-op if no cumulative burst data exists.
+    """
+    py_raw  = df[df["Event"] == "python_cpu_time_s"][["Time", "Value"]].copy()
+    neo_raw = df[df["Event"] == "neo4j_cpu_time_s"][["Time", "Value"]].copy()
+
+    if py_raw.empty:
         return
 
-    # Determine t0 from first epoch or program start
     epoch_start = df.loc[df["Event"] == "epoch_start", "Time"]
     t0 = float(epoch_start.iloc[0]) if len(epoch_start) else float(df["Time"].min())
 
-    def _prepare(frame: pd.DataFrame):
+    def _arrays(frame: pd.DataFrame):
         frame = frame.copy()
-        frame["rel_time"] = pd.to_numeric(frame["Time"], errors="coerce") - t0
-        frame["Value"] = pd.to_numeric(frame["Value"], errors="coerce")
-        frame = frame.dropna().sort_values("rel_time")
-        return frame
+        frame["t"]   = pd.to_numeric(frame["Time"],  errors="coerce") - t0
+        frame["cpu"] = pd.to_numeric(frame["Value"], errors="coerce")
+        frame = frame.dropna(subset=["t", "cpu"]).sort_values("t")
+        return frame["t"].to_numpy(dtype=np.float64), frame["cpu"].to_numpy(dtype=np.float64)
 
-    py_all  = _prepare(py_all)
-    neo_all = _prepare(neo_all)
+    py_t,  py_cpu  = _arrays(py_raw)
+    py_tmid, py_raw_pct, py_smooth = _cpu_pct_from_cumulative(py_t, py_cpu)
 
-    # X-axis window: only the time range covered by burst samples (+5% margin)
-    burst_tmin = float(py_all["rel_time"].min())
-    burst_tmax = float(py_all["rel_time"].max())
-    margin = max((burst_tmax - burst_tmin) * 0.05, 0.05)
-    x_min = max(0.0, burst_tmin - margin)
-    x_max = burst_tmax + margin
+    if len(py_tmid) == 0:
+        return
 
-    # Absolute time bounds for filtering spans
+    burst_tmin = float(py_tmid.min())
+    burst_tmax = float(py_tmid.max())
+    x_min = max(0.0, burst_tmin)
+    x_max = burst_tmax
     abs_tmin = t0 + x_min
     abs_tmax = t0 + x_max
 
     fig, ax = plt.subplots(figsize=(10, 4))
 
-    # Background spans: only draw spans that overlap the burst window.
-    # Render order matters: sampling (blue) first, ETL (green) on top to
-    # replace its sub-window, then training (orange) in its own region.
-    for phase_start_event, phase_end_event, color in [
-        ("start_batch_fetch",      "end_batch_fetch",      "#FFD6D6"),
-        ("start_etl",              "end_etl",              "#D4EDDA"),
-        ("start_batch_processing", "end_batch_processing", "#FFF0DC"),
+    # Background phase spans - four layers, drawn lowest-precedence first so
+    # higher-precedence bands paint over them.
+    # Precedence (lowest to highest): db_wait -> deserialise -> etl -> training
+    # Higher-precedence phases use alpha=0.85 to fully cover the DB execution red.
+    for phase_start_event, phase_end_event, color, alpha in [
+        ("start_batch_fetch",      "end_batch_fetch",      "#FF8888", 0.65),
+        ("start_deserialise",      "end_deserialise",      "#FFD09A", 0.85),
+        ("start_etl",              "end_etl",              "#A8DDB5", 0.85),
+        ("start_batch_processing", "end_batch_processing", "#B8A4E0", 0.85),
     ]:
         starts = df.loc[df["Event"] == phase_start_event, "Time"].to_list()
         ends   = df.loc[df["Event"] == phase_end_event,   "Time"].to_list()
         for s, e in zip(starts[:len(ends)], ends):
             s_f, e_f = float(s), float(e)
-            # Skip spans entirely outside the burst window
             if e_f < abs_tmin or s_f > abs_tmax:
                 continue
-            ax.axvspan(s_f - t0, e_f - t0, color=color, alpha=0.45, lw=0, zorder=0)
+            ax.axvspan(s_f - t0, e_f - t0, color=color, alpha=alpha, lw=0, zorder=0)
 
-    # Plot Python/C++ line
-    ax.plot(
-        py_all["rel_time"].to_numpy(),
-        py_all["Value"].to_numpy(),
-        color="#4C78A8", linewidth=1.2, label="Python / C++", zorder=2,
-    )
+    # Python/C++: faint raw scatter + bold smoothed line
+    ax.scatter(py_tmid, py_raw_pct,
+               s=3, alpha=0.20, color="#4C78A8", zorder=1, linewidths=0)
+    ax.plot(py_tmid, py_smooth,
+            color="#4C78A8", linewidth=1.6, label="Python / C++", zorder=3)
 
-    # Plot Neo4j line if data exists
-    if not neo_all.empty:
-        ax.plot(
-            neo_all["rel_time"].to_numpy(),
-            neo_all["Value"].to_numpy(),
-            color="#F58518", linewidth=1.2, label="Neo4j", zorder=2,
-        )
+    # Collect smoothed series for y-axis scaling (exclude raw scatter outliers).
+    _smooth_series = [py_smooth]
 
-    # Legend entry for background colours
-    from matplotlib.patches import Patch
+    # Neo4j: same treatment if data exists
+    if not neo_raw.empty:
+        neo_t, neo_cpu = _arrays(neo_raw)
+        neo_tmid, neo_raw_pct, neo_smooth = _cpu_pct_from_cumulative(neo_t, neo_cpu)
+        if len(neo_tmid) > 0:
+            ax.scatter(neo_tmid, neo_raw_pct,
+                       s=3, alpha=0.25, color="#D62728", zorder=1, linewidths=0)
+            ax.plot(neo_tmid, neo_smooth,
+                    color="#D62728", linewidth=2.2, label="Neo4j", zorder=3)
+            _smooth_series.append(neo_smooth)
+
     legend_handles = ax.get_legend_handles_labels()[0][:]
     legend_labels  = ax.get_legend_handles_labels()[1][:]
     legend_handles += [
-        Patch(facecolor="#FFD6D6", alpha=0.8, label="DB fetching phase"),
-        Patch(facecolor="#D4EDDA", alpha=0.8, label="ETL phase"),
-        Patch(facecolor="#FFF0DC", alpha=0.8, label="Training phase"),
+        Patch(facecolor="#FF8888", alpha=0.8, label="DB execution phase"),
+        Patch(facecolor="#FFD09A", alpha=0.8, label="Deserialise phase"),
+        Patch(facecolor="#A8DDB5", alpha=0.8, label="ETL phase"),
+        Patch(facecolor="#B8A4E0", alpha=0.8, label="Training phase"),
     ]
-    legend_labels += ["DB fetching phase", "ETL phase", "Training phase"]
+    legend_labels += ["DB execution phase", "Deserialise phase", "ETL phase", "Training phase"]
 
     ax.legend(handles=legend_handles, labels=legend_labels, fontsize=8, loc="upper right")
+
+    # Y-axis: use the max of the smoothed lines + 15% headroom.
+    # The smoothed series already suppresses transient spikes, so this keeps
+    # the interesting region visible without letting rare outliers in the raw
+    # scatter push the axis far above the data.
+    y_top = float(max(s.max() for s in _smooth_series)) * 1.15
+    y_top = max(y_top, 10.0)
+    ax.set_ylim(0, y_top)
+
     ax.set_xlabel("Elapsed seconds")
     ax.set_ylabel("CPU utilization (%)")
-    ax.set_title("CPU utilization over time (burst samples, first N epochs)")
+    ax.set_title("CPU utilization over first batches")
     ax.set_xlim(x_min, x_max)
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
@@ -1970,7 +2130,13 @@ def _plot_avg_cpu_bar_ci(run_dirs: list[Path], output_dir: Path) -> None:
 
 
 def _plot_avg_cpu_timeline(run_dirs: list[Path], output_dir: Path) -> None:
-    """Averaged CPU utilization timeline (Python vs Neo4j) with ±95 % CI band."""
+    """Averaged CPU utilization timeline (Python vs Neo4j) with ±95 % CI band.
+
+    Reads ``python_cpu_time_s`` / ``neo4j_cpu_time_s`` cumulative samples
+    from each run, derives per-run smoothed % series via
+    :func:`_cpu_pct_from_cumulative`, interpolates onto a common time grid,
+    then plots the mean ±95 % CI band.
+    """
     from .measurements_summary import read_measurements
 
     py_series: list[tuple[np.ndarray, np.ndarray]] = []
@@ -1985,19 +2151,23 @@ def _plot_avg_cpu_timeline(run_dirs: list[Path], output_dir: Path) -> None:
             epoch_start = df.loc[df["Event"] == "epoch_start", "Time"]
             t0 = float(epoch_start.iloc[0]) if len(epoch_start) else float(df["Time"].min())
 
-            def _rel(events):
-                sub = df[df["Event"].isin(events)][["Time", "Value"]].copy()
-                sub["t"] = pd.to_numeric(sub["Time"], errors="coerce") - t0
-                sub["v"] = pd.to_numeric(sub["Value"], errors="coerce")
-                sub = sub.dropna().sort_values("t")
-                return sub["t"].to_numpy(dtype=float), sub["v"].to_numpy(dtype=float)
+            def _cumul_arrays(event_name: str):
+                sub = df[df["Event"] == event_name][["Time", "Value"]].copy()
+                sub["t"]   = pd.to_numeric(sub["Time"],  errors="coerce") - t0
+                sub["cpu"] = pd.to_numeric(sub["Value"], errors="coerce")
+                sub = sub.dropna(subset=["t", "cpu"]).sort_values("t")
+                return sub["t"].to_numpy(dtype=np.float64), sub["cpu"].to_numpy(dtype=np.float64)
 
-            py_t, py_v = _rel(["python_cpu_sampling", "python_cpu_etl", "python_cpu_training"])
-            neo_t, neo_v = _rel(["neo4j_cpu_sampling", "neo4j_cpu_etl", "neo4j_cpu_training"])
-            if len(py_t) > 1:
-                py_series.append((py_t, py_v))
-            if len(neo_t) > 1:
-                neo_series.append((neo_t, neo_v))
+            py_t,  py_cpu  = _cumul_arrays("python_cpu_time_s")
+            neo_t, neo_cpu = _cumul_arrays("neo4j_cpu_time_s")
+
+            py_tmid, _, py_smooth = _cpu_pct_from_cumulative(py_t, py_cpu)
+            if len(py_tmid) > 1:
+                py_series.append((py_tmid, py_smooth))
+
+            neo_tmid, _, neo_smooth = _cpu_pct_from_cumulative(neo_t, neo_cpu)
+            if len(neo_tmid) > 1:
+                neo_series.append((neo_tmid, neo_smooth))
         except Exception:
             pass
 

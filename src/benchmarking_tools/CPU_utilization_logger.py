@@ -1,5 +1,9 @@
-import psutil
+import math
 import threading
+import time
+
+import numpy as np
+import psutil
 
 
 def find_neo4j_process() -> psutil.Process | None:
@@ -33,7 +37,12 @@ def find_neo4j_process() -> psutil.Process | None:
 
 
 def _sample_process_cpu(proc: psutil.Process) -> float:
-    """Return CPU % for proc plus all its live children (non-blocking)."""
+    """Return CPU % for proc plus all its live children (non-blocking).
+
+    Used only by the coarse monitor which runs at a 5 s interval where
+    cpu_percent is reliable. The burst monitor uses cumulative cpu_times
+    instead.
+    """
     try:
         total = proc.cpu_percent(interval=None)
         for child in proc.children(recursive=True):
@@ -102,54 +111,65 @@ def start_cpu_monitor(measurer, interval: float = 5):
     return stop_event, t
 
 
-def start_cpu_burst(measurer):
-    """Start an intensive 10 ms CPU burst monitor for a single batch.
+def start_cpu_burst(measurer, period_s: float = 0.001, max_samples: int = 8192):
+    """Start an intensive burst CPU monitor for the first N batches.
 
-    Samples Python and Neo4j CPU every 10 ms.  The current training phase is
-    read from ``measurer.get_phase()`` on each tick to select the event name:
+    Records *cumulative* CPU time (seconds) for Python and Neo4j once every
+    *period_s* seconds into pre-allocated numpy arrays, then flushes all rows
+    to the measurements CSV in a single batch when the burst stops.
 
-    * ``python_cpu_sampling`` / ``neo4j_cpu_sampling``  (phase == "sampling")
-    * ``python_cpu_training`` / ``neo4j_cpu_training``  (phase == "training")
+    Event names written:
+    * ``python_cpu_time_s`` — cumulative CPU-seconds of the Python process
+      (all threads, via ``time.process_time()``; no child-process walk).
+    * ``neo4j_cpu_time_s``  — cumulative user+system CPU-seconds of the Neo4j
+      JVM process (via ``psutil.Process.cpu_times()``).
+
+    The plotter derives CPU % offline from consecutive Δcpu / Δwall pairs,
+    which eliminates the 10 ms jiffy-quantisation artefacts that the old
+    per-tick ``cpu_percent`` approach produced.
 
     ``measurer.neo4j_proc`` must already be set (done by ``start_cpu_monitor``).
-    Call before the batch starts; call ``stop_event.set(); thread.join()`` after.
+    Call before the first burst batch starts; call
+    ``stop_event.set(); thread.join()`` after the last burst batch ends.
 
     Returns ``(stop_event, thread)``.
     """
-    python_proc = psutil.Process()
     neo4j_proc = getattr(measurer, "neo4j_proc", None)
 
-    # Warm up handles for this burst window.
-    python_proc.cpu_percent(interval=None)
+    # Warm up the Neo4j cpu_times handle so the first delta is valid.
     if neo4j_proc is not None:
         try:
-            neo4j_proc.cpu_percent(interval=None)
+            neo4j_proc.cpu_times()
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             neo4j_proc = None
+
+    buf_t   = np.empty(max_samples, dtype=np.float64)
+    buf_py  = np.empty(max_samples, dtype=np.float64)
+    buf_neo = np.full(max_samples, math.nan, dtype=np.float64)
 
     stop_event = threading.Event()
 
     def burst():
-        while not stop_event.is_set():
-            phase = measurer.get_phase()
-            if phase == "sampling":
-                suffix = "sampling"
-            elif phase == "etl":
-                suffix = "etl"
-            else:
-                suffix = "training"
-
-            py_cpu = _sample_process_cpu(python_proc)
-            measurer.log_event(f"python_cpu_{suffix}", py_cpu)
-
+        i = 0
+        while not stop_event.is_set() and i < max_samples:
+            buf_t[i]  = time.monotonic()
+            buf_py[i] = time.process_time()
             if neo4j_proc is not None:
                 try:
-                    neo4j_cpu = neo4j_proc.cpu_percent(interval=None)
-                    measurer.log_event(f"neo4j_cpu_{suffix}", neo4j_cpu)
+                    ct = neo4j_proc.cpu_times()
+                    buf_neo[i] = ct.user + ct.system
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
+            i += 1
+            stop_event.wait(period_s)
 
-            stop_event.wait(0.0001)  # 0.5 ms
+        # Flush all buffered samples in one batch after the burst window ends.
+        # Using explicit timestamps so the values reflect when each sample was
+        # taken, not when the flush happens.
+        for k in range(i):
+            measurer.log_event("python_cpu_time_s", buf_py[k], t=buf_t[k])
+            if not math.isnan(buf_neo[k]):
+                measurer.log_event("neo4j_cpu_time_s", buf_neo[k], t=buf_t[k])
 
     t = threading.Thread(target=burst, daemon=True)
     t.start()

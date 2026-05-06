@@ -212,7 +212,7 @@ class Neo4jRedisCachedFS(Neo4jFS):
 
         if self.measurer is not None:
             self.measurer.log_event("end_etl", 1)
-            self.measurer.set_phase("sampling")
+            self.measurer.set_phase("db_wait")
             self.measurer.log_event(
                 "feat_x_etl_ms",
                 (time.monotonic() - self.t_feat_etl_start) * 1000,

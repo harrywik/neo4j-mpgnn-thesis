@@ -316,9 +316,15 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
                 edge_pairs=edge_pairs,
                 frontier_ids=frontier_ids,
             )
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("db_wait")
 
         if not records:
             return {}, {}, {}

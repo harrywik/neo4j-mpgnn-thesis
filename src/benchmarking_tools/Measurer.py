@@ -64,6 +64,8 @@ class Measurer:
         self.coarse_cpu_interval = coarse_cpu_interval
         self.intensive_cpu_epochs = intensive_cpu_epochs
         self.cpu_burst_batches = int(config.get("cpu_burst_batches", 3))
+        self.cpu_burst_period_ms = float(config.get("cpu_burst_period_ms", 1.0))
+        self.cpu_burst_max_samples = int(config.get("cpu_burst_max_samples", 8192))
         self.neo4j_proc = None
         self._current_phase: str = "idle"
 
@@ -196,10 +198,15 @@ class Measurer:
         self.edge_visit_counter.update(edge_keys)
 
     def set_phase(self, phase: str) -> None:
-        """Set the current training phase ('sampling', 'training', or 'idle').
+        """Set the current training phase.
 
-        Read by the CPU burst monitor thread to label each sample with the
-        correct phase-specific event name.
+        Valid values: ``'db_wait'``, ``'deserialise'``, ``'etl'``,
+        ``'training'``, ``'idle'``.
+
+        The phase string is informational only; the burst sampler records
+        cumulative CPU times and the plotter assigns phases from boundary
+        events (``start_batch_fetch``, ``start_deserialise``, ``start_etl``,
+        ``start_batch_processing``).
         """
         self._current_phase = phase
 
@@ -207,8 +214,15 @@ class Measurer:
         """Return the current training phase string."""
         return self._current_phase
 
-    def log_event(self, event_name: str, value: int | float = 1):
-        self._writer.writerow([event_name, time.monotonic(), value])
+    def log_event(self, event_name: str, value: int | float = 1, t: float | None = None):
+        """Write one measurement row.
+
+        *t* is the ``time.monotonic()`` timestamp for the event.  When omitted
+        the current wall time is used.  Passing an explicit *t* is only needed
+        by the burst sampler, which pre-buffers samples and flushes them after
+        the burst window ends.
+        """
+        self._writer.writerow([event_name, t if t is not None else time.monotonic(), value])
 
     def close(self) -> None:
         """Flush and close measurement outputs explicitly."""

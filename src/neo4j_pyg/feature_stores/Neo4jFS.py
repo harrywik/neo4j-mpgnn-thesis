@@ -229,7 +229,7 @@ class Neo4jFS(FeatureStore):
 
         if self.measurer is not None:
             self.measurer.log_event("end_etl", 1)
-            self.measurer.set_phase("sampling")
+            self.measurer.set_phase("db_wait")
             self.measurer.log_event("feat_x_etl_ms", (time.monotonic() - self.t_feat_etl_start) * 1000)
 
         return result
@@ -248,9 +248,15 @@ class Neo4jFS(FeatureStore):
         with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
             result = session.run(self._query_both, **self._query_both_params(nids, x_attr))
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("db_wait")
 
         total_ms = (t_all_records - t_send) * 1000
 
@@ -361,9 +367,15 @@ class Neo4jFS(FeatureStore):
         with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
             result = session.run(query, **self._query_value_params(nids, attr))
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
             records = list(result)
             t_all_records = time.monotonic()
             summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("db_wait")
 
         total_feat_fetch_ms = (t_all_records - t_send) * 1000
 

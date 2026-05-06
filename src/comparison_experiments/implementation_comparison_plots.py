@@ -464,42 +464,58 @@ def plot_comparison_cpu_bar(
     )
 
 
-_CPU_EVENTS = [
-    "python_cpu_coarse",
-    "python_cpu_sampling",
-    "python_cpu_etl",
-    "python_cpu_training",
-]
-
-
 def _load_cpu_trace(csv_path: Path):
     """Return CPU trace data for a single run, or None on failure.
 
-    Merges all python_cpu_* events, smooths them with a short rolling window,
-    and returns time relative to the first epoch_start together with the raw
-    coarse samples for marker overlays.
+    Reads ``python_cpu_time_s`` cumulative samples (new format) and derives
+    CPU % from consecutive Δcpu / Δwall pairs, then applies a 20 ms boxcar
+    smooth.  Coarse 5-second samples are returned separately for marker
+    overlays.
+
+    Falls back to the old ``python_cpu_*`` per-tick events when no cumulative
+    data is present so that previously recorded runs can still be plotted.
+
+    Returns ``(t_mid, raw_pct, smooth_pct, coarse_rel_t, coarse_vals)`` or
+    ``None`` on failure.
     """
+    from benchmarking_tools.measurements_plots import _cpu_pct_from_cumulative
+
     df = pd.read_csv(csv_path)
-    df["Time"] = pd.to_numeric(df["Time"], errors="coerce")
+    df["Time"]  = pd.to_numeric(df["Time"],  errors="coerce")
     df["Value"] = pd.to_numeric(df["Value"], errors="coerce")
     df = df.dropna(subset=["Time"]).sort_values("Time").reset_index(drop=True)
-
-    cpu = df[df["Event"].isin(_CPU_EVENTS)][["Time", "Value"]].copy()
-    if cpu.empty:
-        return None
 
     epoch_starts = df.loc[df["Event"] == "epoch_start", "Time"]
     t0 = float(epoch_starts.iloc[0]) if len(epoch_starts) else float(df["Time"].min())
 
-    cpu = cpu.sort_values("Time")
-    rel_t = (cpu["Time"] - t0).to_numpy(dtype=float)
-    vals = cpu["Value"].to_numpy(dtype=float)
-
     coarse = df[df["Event"] == "python_cpu_coarse"][["Time", "Value"]].copy()
     coarse_rel_t = (coarse["Time"].to_numpy(dtype=float) - t0) if not coarse.empty else np.array([])
-    coarse_vals = coarse["Value"].to_numpy(dtype=float) if not coarse.empty else np.array([])
+    coarse_vals  = coarse["Value"].to_numpy(dtype=float) if not coarse.empty else np.array([])
 
-    # Rolling-mean smoothing: window spans roughly 0.4 s worth of samples.
+    burst = df[df["Event"] == "python_cpu_time_s"][["Time", "Value"]].copy()
+    if not burst.empty:
+        burst = burst.sort_values("Time")
+        t_arr   = (burst["Time"].to_numpy(dtype=float) - t0)
+        cpu_arr = burst["Value"].to_numpy(dtype=float)
+        t_mid, raw_pct, smooth_pct = _cpu_pct_from_cumulative(t_arr, cpu_arr)
+        if len(t_mid) < 2:
+            return None
+        return t_mid, raw_pct, smooth_pct, coarse_rel_t, coarse_vals
+
+    # Legacy fallback: old per-tick cpu_percent events
+    _LEGACY_EVENTS = [
+        "python_cpu_coarse",
+        "python_cpu_sampling",
+        "python_cpu_etl",
+        "python_cpu_training",
+    ]
+    cpu = df[df["Event"].isin(_LEGACY_EVENTS)][["Time", "Value"]].copy()
+    if cpu.empty:
+        return None
+
+    cpu = cpu.sort_values("Time")
+    rel_t = (cpu["Time"] - t0).to_numpy(dtype=float)
+    vals  = cpu["Value"].to_numpy(dtype=float)
     if len(vals) > 4:
         total_span = rel_t[-1] - rel_t[0]
         avg_gap = total_span / max(len(vals) - 1, 1)
@@ -508,7 +524,6 @@ def _load_cpu_trace(csv_path: Path):
         smoothed = pd.Series(vals).rolling(win, center=True, min_periods=1).mean().to_numpy()
     else:
         smoothed = vals
-
     return rel_t, vals, smoothed, coarse_rel_t, coarse_vals
 
 
@@ -518,7 +533,7 @@ def plot_comparison_cpu_timeline(
     """CPU utilisation over time from run_0 — one clean panel per implementation.
 
     Each panel uses local y-scaling so small CPU variations remain visible.
-    The plot shows a faint raw trace, a smoothed trend line, and markers for
+    The plot shows a faint raw scatter, a smoothed trend line, and markers for
     the coarse 5-second samples.
     """
 
@@ -542,7 +557,7 @@ def plot_comparison_cpu_timeline(
         color = _color(idx)
         rel_t, raw_vals, smoothed, coarse_rel_t, coarse_vals = trace
 
-        ax.plot(rel_t, raw_vals, color=color, linewidth=0.8, alpha=0.18, zorder=1)
+        ax.scatter(rel_t, raw_vals, s=3, alpha=0.18, color=color, linewidths=0, zorder=1)
         ax.plot(rel_t, smoothed, color=color, linewidth=2.0, zorder=2)
 
         if len(coarse_rel_t):
@@ -561,12 +576,12 @@ def plot_comparison_cpu_timeline(
         peak_cpu = float(np.max(raw_vals))
         ax.axhline(mean_cpu, color=color, linewidth=1.0, linestyle="--", alpha=0.8, zorder=0)
 
-        q_low = float(np.percentile(raw_vals, 2))
+        q_low  = float(np.percentile(raw_vals, 2))
         q_high = float(np.percentile(raw_vals, 98))
         spread = max(q_high - q_low, 4.0)
-        pad = max(spread * 0.2, 2.0)
-        y_min = max(0.0, q_low - pad)
-        y_max = q_high + pad
+        pad    = max(spread * 0.2, 2.0)
+        y_min  = max(0.0, q_low - pad)
+        y_max  = q_high + pad
 
         ax.set_title(f"{name}  |  mean={mean_cpu:.1f}%  peak={peak_cpu:.1f}%", fontsize=10, fontweight="bold", pad=4)
         ax.set_ylabel("CPU %", fontsize=9)
