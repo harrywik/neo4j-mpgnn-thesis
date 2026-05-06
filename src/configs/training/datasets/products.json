@@ -14,7 +14,7 @@
   "default_hidden_dim1": 20,
   "default_hidden_dim2": 20,
   "lr": 1e-3,
-  "batch_size": 30,
+  "batch_size": 128,
   "max_epochs": 1,
   "patience": 200,
   "min_delta": 0.01,
@@ -23,9 +23,9 @@
   "drop_last": true,
   "profile": true,
   "logg_cpu_utilization": true,
-  "cpu_burst_batches": 5,
+  "cpu_burst_batches": 3,
   "max_training_size": null,
   "max_validation_size": 1,
-  "max_test_size": 30000,
+  "max_test_size": 100,
   "nbr_runs": 1
 }

@@ -121,11 +121,12 @@ class Neo4jSampler(BaseSampler):
 
                 // 8. return the next frontier, visited and edges
                 RETURN 
-                    next_f AS frontier,
-                    visited + next_f AS visited,
-                    edges + n_edges_flat AS edges,
-                    nodes_by_hop + [next_f] AS nodes_by_hop
+                    next_f AS next_frontier,
+                    visited + next_f AS next_visited,
+                    edges + n_edges_flat AS next_edges,
+                    nodes_by_hop + [next_f] AS next_nodes_by_hop
             }}
+            WITH next_frontier AS frontier, next_visited AS visited, next_edges AS edges, next_nodes_by_hop AS nodes_by_hop
             """)
 
         q.append(f"""
