@@ -1,0 +1,75 @@
+\contentsline {chapter}{\numberline {1}Introduction}{1}{}%
+\contentsline {section}{\numberline {1.1}Research questions}{2}{}%
+\contentsline {section}{\numberline {1.2}Scope and limitations}{2}{}%
+\contentsline {section}{\numberline {1.3}Thesis outline}{2}{}%
+\contentsline {chapter}{\numberline {2}Background}{3}{}%
+\contentsline {section}{\numberline {2.1}Graphs and graph representation learning}{3}{}%
+\contentsline {subsection}{\numberline {2.1.1}Transductive nature of traditional GRL}{3}{}%
+\contentsline {section}{\numberline {2.2}Neural networks}{4}{}%
+\contentsline {section}{\numberline {2.3}Graph neural networks}{4}{}%
+\contentsline {subsection}{\numberline {2.3.1}Message passing}{5}{}%
+\contentsline {subsection}{\numberline {2.3.2}Implications for large-graph training}{5}{}%
+\contentsline {section}{\numberline {2.4}Graph neural networks for large graphs}{6}{}%
+\contentsline {subsection}{\numberline {2.4.1}Training under memory constraints}{6}{}%
+\contentsline {subsection}{\numberline {2.4.2}Subgraph sampling}{7}{}%
+\contentsline {section}{\numberline {2.5}PyTorch Geometric}{8}{}%
+\contentsline {section}{\numberline {2.6}Neo4j and graph databases}{8}{}%
+\contentsline {subsection}{\numberline {2.6.1}Alternatives to Neo4j}{9}{}%
+\contentsline {subsection}{\numberline {2.6.2}Querying Neo4j with Cypher and procedures}{9}{}%
+\contentsline {subsection}{\numberline {2.6.3}Data retrieval from Neo4j}{9}{}%
+\contentsline {subsection}{\numberline {2.6.4}Cypher query execution pipeline}{9}{}%
+\contentsline {chapter}{\numberline {3}Related Work}{11}{}%
+\contentsline {section}{\numberline {3.1}Subgraph sampling}{11}{}%
+\contentsline {section}{\numberline {3.2}Distributed GNN systems}{11}{}%
+\contentsline {section}{\numberline {3.3}Database-backed GNN pipelines}{12}{}%
+\contentsline {section}{\numberline {3.4}Research gap}{12}{}%
+\contentsline {chapter}{\numberline {4}Method}{13}{}%
+\contentsline {section}{\numberline {4.1}Experimental methodology}{13}{}%
+\contentsline {section}{\numberline {4.2}Baseline graph-database-backed GNN system}{13}{}%
+\contentsline {section}{\numberline {4.3}System configurations}{13}{}%
+\contentsline {section}{\numberline {4.4}Datasets}{14}{}%
+\contentsline {section}{\numberline {4.5}Equivalence constraint}{14}{}%
+\contentsline {section}{\numberline {4.6}Performance evaluation}{14}{}%
+\contentsline {section}{\numberline {4.7}Benchmarking procedure}{15}{}%
+\contentsline {section}{\numberline {4.8}Graph neural network model}{15}{}%
+\contentsline {section}{\numberline {4.9}Sampling algorithms}{15}{}%
+\contentsline {subsection}{\numberline {4.9.1}Neighbor sampling}{15}{}%
+\contentsline {subsection}{\numberline {4.9.2}GraphSAINT random-walk sampling}{16}{}%
+\contentsline {chapter}{\numberline {5}System Design}{17}{}%
+\contentsline {section}{\numberline {5.1}Baseline architecture}{17}{}%
+\contentsline {section}{\numberline {5.2}Improved architecture}{18}{}%
+\contentsline {section}{\numberline {5.3}Graph representation in Neo4j}{18}{}%
+\contentsline {section}{\numberline {5.4}PyTorch Geometric integration}{18}{}%
+\contentsline {section}{\numberline {5.5}Profiling and logging}{19}{}%
+\contentsline {subsection}{\numberline {5.5.1}Training logging}{19}{}%
+\contentsline {subsection}{\numberline {5.5.2}Query execution profiling}{19}{}%
+\contentsline {subsection}{\numberline {5.5.3}Python-level profiling}{19}{}%
+\contentsline {section}{\numberline {5.6}Implementation decisions}{19}{}%
+\contentsline {chapter}{\numberline {6}Results}{20}{}%
+\contentsline {section}{\numberline {6.1}RQ1: Bottlenecks}{21}{}%
+\contentsline {subsection}{\numberline {6.1.1}Training phase vs. sampling phase}{21}{}%
+\contentsline {subsection}{\numberline {6.1.2}Sampling subphases}{21}{}%
+\contentsline {subsection}{\numberline {6.1.3}Feature vector datatype}{21}{}%
+\contentsline {subsection}{\numberline {6.1.4}Effect of caching}{21}{}%
+\contentsline {subsection}{\numberline {6.1.5}Effect of multisampler parallelism}{21}{}%
+\contentsline {subsection}{\numberline {6.1.6}Summary of RQ1}{21}{}%
+\contentsline {section}{\numberline {6.2}RQ2: Sampling strategies}{21}{}%
+\contentsline {subsection}{\numberline {6.2.1}Neighbor sampling in Neo4j}{21}{}%
+\contentsline {subsection}{\numberline {6.2.2}GraphSAINT in Neo4j}{21}{}%
+\contentsline {subsection}{\numberline {6.2.3}Summary of RQ2}{21}{}%
+\contentsline {section}{\numberline {6.3}RQ3: Inference with graph stored in Neo4j}{21}{}%
+\contentsline {subsection}{\numberline {6.3.1}Inference setting definitions}{21}{}%
+\contentsline {subsection}{\numberline {6.3.2}Batch inference performance}{21}{}%
+\contentsline {subsection}{\numberline {6.3.3}Inference on newly inserted nodes}{21}{}%
+\contentsline {subsection}{\numberline {6.3.4}Summary of RQ3}{21}{}%
+\contentsline {section}{\numberline {6.4}RQ4: Effect of graph size}{21}{}%
+\contentsline {subsection}{\numberline {6.4.1}Small graphs}{21}{}%
+\contentsline {subsection}{\numberline {6.4.2}Medium graphs}{21}{}%
+\contentsline {subsection}{\numberline {6.4.3}Large graphs}{21}{}%
+\contentsline {subsection}{\numberline {6.4.4}Summary of RQ4}{21}{}%
+\contentsline {chapter}{\numberline {7}Discussion}{22}{}%
+\contentsline {section}{\numberline {7.1}Optimal system implementation}{22}{}%
+\contentsline {section}{\numberline {7.2}Implications}{22}{}%
+\contentsline {section}{\numberline {7.3}Threats to validity}{22}{}%
+\contentsline {chapter}{\numberline {8}Conclusion}{23}{}%
+\contentsline {section}{\numberline {8.1}Future work}{23}{}%
