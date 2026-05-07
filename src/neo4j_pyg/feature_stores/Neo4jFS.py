@@ -389,6 +389,9 @@ class Neo4jFS(FeatureStore):
 
         result_map: Dict[int, object] = {}
         t_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
 
         if not records:
             if self.measurer is not None:
@@ -413,6 +416,8 @@ class Neo4jFS(FeatureStore):
 
         if self.measurer is not None:
             self.measurer.log_event(f"{phase}etl_parse_ms", (time.monotonic() - t_etl_start) * 1000)
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("db_wait")
         return result_map
 
     def _update_cached_value(self, nid: int, value: object, attr: TensorAttr, **kwargs) -> None:

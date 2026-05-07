@@ -12,7 +12,7 @@
     "connection_mode": "driver"
   },
   "sampler": {
-    "class_name": "Neo4jJavaNeighborSampler",
+    "class_name": "Neo4jSampler",
     "num_neighbors": [10, 5]
   },
   "model": {

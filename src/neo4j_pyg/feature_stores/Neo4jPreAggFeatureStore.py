@@ -214,6 +214,13 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             frontier_ids=list(frontier_set),
             include_label=True,
         )
+
+        # DB call is done — start timing pure Python assembly.
+        self.t_feat_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
+
         if not feature_map and not node_ids:
             empty_feats = np.empty((0, self._feature_dim or 0), dtype=np.float32)
             return [], empty_feats, np.empty(0, dtype=np.int64)
@@ -231,7 +238,7 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         self._feature_dim = feature_dim
         zero = np.zeros(feature_dim, dtype=np.float32)
         feat_matrix = np.empty((len(node_ids), feature_dim), dtype=np.float32)
-        y_array = np.asarray([label_map[nid] for nid in node_ids], dtype=np.int64)
+        y_array = np.asarray([label_map.get(nid, -1) for nid in node_ids], dtype=np.int64)
 
         for i, nid in enumerate(node_ids):
             feat_matrix[i] = feature_map.get(nid, zero)
@@ -272,6 +279,12 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             frontier_ids=list(frontier_set),
             include_label=False,
         )
+
+        # DB call is done — start timing pure Python assembly.
+        self.t_feat_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
 
         feature_dim = None
         if result_map:
@@ -324,9 +337,13 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             summary = result.consume()
             if self.measurer is not None:
                 self.measurer.log_event("end_deserialise", 1)
-                self.measurer.set_phase("db_wait")
+                self.measurer.set_phase("etl")
+                self.measurer.log_event("start_etl", 1)
 
         if not records:
+            if self.measurer is not None:
+                self.measurer.log_event("end_etl", 1)
+                self.measurer.set_phase("db_wait")
             return {}, {}, {}
 
         total_fetch_ms = (t_all_records - t_send) * 1000
@@ -374,6 +391,8 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             raw_bytes = int(raw_matrix.nbytes) if raw_matrix is not None else 0
             agg_bytes = int(agg_matrix.nbytes) if agg_matrix is not None else 0
             self.measurer.log_event("feat_bytes", raw_bytes + agg_bytes)
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("db_wait")
 
         return feature_map, label_map, preagg_map
 
