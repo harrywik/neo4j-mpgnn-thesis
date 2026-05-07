@@ -36,6 +36,13 @@ from comparison_experiments.sampler_comparison.comparison_plots import (
     plot_time_decomposition_stacked,
 )
 import pandas as pd
+from benchmarking_tools.measurements_plots import (
+    _parse_train_profile,
+    _find_profile_fn,
+    _FRAMEWORK_FORWARD_RE,
+    _extract_driver_ms_per_batch,
+    _DRIVER_ENTRIES,
+)
 
 # ---------------------------------------------------------------------------
 # Color / style helpers  (same palette as comparison_plots.py)
@@ -634,6 +641,221 @@ def _vertical_bar_chart(
 
 
 # ---------------------------------------------------------------------------
+# End-to-end latency (topo + features + GNN compute)
+# ---------------------------------------------------------------------------
+
+def _extract_avg_gnn_slices(
+    impl_dir: Path, nbr_runs: int
+) -> list[tuple[str, float, str]]:
+    """Return averaged GNN compute slices (forward/backward/optimizer) from train_profile.txt."""
+    import re
+    fwd_ms: list[float] = []
+    bwd_ms: list[float] = []
+    opt_ms: list[float] = []
+    for run_idx in range(nbr_runs):
+        run_dir = impl_dir / f"run_{run_idx}"
+        profile_data = _parse_train_profile(run_dir / "train_profile.txt")
+        if not profile_data:
+            continue
+        fns = profile_data["functions"]
+        run_batch_fn = _find_profile_fn(fns, r"Training\.py.*_run_batch")
+        n_train = run_batch_fn["ncalls"] if run_batch_fn else None
+        if not n_train or n_train <= 0:
+            continue
+        forward_candidates = [
+            fn for fn in fns
+            if re.search(r"\(forward\)$", fn["location"])
+            and not _FRAMEWORK_FORWARD_RE.search(fn["location"])
+        ]
+        if forward_candidates:
+            fwd_fn = max(forward_candidates, key=lambda f: f["cumtime"])
+            ms = fwd_fn["cumtime"] * 1000 / fwd_fn["ncalls"]
+            if ms > 0:
+                fwd_ms.append(ms)
+        bwd_fn = _find_profile_fn(
+            fns,
+            r"_tensor\.py.*\(backward\)",
+            r"graph\.py.*_engine_run_backward",
+            r"__init__.*\(backward\)",
+        )
+        if bwd_fn:
+            ms = bwd_fn["cumtime"] * 1000 / max(bwd_fn["ncalls"], 1)
+            if ms > 0:
+                bwd_ms.append(ms)
+        opt_fn = _find_profile_fn(
+            fns,
+            r"optimizer\.py.*\(wrapper\)",
+            r"adam\.py.*\(step\)",
+            r"adam\.py.*\(adam\)",
+        )
+        if opt_fn:
+            ms = opt_fn["cumtime"] * 1000 / max(opt_fn["ncalls"], 1)
+            if ms > 0:
+                opt_ms.append(ms)
+    slices: list[tuple[str, float, str]] = []
+    if fwd_ms:
+        slices.append(("GNN forward", float(np.mean(fwd_ms)), "#54A24B"))
+    if bwd_ms:
+        slices.append(("GNN backward", float(np.mean(bwd_ms)), "#88D27A"))
+    if opt_ms:
+        slices.append(("Optimizer step", float(np.mean(opt_ms)), "#B8EFB0"))
+    return slices
+
+
+def plot_comparison_end_to_end_latency(
+    impl_data: dict[str, dict],
+    impl_dirs: dict[str, Path],
+    nbr_runs: int,
+    output_dir: Path,
+) -> None:
+    """End-to-end latency breakdown (topology + features + GNN compute) for all implementations."""
+    grouped_rows: list[tuple[str, list[tuple[str, list[tuple[str, float, str]]]]]] = []
+    for impl_name, agg in impl_data.items():
+        impl_dir = impl_dirs[impl_name]
+        rows = list(_build_avg_end_to_end_slices(impl_dir, agg, nbr_runs))
+        gnn_slices = _extract_avg_gnn_slices(impl_dir, nbr_runs)
+        if gnn_slices:
+            rows.append(("GNN compute", gnn_slices))
+        if rows:
+            grouped_rows.append((impl_name, rows))
+
+    if not grouped_rows:
+        return
+
+    n_rows = sum(len(impl_rows) for _, impl_rows in grouped_rows)
+    bar_height = 0.52
+    group_gap = 0.58
+
+    fig, ax = plt.subplots(figsize=(11, max(3.0, n_rows * 0.9 + len(grouped_rows) * 0.35)))
+    group_ticks: list[float] = []
+    group_labels: list[str] = []
+    legend_handles: dict[str, tuple[str, str]] = {}
+    current_y = 0.0
+    max_total = 0.0
+
+    for impl_name, impl_rows in grouped_rows:
+        n = len(impl_rows)
+        for row_label, slices in impl_rows:
+            row_y = current_y
+            left = 0.0
+            total = sum(s[1] for s in slices)
+            max_total = max(max_total, total)
+            for seg_label, width, color in slices:
+                if width <= 0:
+                    continue
+                ax.barh(row_y, width, left=left, height=bar_height, color=color,
+                        edgecolor="white", linewidth=0.5)
+                if total > 0 and width / total > 0.08:
+                    ax.text(
+                        left + width / 2, row_y,
+                        f"{width:.1f}",
+                        ha="center", va="center", fontsize=7,
+                        color="white" if color not in (_C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
+                        fontweight="bold",
+                    )
+                left += width
+                legend_handles[seg_label] = (seg_label, color)
+            ax.text(left, row_y, f"  {left:.1f} ms", ha="left", va="center", fontsize=8)
+            ax.text(-max_total * 0.01 if max_total > 0 else -0.5, row_y,
+                    row_label, ha="right", va="center", fontsize=7, color="#555555")
+            current_y += bar_height + 0.06
+        group_center = current_y - (n * (bar_height + 0.06)) / 2
+        group_ticks.append(group_center)
+        group_labels.append(impl_name)
+        current_y += group_gap
+
+    ax.set_yticks(group_ticks)
+    ax.set_yticklabels(group_labels, fontsize=9)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean ms per batch")
+    ax.set_title("End-to-end latency breakdown by implementation")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+    if max_total > 0:
+        ax.set_xlim(0, max_total * 1.25)
+
+    legend_patches = [Patch(facecolor=color, label=label, edgecolor="white")
+                      for label, color in legend_handles.values()]
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
+    fig.tight_layout()
+    fig.savefig(output_dir / "comparison_end_to_end_latency.png", dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
+# Driver time breakdown
+# ---------------------------------------------------------------------------
+
+def plot_comparison_driver_time_breakdown(
+    impl_dirs: dict[str, Path],
+    nbr_runs: int,
+    output_dir: Path,
+) -> None:
+    """Grouped horizontal bars of driver leaf timings (ms/batch) per implementation."""
+    color_map = {e[0]: e[3] for e in _DRIVER_ENTRIES}
+    all_labels_ordered = [e[0] for e in _DRIVER_ENTRIES]
+
+    impl_data_map: dict[str, dict[str, float]] = {}
+    for impl_name, impl_dir in impl_dirs.items():
+        per_label: dict[str, list[float]] = {}
+        for run_idx in range(nbr_runs):
+            run_dir = impl_dir / f"run_{run_idx}"
+            mj = run_dir / "measurements.json"
+            n_batches = 1
+            if mj.exists():
+                try:
+                    with open(mj) as f:
+                        n_batches = json.load(f).get("run", {}).get("batches_seen") or 1
+                except Exception:
+                    pass
+            vals = _extract_driver_ms_per_batch(run_dir / "train_profile.prof", n_batches)
+            for label, v in vals.items():
+                per_label.setdefault(label, []).append(v)
+        means = {label: float(np.mean(vals)) for label, vals in per_label.items() if vals}
+        if means:
+            impl_data_map[impl_name] = means
+
+    if not impl_data_map:
+        return
+
+    labels_present = [l for l in all_labels_ordered if any(l in d for d in impl_data_map.values())]
+    if not labels_present:
+        return
+
+    n_impls = len(impl_data_map)
+    n_labels = len(labels_present)
+    bar_h = 0.7 / n_impls
+    group_gap = 0.3
+
+    fig, ax = plt.subplots(figsize=(max(6, n_labels * 1.8), max(3.0, n_impls * n_labels * 0.4)))
+    impl_names = list(impl_data_map.keys())
+
+    for g_i, label in enumerate(labels_present):
+        for i, impl_name in enumerate(impl_names):
+            val = impl_data_map[impl_name].get(label, 0.0)
+            y = g_i - (n_impls - 1) * bar_h / 2 + i * bar_h
+            color = _color(i)
+            ax.barh(y, val, height=bar_h * 0.85, color=color, edgecolor="white", linewidth=0.4)
+            if val > 0:
+                ax.text(val + max(impl_data_map[impl_name].values(), default=1) * 0.01,
+                        y, f"{val:.2f}", va="center", ha="left", fontsize=6)
+
+    y_ticks = list(range(n_labels))
+    ax.set_yticks(y_ticks)
+    ax.set_yticklabels([l.replace("\n", " ") for l in labels_present], fontsize=8)
+    ax.invert_yaxis()
+    ax.set_xlabel("mean ms per batch")
+    ax.set_title("Driver time breakdown by implementation")
+    ax.grid(axis="x", linestyle="--", alpha=0.3)
+
+    legend_patches = [Patch(facecolor=_color(i), label=name, edgecolor="white")
+                      for i, name in enumerate(impl_names)]
+    ax.legend(handles=legend_patches, loc="upper right", fontsize=7, framealpha=0.85)
+    fig.tight_layout()
+    fig.savefig(output_dir / "comparison_driver_time_breakdown.png", dpi=150)
+    plt.close(fig)
+
+
+# ---------------------------------------------------------------------------
 # Master entry point
 # ---------------------------------------------------------------------------
 
@@ -676,6 +898,8 @@ def plot_all_comparisons(
     plot_comparison_throughput(impl_data, output_dir)
     plot_comparison_best_accuracy(impl_data, output_dir)
     plot_comparison_subphase_latency(impl_data, impl_dirs, nbr_runs, output_dir)
+    plot_comparison_end_to_end_latency(impl_data, impl_dirs, nbr_runs, output_dir)
+    plot_comparison_driver_time_breakdown(impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_bar(impl_dirs, nbr_runs, output_dir)
     plot_comparison_cpu_timeline(impl_dirs, output_dir)
     try:
