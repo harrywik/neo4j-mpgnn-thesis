@@ -8,7 +8,8 @@ IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	gpu_cache_neo4j redis_cache_neo4j
 NBR_RUNS ?= 3
 NPROC ?= 2
-EXPERIMENTS := sampler_comparison compare_implementations compare_datasets inference_experiment inference_plots
+EXPERIMENTS := sampler_comparison compare_implementations compare_datasets combine_results inference_experiment inference_plots
+COMBINE_OUTPUT ?= experiment_results/results/combined
 INFERENCE_DATASET ?= cora
 INFERENCE_MODEL ?= gcn
 INFERENCE_OUTPUT ?= results/inference_comparison
@@ -24,7 +25,7 @@ NEO4J_PLUGINS_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_PLUGINS_D
 # GNN model artifact directory — must match server.jvm.additional=-DNEO4J_GNN_MODEL_DIR in neo4j.conf
 NEO4J_GNN_MODEL_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_GNN_MODEL_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M add_float_features_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M add_float_features_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp combine_results
 
 help:
 	@echo "Usage: make <implementation> [DATASET=cora]"
@@ -39,6 +40,10 @@ help:
 	@echo "  make compare_implementations IMPLS_CMP=\"baseline_neo4j multsampler\" [DATASET=cora] [NBR_RUNS=3]"
 	@echo "Compare one implementation across datasets:"
 	@echo "  make compare_datasets IMPL_CMP=baseline_pyg DATASETS_CMP=\"cora arxiv\" [NBR_RUNS=3]"
+	@echo "Combine existing result dirs into comparison plots:"
+	@echo "  make combine_results DIRS_CMP=\"path/to/impl_a path/to/impl_b\" [OUTPUT_DIR=experiment_results/results/combined] [NBR_RUNS=3]"
+	@echo "  (bare paths infer impl name from dir name; single-run dirs are handled automatically)"
+	@echo "  (use IMPL=PATH pairs to override the name: DIRS_CMP=\"my_name=path/to/dir\")"
 	@echo "Compare inference strategies:"
 	@echo "  make add_float_features_papers100M   add feature_vector_floats to all Paper nodes (one-time, resumable)"
 	@echo ""
@@ -102,6 +107,16 @@ compare_implementations:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.compare_implementations \
 		--dataset $(DATASET) \
 		--implementations $(IMPLS_CMP) \
+		--nbr_runs $(NBR_RUNS)
+
+combine_results:
+	@if [ -z "$(DIRS_CMP)" ]; then \
+		echo "DIRS_CMP is required, e.g. DIRS_CMP=\"baseline_neo4j=experiment_results/results/run_1/baseline_neo4j multsampler=experiment_results/results/run_2/multsampler\""; \
+		exit 1; \
+	fi
+	@PYTHONPATH=$(PYTHONPATH) $(PY) -m comparison_experiments.combine_results \
+		--dirs $(DIRS_CMP) \
+		--output_dir $(if $(OUTPUT_DIR),$(OUTPUT_DIR),$(COMBINE_OUTPUT)) \
 		--nbr_runs $(NBR_RUNS)
 
 compare_datasets:
