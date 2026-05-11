@@ -5,7 +5,7 @@ GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
 	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp neo4j_java_sampler preagg_neo4j \
-	gpu_cache_neo4j redis_cache_neo4j
+	gpu_cache_neo4j redis_cache_neo4j java_neo4j
 NBR_RUNS ?= 3
 NPROC ?= 2
 EXPERIMENTS := sampler_comparison compare_implementations compare_datasets combine_results inference_experiment inference_plots

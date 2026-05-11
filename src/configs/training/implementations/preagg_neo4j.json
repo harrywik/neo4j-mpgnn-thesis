@@ -13,7 +13,7 @@
   },
   "sampler": {
     "class_name": "Neo4jJavaNeighborSampler",
-    "num_neighbors": [10, 5]
+    "num_neighbors": [20, 10]
   },
   "model": {
     "class_name": "GCN",
