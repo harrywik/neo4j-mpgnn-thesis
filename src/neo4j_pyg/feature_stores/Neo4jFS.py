@@ -41,7 +41,7 @@ class Neo4jFS(FeatureStore):
         profile: bool = False,
         profile_accumulator: Optional[QueryProfileAccumulator] = None,
         node_label: str = None,
-        use_java_fetch: bool = False,
+        use_java_fetch: bool = True,
     ):
         super().__init__()
         self.driver = driver

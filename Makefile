@@ -4,7 +4,7 @@ PYTHONPATH := src
 GNNSRC := src/gnn_implementations
 DATASET ?= cora
 IMPLS := baseline_multsampler baseline_neo4j baseline_pyg \
-	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp neo4j_java_sampler preagg_neo4j \
+	cache_multsampler cache_neo4j distributed saint_pyg saint_neo4j multsampler neo4j_udp java_neo4j preagg_neo4j \
 	gpu_cache_neo4j redis_cache_neo4j
 NBR_RUNS ?= 3
 NPROC ?= 2
@@ -33,7 +33,7 @@ help:
 	@echo ""
 	@echo "Available datasets: cora arxiv products papers100M"
 	@echo "Available implementations: baseline_neo4j baseline_pyg cache_multsampler cache_neo4j"
-	@echo "                           multsampler neo4j_udp preagg_neo4j neo4j_java_sampler saint_neo4j saint_pyg distributed"
+	@echo "                           multsampler neo4j_udp preagg_neo4j java_neo4j saint_neo4j saint_pyg distributed"
 	@echo "                           gpu_cache_neo4j redis_cache_neo4j"
 	@echo ""
 	@echo "Compare multiple implementations:"

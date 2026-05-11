@@ -741,7 +741,7 @@ public class GNNProcedures {
             List<Long> hop = hops.get(i);
             if (hop != null) requestedIds.addAll(hop);
         }
-        Set<Long> rawNodeSet = new HashSet<>(requestedIds);
+        // rawNodeSet removed: requestedIds IS the raw node set, so contains() is always true.
 
         Map<Long, List<Long>> incoming = new HashMap<>();
         Map<Long, Long> sampledInDegree = new HashMap<>();
@@ -769,11 +769,12 @@ public class GNNProcedures {
         Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
 
         List<Long> outRawIds = new ArrayList<>();
-        ByteArrayOutputStream rawFeatOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream rawFeatOut = new ByteArrayOutputStream(requestedIds.size() * 512);
         List<Long> outLabelIds = new ArrayList<>();
         List<Object> outLabels = new ArrayList<>();
         List<Long> outTargetIds = new ArrayList<>();
-        ByteArrayOutputStream aggOut = new ByteArrayOutputStream();
+        ByteArrayOutputStream aggOut = new ByteArrayOutputStream(targetSet.size() * 512);
+        float selfLoopWeightF = (float) selfLoopWeight;
 
         for (Long nodeId : requestedIds) {
             Node node = nodesById.get(nodeId);
@@ -781,10 +782,13 @@ public class GNNProcedures {
                 continue;
             }
 
+            // Single property access: extract float[] once and derive bytes from it.
             float[] nodeFeatures = extractFeaturesF(node, featureKey, featureType);
-            if (rawNodeSet.contains(nodeId) && nodeFeatures != null) {
+            if (nodeFeatures != null) {
                 outRawIds.add(nodeId);
-                byte[] raw = extractFeaturesAsFloat32Bytes(node, featureKey, featureType);
+                byte[] raw = "byte[]".equals(featureType)
+                        ? (byte[]) node.getProperty(featureKey, null)
+                        : packFloat32Bytes(nodeFeatures);
                 if (raw != null) rawFeatOut.write(raw, 0, raw.length);
             }
 
@@ -797,14 +801,17 @@ public class GNNProcedures {
                 continue;
             }
 
-            float targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + (float) selfLoopWeight;
+            float targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + selfLoopWeightF;
             float[] agg = null;
 
             if (nodeFeatures != null) {
                 agg = new float[nodeFeatures.length];
-                float selfWeight = (float) selfLoopWeight / targetDegreeHat;
+                float selfWeight = selfLoopWeightF / targetDegreeHat;
                 accumulateScaledF(agg, nodeFeatures, selfWeight);
             }
+
+            // Hoist 1/sqrt(targetDegreeHat) out of the neighbor loop.
+            float invSqrtTargetDeg = 1.0f / (float) Math.sqrt(targetDegreeHat);
 
             for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
                 Node srcNode = nodesById.get(srcId);
@@ -821,8 +828,8 @@ public class GNNProcedures {
                     agg = new float[srcFeatures.length];
                 }
 
-                float srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + (float) selfLoopWeight;
-                float weight = 1.0f / (float) Math.sqrt(targetDegreeHat * srcDegreeHat);
+                float srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeightF;
+                float weight = invSqrtTargetDeg / (float) Math.sqrt(srcDegreeHat);
                 accumulateScaledF(agg, srcFeatures, weight);
             }
 

@@ -64,7 +64,7 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         edge_type: str = "",
         aggregation_mode: str = "mean",
         improved: bool = False,
-        use_java_preagg: bool = False,
+        use_java_preagg: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
