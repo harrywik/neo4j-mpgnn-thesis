@@ -1,7 +1,7 @@
 [project]
 name = "neo4j-mpgnn-thesis"
 version = "0.1.0"
-description = "Add your description here"
+description = "Neo4j Thesis on GDB-backed GNNs by Victor Pekkari and Harry Wik"
 readme = "README.md"
 requires-python = ">=3.12"
 
@@ -23,11 +23,12 @@ dependencies = [
     "redis>=5.0.0",
     "cachetools>=5.0.0",
     "psutil>=5.9.0",
-    "torch==2.7.1",
-    "torch_cluster==1.6.3",
-    "torch_sparse==0.6.18",
-    "torch_scatter==2.1.2",
-    "pyg-lib>=0.5.0",
+    "torch==2.7.1; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch_cluster==1.6.3; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch_sparse==0.6.18; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "torch_scatter==2.1.2; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "pyg-lib>=0.5.0; sys_platform == 'linux' and platform_machine == 'x86_64'",
+    "seaborn>=0.13.2",
 ]
 
 [tool.uv.extra-build-dependencies]

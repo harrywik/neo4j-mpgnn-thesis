@@ -1530,18 +1530,15 @@ dependencies = [
     { name = "pandas" },
     { name = "psutil" },
     { name = "pyarrow" },
-    { name = "pyg-lib" },
+    { name = "pyg-lib", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "redis" },
     { name = "scipy" },
-    { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "torch-cluster", version = "1.6.3", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "torch-cluster", version = "1.6.3+pt27cpu", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "seaborn" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch-cluster", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "torch-geometric" },
-    { name = "torch-scatter", version = "2.1.2", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "torch-scatter", version = "2.1.2+pt27cpu", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "torch-sparse", version = "0.6.18", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "torch-sparse", version = "0.6.18+pt27cpu", source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }, marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "torch-scatter", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+    { name = "torch-sparse", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
     { name = "tqdm" },
 ]
 
@@ -1558,14 +1555,15 @@ requires-dist = [
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pyarrow", specifier = "==22.0.0" },
-    { name = "pyg-lib", specifier = ">=0.5.0", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
+    { name = "pyg-lib", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=0.5.0", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
     { name = "redis", specifier = ">=5.0.0" },
     { name = "scipy", specifier = "==1.13.1" },
-    { name = "torch", specifier = "==2.7.1", index = "https://download.pytorch.org/whl/cpu" },
-    { name = "torch-cluster", specifier = "==1.6.3", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
+    { name = "seaborn", specifier = ">=0.13.2" },
+    { name = "torch", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==2.7.1", index = "https://download.pytorch.org/whl/cpu" },
+    { name = "torch-cluster", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==1.6.3", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
     { name = "torch-geometric", specifier = "==2.7.0" },
-    { name = "torch-scatter", specifier = "==2.1.2", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
-    { name = "torch-sparse", specifier = "==0.6.18", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
+    { name = "torch-scatter", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==2.1.2", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
+    { name = "torch-sparse", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = "==0.6.18", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
     { name = "tqdm", specifier = ">=4.67.3" },
 ]
 
@@ -1679,8 +1677,8 @@ dependencies = [
     { name = "pandas" },
     { name = "scikit-learn" },
     { name = "six" },
-    { name = "torch", version = "2.7.1", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "torch", version = "2.7.1", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
+    { name = "torch", version = "2.7.1+cpu", source = { registry = "https://download.pytorch.org/whl/cpu" }, marker = "sys_platform != 'darwin'" },
     { name = "tqdm" },
     { name = "urllib3" },
 ]
@@ -2162,9 +2160,7 @@ version = "0.5.0+pt27cpu"
 source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
 wheels = [
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/pyg_lib-0.5.0%2Bpt27cpu-cp312-cp312-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/pyg_lib-0.5.0%2Bpt27cpu-cp312-cp312-win_amd64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/pyg_lib-0.5.0%2Bpt27cpu-cp313-cp313-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/pyg_lib-0.5.0%2Bpt27cpu-cp313-cp313-win_amd64.whl" },
 ]
 
 [[package]]
@@ -2545,6 +2541,20 @@ wheels = [
 ]
 
 [[package]]
+name = "seaborn"
+version = "0.13.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "matplotlib" },
+    { name = "numpy" },
+    { name = "pandas" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/86/59/a451d7420a77ab0b98f7affa3a1d78a313d2f7281a57afb1a34bae8ab412/seaborn-0.13.2.tar.gz", hash = "sha256:93e60a40988f4d65e9f4885df477e2fdaff6b73a9ded434c1ab356dd57eefff7", size = 1457696, upload-time = "2024-01-25T13:21:52.551Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/11/00d3c3dfc25ad54e731d91449895a79e4bf2384dc3ac01809010ba88f6d5/seaborn-0.13.2-py3-none-any.whl", hash = "sha256:636f8336facf092165e27924f223d3c62ca560b1f2bb5dff7ab7fad265361987", size = 294914, upload-time = "2024-01-25T13:21:49.598Z" },
+]
+
+[[package]]
 name = "send2trash"
 version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2662,23 +2672,24 @@ wheels = [
 [[package]]
 name = "torch"
 version = "2.7.1"
-source = { registry = "https://download.pytorch.org/whl/cpu" }
+source = { registry = "https://pypi.org/simple" }
 resolution-markers = [
+    "python_full_version >= '3.14' and sys_platform == 'darwin'",
     "python_full_version < '3.14' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "fsspec", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "jinja2", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "networkx", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "setuptools", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "sympy", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-    { name = "typing-extensions", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
+    { name = "filelock", marker = "sys_platform == 'darwin'" },
+    { name = "fsspec", marker = "sys_platform == 'darwin'" },
+    { name = "jinja2", marker = "sys_platform == 'darwin'" },
+    { name = "networkx", marker = "sys_platform == 'darwin'" },
+    { name = "setuptools", marker = "sys_platform == 'darwin'" },
+    { name = "sympy", marker = "sys_platform == 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform == 'darwin'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1-cp312-none-macosx_11_0_arm64.whl", hash = "sha256:7b4f8b2b83bd08f7d399025a9a7b323bdbb53d20566f1e0d584689bb92d82f9a" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1-cp313-cp313t-macosx_14_0_arm64.whl", hash = "sha256:95af97e7b2cecdc89edc0558962a51921bf9c61538597dbec6b7cc48d31e2e13" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:7ecd868a086468e1bcf74b91db425c1c2951a9cfcd0592c4c73377b7e42485ae" },
+    { url = "https://files.pythonhosted.org/packages/3a/60/04b77281c730bb13460628e518c52721257814ac6c298acd25757f6a175c/torch-2.7.1-cp312-none-macosx_11_0_arm64.whl", hash = "sha256:787687087412c4bd68d315e39bc1223f08aae1d16a9e9771d95eabbb04ae98fb", size = 68645146, upload-time = "2025-06-04T17:38:52.97Z" },
+    { url = "https://files.pythonhosted.org/packages/95/bf/e086ee36ddcef9299f6e708d3b6c8487c1651787bb9ee2939eb2a7f74911/torch-2.7.1-cp313-cp313t-macosx_14_0_arm64.whl", hash = "sha256:0da4f4dba9f65d0d203794e619fe7ca3247a55ffdcbd17ae8fb83c8b2dc9b585", size = 68925988, upload-time = "2025-06-04T17:38:29.273Z" },
+    { url = "https://files.pythonhosted.org/packages/b1/29/beb45cdf5c4fc3ebe282bf5eafc8dfd925ead7299b3c97491900fe5ed844/torch-2.7.1-cp313-none-macosx_11_0_arm64.whl", hash = "sha256:988b0cbc4333618a1056d2ebad9eb10089637b659eb645434d0809d8d937b946", size = 68645708, upload-time = "2025-06-04T17:34:39.852Z" },
 ]
 
 [[package]]
@@ -2688,64 +2699,39 @@ source = { registry = "https://download.pytorch.org/whl/cpu" }
 resolution-markers = [
     "python_full_version >= '3.14' and sys_platform != 'darwin'",
     "python_full_version < '3.14' and sys_platform != 'darwin'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
 ]
 dependencies = [
-    { name = "filelock", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "fsspec", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "jinja2", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "networkx", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "setuptools", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "sympy", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
-    { name = "typing-extensions", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "filelock", marker = "sys_platform != 'darwin'" },
+    { name = "fsspec", marker = "sys_platform != 'darwin'" },
+    { name = "jinja2", marker = "sys_platform != 'darwin'" },
+    { name = "networkx", marker = "sys_platform != 'darwin'" },
+    { name = "setuptools", marker = "sys_platform != 'darwin'" },
+    { name = "sympy", marker = "sys_platform != 'darwin'" },
+    { name = "typing-extensions", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:3bf2db5adf77b433844f080887ade049c4705ddf9fe1a32023ff84ff735aa5ad" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8f8b3cfc53010a4b4a3c7ecb88c212e9decc4f5eeb6af75c3c803937d2d60947" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:0bc887068772233f532b51a3e8c8cfc682ae62bef74bf4e0c53526c8b9e4138f" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-win_arm64.whl", hash = "sha256:a2618775f32eb4126c5b2050686da52001a08cffa331637d9cf51c8250931e00" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:eb17646792ac4374ffc87e42369f45d21eff17c790868963b90483ef0b6db4ef" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:84ea1f6a1d15663037d01b121d6e33bb9da3c90af8e069e5072c30f413455a57" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-win_amd64.whl", hash = "sha256:b66f77f6f67317344ee083aa7ac4751a14395fcb38060d564bf513978d267153" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:56136a2aca6707df3c8811e46ea2d379eaafd18e656e2fd51e8e4d0ca995651b" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:355614185a2aea7155f9c88a20bfd49de5f3063866f3cf9b2f21b6e9e59e31e0" },
-    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-win_amd64.whl", hash = "sha256:464bca1bc9452f2ccd676514688896e66b9488f2a0268ecd3ac497cf09c5aac1" },
-]
-
-[[package]]
-name = "torch-cluster"
-version = "1.6.3"
-source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version < '3.14' and sys_platform == 'darwin'",
-]
-dependencies = [
-    { name = "scipy", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-]
-wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3-cp312-cp312-macosx_10_13_universal2.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3-cp313-cp313-macosx_10_13_universal2.whl" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:3bf2db5adf77b433844f080887ade049c4705ddf9fe1a32023ff84ff735aa5ad", upload-time = "2025-06-03T18:27:57Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:8f8b3cfc53010a4b4a3c7ecb88c212e9decc4f5eeb6af75c3c803937d2d60947", upload-time = "2025-06-03T18:27:57Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-win_amd64.whl", hash = "sha256:0bc887068772233f532b51a3e8c8cfc682ae62bef74bf4e0c53526c8b9e4138f", upload-time = "2025-06-03T18:27:56Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp312-cp312-win_arm64.whl", hash = "sha256:a2618775f32eb4126c5b2050686da52001a08cffa331637d9cf51c8250931e00", upload-time = "2025-07-16T16:40:20Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:eb17646792ac4374ffc87e42369f45d21eff17c790868963b90483ef0b6db4ef", upload-time = "2025-06-03T18:28:00Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:84ea1f6a1d15663037d01b121d6e33bb9da3c90af8e069e5072c30f413455a57", upload-time = "2025-06-03T18:28:01Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313-win_amd64.whl", hash = "sha256:b66f77f6f67317344ee083aa7ac4751a14395fcb38060d564bf513978d267153", upload-time = "2025-06-03T18:28:00Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-manylinux_2_28_aarch64.whl", hash = "sha256:56136a2aca6707df3c8811e46ea2d379eaafd18e656e2fd51e8e4d0ca995651b", upload-time = "2025-06-03T18:28:03Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-manylinux_2_28_x86_64.whl", hash = "sha256:355614185a2aea7155f9c88a20bfd49de5f3063866f3cf9b2f21b6e9e59e31e0", upload-time = "2025-06-03T18:28:05Z" },
+    { url = "https://download-r2.pytorch.org/whl/cpu/torch-2.7.1%2Bcpu-cp313-cp313t-win_amd64.whl", hash = "sha256:464bca1bc9452f2ccd676514688896e66b9488f2a0268ecd3ac497cf09c5aac1", upload-time = "2025-06-03T18:28:01Z" },
 ]
 
 [[package]]
 name = "torch-cluster"
 version = "1.6.3+pt27cpu"
 source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform != 'darwin'",
-    "python_full_version < '3.14' and sys_platform != 'darwin'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
-]
 dependencies = [
-    { name = "scipy", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "scipy", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp312-cp312-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp312-cp312-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp312-cp312-win_amd64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp313-cp313-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp313-cp313-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_cluster-1.6.3%2Bpt27cpu-cp313-cp313-win_amd64.whl" },
 ]
 
 [[package]]
@@ -2770,68 +2756,23 @@ wheels = [
 
 [[package]]
 name = "torch-scatter"
-version = "2.1.2"
-source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version < '3.14' and sys_platform == 'darwin'",
-]
-wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2-cp312-cp312-macosx_10_13_universal2.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2-cp313-cp313-macosx_10_13_universal2.whl" },
-]
-
-[[package]]
-name = "torch-scatter"
 version = "2.1.2+pt27cpu"
 source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform != 'darwin'",
-    "python_full_version < '3.14' and sys_platform != 'darwin'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
-]
 wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp312-cp312-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp312-cp312-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp312-cp312-win_amd64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp313-cp313-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp313-cp313-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_scatter-2.1.2%2Bpt27cpu-cp313-cp313-win_amd64.whl" },
-]
-
-[[package]]
-name = "torch-sparse"
-version = "0.6.18"
-source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version < '3.14' and sys_platform == 'darwin'",
-]
-dependencies = [
-    { name = "scipy", marker = "python_full_version < '3.14' and sys_platform == 'darwin'" },
-]
-wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18-cp312-cp312-macosx_11_0_universal2.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18-cp313-cp313-macosx_11_0_universal2.whl" },
 ]
 
 [[package]]
 name = "torch-sparse"
 version = "0.6.18+pt27cpu"
 source = { registry = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" }
-resolution-markers = [
-    "python_full_version >= '3.14' and sys_platform != 'darwin'",
-    "python_full_version < '3.14' and sys_platform != 'darwin'",
-    "python_full_version >= '3.14' and sys_platform == 'darwin'",
-]
 dependencies = [
-    { name = "scipy", marker = "python_full_version >= '3.14' or sys_platform != 'darwin'" },
+    { name = "scipy", marker = "sys_platform != 'darwin'" },
 ]
 wheels = [
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp312-cp312-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp312-cp312-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp312-cp312-win_amd64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp313-cp313-linux_aarch64.whl" },
     { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp313-cp313-linux_x86_64.whl" },
-    { url = "https://data.pyg.org/whl/torch-2.7.0%2Bcpu/torch_sparse-0.6.18%2Bpt27cpu-cp313-cp313-win_amd64.whl" },
 ]
 
 [[package]]
