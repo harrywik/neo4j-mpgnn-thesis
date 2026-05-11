@@ -28,6 +28,7 @@ class Neo4jSampler(BaseSampler):
         self.profile = profile
 
         self.last_nodes_by_hop: List[List[int]] = []
+        self.last_sampled_edge_pairs: List[List[int]] = []
         self.query = self._build_fanout_query()
 
     def _build_fanout_query(self) -> str:
@@ -150,6 +151,7 @@ class Neo4jSampler(BaseSampler):
         # ETL (tensor building) delegated to graph store so all ETL
         # instrumentation lives in one place.
         self.last_nodes_by_hop = [list(hop) for hop in (record.get("nodes_by_hop") or [])] if record else []
+        self.last_sampled_edge_pairs = record.get("edge_pairs", []) if record else []
 
         node, row, col = self.graph_store.build_topo_etl(record, seeds)
 

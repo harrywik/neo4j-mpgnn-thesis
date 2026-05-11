@@ -41,6 +41,7 @@ class Neo4jFS(FeatureStore):
         profile: bool = False,
         profile_accumulator: Optional[QueryProfileAccumulator] = None,
         node_label: str = None,
+        use_java_fetch: bool = False,
     ):
         super().__init__()
         self.driver = driver
@@ -60,6 +61,7 @@ class Neo4jFS(FeatureStore):
         self.profile = profile
         self.profile_accumulator = profile_accumulator
         self.node_label = node_label
+        self.use_java_fetch = use_java_fetch
         self._labels: Dict[str, int] = {}
         self._feature_dim: Optional[int] = None
         self.t_feat_etl_start: Optional[float] = None
@@ -234,7 +236,85 @@ class Neo4jFS(FeatureStore):
 
         return result
 
+    @property
+    def _java_fetch_query(self) -> str:
+        return (
+            "CALL gnnProcedures.fetch.nodesBatch("
+            "$node_ids, $node_label, $node_id_key, $feature_key, $feature_type, $target_key"
+            ") YIELD nodeIds, features, labels"
+        )
+
     def _get_both_from_db(
+        self, nids: List[int], x_attr: TensorAttr
+    ) -> Tuple[List[int], np.ndarray, np.ndarray]:
+        if self.use_java_fetch:
+            return self._get_both_from_db_java(nids, x_attr)
+        return self._get_both_from_db_cypher(nids, x_attr)
+
+    def _get_both_from_db_java(
+        self, nids: List[int], x_attr: TensorAttr
+    ) -> Tuple[List[int], np.ndarray, np.ndarray]:
+        params = {
+            "node_ids": nids,
+            "node_label": self.node_label or "",
+            "node_id_key": self.nodeid_property,
+            "feature_key": self.feature_property,
+            "feature_type": self.feature_property_type,
+            "target_key": self.target_property,
+        }
+        with self._get_driver().session(database=self.database_name) as session:
+            t_send = time.monotonic()
+            result = session.run(self._java_fetch_query, **params)
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
+            records = list(result)
+            t_all_records = time.monotonic()
+            summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("db_wait")
+
+        total_ms = (t_all_records - t_send) * 1000
+        self.t_feat_etl_start = time.monotonic()
+        if self.measurer is not None:
+            self.measurer.log_event("start_etl", 1)
+            self.measurer.set_phase("etl")
+            self.measurer.log_event("remote_feature_recieved", 1)
+            self.measurer.log_event("feat_fetch_ms", total_ms)
+
+        if self.profile_accumulator is not None:
+            self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
+
+        if not records:
+            empty_feats = np.empty((0, self._feature_dim or 0), dtype=np.float32)
+            return [], empty_feats, np.empty(0, dtype=np.int64)
+
+        rec = records[0]
+        fetched_nids: List[int] = list(rec["nodeIds"])
+        raw_labels: list = list(rec["labels"])
+        flat_bytes = rec["features"]
+
+        n = len(fetched_nids)
+        feat_matrix = np.frombuffer(memoryview(flat_bytes), dtype=np.float32).reshape(n, -1)
+
+        if self.measurer is not None:
+            self.measurer.log_event("feat_bytes", feat_matrix.nbytes)
+
+        y_array = np.empty(n, dtype=np.int64)
+        first_label = raw_labels[0] if raw_labels else None
+        if isinstance(first_label, str):
+            for i, lbl in enumerate(raw_labels):
+                if lbl not in self._labels:
+                    self._labels[lbl] = len(self._labels)
+                y_array[i] = self._labels[lbl]
+        else:
+            for i, lbl in enumerate(raw_labels):
+                y_array[i] = -1 if lbl is None else int(lbl)
+
+        return fetched_nids, feat_matrix, y_array
+
+    def _get_both_from_db_cypher(
         self, nids: List[int], x_attr: TensorAttr
     ) -> Tuple[List[int], np.ndarray, np.ndarray]:
         """Fetch both feature vector and label for *nids* in one Cypher query.

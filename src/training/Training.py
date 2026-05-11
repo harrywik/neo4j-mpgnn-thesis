@@ -225,7 +225,7 @@ class Trainer:
         for i, nid in enumerate(node_ids):
             preagg = preagg_map.get(int(nid))
             if preagg is not None:
-                aggregated_neighbors[i] = torch.as_tensor(preagg, device=batch.x.device, dtype=batch.x.dtype)
+                aggregated_neighbors[i] = torch.tensor(preagg, device=batch.x.device, dtype=batch.x.dtype)
 
         return {
             "frontier_mask": frontier_mask,
