@@ -12,8 +12,8 @@
     "connection_mode": "driver"
   },
   "sampler": {
-    "class_name": "Neo4jSampler",
-    "num_neighbors": [20, 10]
+    "class_name": "Neo4jJavaNeighborSampler",
+    "num_neighbors": [10, 5]
   },
   "model": {
     "class_name": "GCN",
