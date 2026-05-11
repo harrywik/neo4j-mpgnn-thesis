@@ -6,6 +6,7 @@ import org.neo4j.procedure.*;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -218,7 +219,15 @@ public class GNNProcedures {
     }
 
     private static void accumulateScaledF(float[] acc, float[] feat, float scale) {
-        for (int i = 0; i < acc.length; i++) acc[i] += scale * feat[i];
+        FloatVector scaleVec = FloatVector.broadcast(SPECIES, scale);
+        int simdBound = SPECIES.loopBound(acc.length);
+        int i = 0;
+        for (; i < simdBound; i += SPECIES.length()) {
+            FloatVector va = FloatVector.fromArray(SPECIES, acc, i);
+            FloatVector vf = FloatVector.fromArray(SPECIES, feat, i);
+            vf.fma(scaleVec, va).intoArray(acc, i);
+        }
+        for (; i < acc.length; i++) acc[i] += scale * feat[i];
     }
 
     // ─── Spec / weights caches (keyed by model-directory path) ───────────────
@@ -356,19 +365,19 @@ public class GNNProcedures {
      */
     public static class SampledFetchBatchResult {
         public final List<Long> rawNodeIds;
-        public final List<byte[]> rawNodeFeatures;
+        public final byte[] rawNodeFeatures;
         public final List<Long> labelNodeIds;
         public final List<Object> labels;
         public final List<Long> targetNodeIds;
-        public final List<byte[]> aggregatedFeatures;
+        public final byte[] aggregatedFeatures;
 
         public SampledFetchBatchResult(
                 List<Long> rawNodeIds,
-            List<byte[]> rawNodeFeatures,
+                byte[] rawNodeFeatures,
                 List<Long> labelNodeIds,
                 List<Object> labels,
                 List<Long> targetNodeIds,
-            List<byte[]> aggregatedFeatures
+                byte[] aggregatedFeatures
         ) {
             this.rawNodeIds = rawNodeIds;
             this.rawNodeFeatures = rawNodeFeatures;
@@ -405,6 +414,26 @@ public class GNNProcedures {
     }
 
     /**
+     * Single-row batch result for plain node feature+label fetch.
+     *
+     * <p>Equivalent to the Cypher query
+     * {@code UNWIND $node_ids AS nid MATCH (n {nodeId: nid}) RETURN nid, feature, label}
+     * but packs features as flat little-endian float32 bytes to avoid Bolt
+     * list-of-doubles overhead.
+     */
+    public static class NodeFetchBatchResult {
+        public final List<Long>   nodeIds;
+        public final byte[]       features;   // flat float32 LE, len = nodeIds.size() * featureDim
+        public final List<Object> labels;
+
+        public NodeFetchBatchResult(List<Long> nodeIds, byte[] features, List<Object> labels) {
+            this.nodeIds  = nodeIds;
+            this.features = features;
+            this.labels   = labels;
+        }
+    }
+
+    /**
      * Result row for {@link #uploadModel}: one record confirming the upload.
      */
     public static class UploadModelResult {
@@ -422,6 +451,44 @@ public class GNNProcedures {
     // -------------------------------------------------------------------------
     // Procedure
     // -------------------------------------------------------------------------
+
+    @Procedure(name = "gnnProcedures.fetch.nodesBatch", mode = Mode.READ)
+    @Description(
+        "Fetch feature vectors and labels for a list of node IDs in one batch. "
+        + "Returns a single row: nodeIds (List<Long>), features (byte[] flat float32 LE), labels (List<Object>). "
+        + "Equivalent to: UNWIND $node_ids AS nid MATCH (n {nodeId: nid}) RETURN nid, feature, label."
+    )
+    public Stream<NodeFetchBatchResult> fetchNodesBatch(
+            @Name("nodeIds")     List<Long> nodeIds,
+            @Name("nodeLabel")   String nodeLabel,
+            @Name("nodeIdKey")   String nodeIdKey,
+            @Name("featureKey")  String featureKey,
+            @Name("featureType") String featureType,
+            @Name("targetKey")   String targetKey
+    ) {
+        if (nodeIds == null || nodeIds.isEmpty()) {
+            return Stream.of(new NodeFetchBatchResult(new ArrayList<>(), new byte[0], new ArrayList<>()));
+        }
+
+        Label label = Label.label(nodeLabel);
+        Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, nodeIds);
+
+        List<Long>   outIds      = new ArrayList<>(nodeIds.size());
+        List<Object> outLabels   = new ArrayList<>(nodeIds.size());
+        ByteArrayOutputStream featOut = new ByteArrayOutputStream();
+
+        for (Long nid : nodeIds) {
+            Node node = nodesById.get(nid);
+            if (node == null) continue;
+            byte[] raw = extractFeaturesAsFloat32Bytes(node, featureKey, featureType);
+            if (raw == null) continue;
+            featOut.write(raw, 0, raw.length);
+            outIds.add(nid);
+            outLabels.add(node.getProperty(targetKey, null));
+        }
+
+        return Stream.of(new NodeFetchBatchResult(outIds, featOut.toByteArray(), outLabels));
+    }
 
     @Procedure(name = "gnnProcedures.sampling.neighbor.sample", mode = Mode.READ)
     @Description(
@@ -642,11 +709,8 @@ public class GNNProcedures {
         + "Returns grouped id/value payloads instead of one row per node."
     )
     public Stream<SampledFetchBatchResult> aggregateSampledNeighborsGCNNormFetchBatch(
-            @Name("nodeIds")                            List<Long> nodeIds,
-            @Name("rawNodeIds")                         List<Long> rawNodeIds,
-            @Name("targetIds")                          List<Long> targetIds,
+            @Name("nodesByHop")                         List<List<Long>> nodesByHop,
             @Name("edgePairs")                          List<List<Long>> edgePairs,
-            @Name("frontierIds")                        List<Long> frontierIds,
             @Name("nodeIdKey")                          String nodeIdKey,
             @Name("featureKey")                         String featureKey,
             @Name("featureType")                        String featureType,
@@ -658,16 +722,31 @@ public class GNNProcedures {
         Label label = Label.label(nodeLabel);
         boolean includeLabel = Boolean.TRUE.equals(returnLabel) && targetKey != null && !targetKey.isEmpty();
         double selfLoopWeight = Boolean.TRUE.equals(improved) ? 2.0 : 1.0;
-        List<Long> requestedIds = nodeIds == null ? Collections.emptyList() : nodeIds;
-        List<Long> rawIds = rawNodeIds == null ? Collections.emptyList() : rawNodeIds;
-        List<Long> targetIdsOrdered = targetIds == null ? Collections.emptyList() : targetIds;
-        Set<Long> rawNodeSet = new HashSet<>(rawIds);
-        Set<Long> targetSet = new HashSet<>(targetIdsOrdered);
-        Set<Long> frontierSet = frontierIds == null ? Collections.emptySet() : new HashSet<>(frontierIds);
+
+        List<List<Long>> hops = nodesByHop == null ? Collections.emptyList() : nodesByHop;
+        int numHops = hops.size();
+
+        // Last hop = frontier: feature sources only, not returned in output.
+        Set<Long> frontierSet = numHops > 0 && hops.get(numHops - 1) != null
+                ? new HashSet<>(hops.get(numHops - 1))
+                : Collections.emptySet();
+        // Second-to-last hop = targets: receive GCN-norm aggregated features.
+        Set<Long> targetSet = numHops >= 2 && hops.get(numHops - 2) != null
+                ? new HashSet<>(hops.get(numHops - 2))
+                : Collections.emptySet();
+
+        // All hops except the last contribute raw features to the output.
+        List<Long> requestedIds = new ArrayList<>();
+        for (int i = 0; i < numHops - 1; i++) {
+            List<Long> hop = hops.get(i);
+            if (hop != null) requestedIds.addAll(hop);
+        }
+        Set<Long> rawNodeSet = new HashSet<>(requestedIds);
 
         Map<Long, List<Long>> incoming = new HashMap<>();
         Map<Long, Long> sampledInDegree = new HashMap<>();
         Set<Long> requiredNodeIds = new HashSet<>(requestedIds);
+        requiredNodeIds.addAll(frontierSet);
         if (edgePairs != null) {
             for (List<Long> pair : edgePairs) {
                 if (pair == null || pair.size() < 2) {
@@ -684,18 +763,17 @@ public class GNNProcedures {
                 incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
                 sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
                 sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
-                requiredNodeIds.add(srcId);
             }
         }
 
         Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
 
         List<Long> outRawIds = new ArrayList<>();
-    List<byte[]> outRawFeatures = new ArrayList<>();
+        ByteArrayOutputStream rawFeatOut = new ByteArrayOutputStream();
         List<Long> outLabelIds = new ArrayList<>();
         List<Object> outLabels = new ArrayList<>();
         List<Long> outTargetIds = new ArrayList<>();
-    List<byte[]> outAggregated = new ArrayList<>();
+        ByteArrayOutputStream aggOut = new ByteArrayOutputStream();
 
         for (Long nodeId : requestedIds) {
             Node node = nodesById.get(nodeId);
@@ -703,10 +781,11 @@ public class GNNProcedures {
                 continue;
             }
 
-            double[] nodeFeatures = extractFeatures(node, featureKey, featureType);
+            float[] nodeFeatures = extractFeaturesF(node, featureKey, featureType);
             if (rawNodeSet.contains(nodeId) && nodeFeatures != null) {
                 outRawIds.add(nodeId);
-                outRawFeatures.add(extractFeaturesAsFloat32Bytes(node, featureKey, featureType));
+                byte[] raw = extractFeaturesAsFloat32Bytes(node, featureKey, featureType);
+                if (raw != null) rawFeatOut.write(raw, 0, raw.length);
             }
 
             if (includeLabel) {
@@ -718,13 +797,13 @@ public class GNNProcedures {
                 continue;
             }
 
-            double targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + selfLoopWeight;
-            double[] agg = null;
+            float targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + (float) selfLoopWeight;
+            float[] agg = null;
 
             if (nodeFeatures != null) {
-                agg = new double[nodeFeatures.length];
-                double selfWeight = selfLoopWeight / targetDegreeHat;
-                accumulateScaled(agg, nodeFeatures, selfWeight);
+                agg = new float[nodeFeatures.length];
+                float selfWeight = (float) selfLoopWeight / targetDegreeHat;
+                accumulateScaledF(agg, nodeFeatures, selfWeight);
             }
 
             for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
@@ -733,31 +812,32 @@ public class GNNProcedures {
                     continue;
                 }
 
-                double[] srcFeatures = extractFeatures(srcNode, featureKey, featureType);
+                float[] srcFeatures = extractFeaturesF(srcNode, featureKey, featureType);
                 if (srcFeatures == null) {
                     continue;
                 }
 
                 if (agg == null) {
-                    agg = new double[srcFeatures.length];
+                    agg = new float[srcFeatures.length];
                 }
 
-                double srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeight;
-                double weight = 1.0 / Math.sqrt(targetDegreeHat * srcDegreeHat);
-                accumulateScaled(agg, srcFeatures, weight);
+                float srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + (float) selfLoopWeight;
+                float weight = 1.0f / (float) Math.sqrt(targetDegreeHat * srcDegreeHat);
+                accumulateScaledF(agg, srcFeatures, weight);
             }
 
             outTargetIds.add(nodeId);
-            outAggregated.add(packFloat32Bytes(agg));
+            byte[] aggBytes = packFloat32Bytes(agg);
+            if (aggBytes != null) aggOut.write(aggBytes, 0, aggBytes.length);
         }
 
         return Stream.of(new SampledFetchBatchResult(
                 outRawIds,
-                outRawFeatures,
+                rawFeatOut.toByteArray(),
                 outLabelIds,
                 outLabels,
                 outTargetIds,
-                outAggregated
+                aggOut.toByteArray()
         ));
     }
 
@@ -1334,7 +1414,15 @@ public class GNNProcedures {
         return packFloat32Bytes((double[]) prop);
     }
 
-    /** Pack a feature vector as little-endian float32 bytes for Bolt transport. */
+    /** Pack a float32 feature vector as little-endian bytes for Bolt transport (bulk copy, no loop). */
+    private static byte[] packFloat32Bytes(float[] arr) {
+        if (arr == null) return null;
+        ByteBuffer buf = ByteBuffer.allocate(arr.length * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);
+        buf.asFloatBuffer().put(arr);
+        return buf.array();
+    }
+
+    /** Pack a double[] feature vector as little-endian float32 bytes for Bolt transport. */
     private byte[] packFloat32Bytes(double[] arr) {
         if (arr == null) return null;
         ByteBuffer buf = ByteBuffer.allocate(arr.length * Float.BYTES).order(ByteOrder.LITTLE_ENDIAN);

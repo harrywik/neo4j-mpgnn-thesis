@@ -64,6 +64,7 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         edge_type: str = "",
         aggregation_mode: str = "mean",
         improved: bool = False,
+        use_java_preagg: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -72,6 +73,7 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         self.edge_type = edge_type or ""
         self.aggregation_mode = aggregation_mode or "mean"
         self.improved = bool(improved)
+        self.use_java_preagg = bool(use_java_preagg)
         self._last_hybrid_preagg: Dict[int, np.ndarray] = {}
         self._last_hybrid_targets: set[int] = set()
         if self.aggregation_mode == "sampledGcnNorm" and self.sampler is not None:
@@ -145,11 +147,8 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         prefix = "PROFILE " if self.profile else ""
         return (
             f"{prefix}CALL gnnProcedures.aggregation.neighbor.sampledGcnNormFetchBatch("
-            "$node_ids,"
-            "$raw_node_ids,"
-            "$target_ids,"
+            "$nodes_by_hop,"
             "$edge_pairs,"
-            "$frontier_ids,"
             f"{self._cypher_str(self.nodeid_property)},"
             f"{self._cypher_str(self.feature_property)},"
             f"{self._cypher_str(self.feature_property_type)},"
@@ -167,11 +166,8 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         prefix = "PROFILE " if self.profile else ""
         return (
             f"{prefix}CALL gnnProcedures.aggregation.neighbor.sampledGcnNormFetchBatch("
-            "$node_ids,"
-            "$raw_node_ids,"
-            "$target_ids,"
+            "$nodes_by_hop,"
             "$edge_pairs,"
-            "$frontier_ids,"
             f"{self._cypher_str(self.nodeid_property)},"
             f"{self._cypher_str(self.feature_property)},"
             f"{self._cypher_str(self.feature_property_type)},"
@@ -184,34 +180,69 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             "RETURN rawNodeIds, rawNodeFeatures, labelNodeIds, labels, targetNodeIds, aggregatedFeatures"
         )
 
+    @cached_property
+    def _query_sampled_gcnnorm_fetch_cypher(self) -> str:
+        """Pure-Cypher equivalent of sampledGcnNormFetchBatch (with label).
+
+        Fetches raw features for ``$raw_node_ids`` and labels for ``$node_ids``
+        using UNWIND/MATCH.  ``targetNodeIds`` and ``aggregatedFeatures`` are
+        always empty — GCN-norm aggregation is not performed server-side.
+        """
+        prefix = "PROFILE " if self.profile else ""
+        lf = f":{self.node_label}" if self.node_label else ""
+        return (
+            f"{prefix}"
+            f"UNWIND $raw_node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"WITH collect(nid) AS rawNodeIds, collect(n.{self.feature_property}) AS rawNodeFeatures "
+            f"UNWIND $node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"WITH rawNodeIds, rawNodeFeatures, "
+            f"collect(nid) AS labelNodeIds, collect(n.{self.target_property}) AS labels "
+            f"RETURN rawNodeIds, rawNodeFeatures, labelNodeIds, labels, "
+            f"[] AS targetNodeIds, [] AS aggregatedFeatures"
+        )
+
+    @cached_property
+    def _query_sampled_gcnnorm_fetch_cypher_no_label(self) -> str:
+        """Pure-Cypher equivalent of sampledGcnNormFetchBatch (without label).
+
+        Fetches raw features for ``$raw_node_ids`` using UNWIND/MATCH.
+        ``labelNodeIds``, ``labels``, ``targetNodeIds``, and ``aggregatedFeatures``
+        are always empty.
+        """
+        prefix = "PROFILE " if self.profile else ""
+        lf = f":{self.node_label}" if self.node_label else ""
+        return (
+            f"{prefix}"
+            f"UNWIND $raw_node_ids AS nid "
+            f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+            f"WITH collect(nid) AS rawNodeIds, collect(n.{self.feature_property}) AS rawNodeFeatures "
+            f"RETURN rawNodeIds, rawNodeFeatures, "
+            f"[] AS labelNodeIds, [] AS labels, [] AS targetNodeIds, [] AS aggregatedFeatures"
+        )
+
     def _get_both_from_db(self, nids: List[int], x_attr: TensorAttr):
         if self.aggregation_mode != "sampledGcnNorm":
             return super()._get_both_from_db(nids, x_attr)
 
         if self.sampler is not None:
+            nodes_by_hop = getattr(self.sampler, "last_nodes_by_hop", None) or []
             self.set_sampled_subgraph_context(
                 sampled_nodes=getattr(self.sampler, "last_sampled_nodes", None),
                 edge_pairs=getattr(self.sampler, "last_sampled_edge_pairs", None),
-                frontier_nodes=getattr(self.sampler, "last_frontier_nodes", None),
+                frontier_nodes=None,
             )
+        else:
+            nodes_by_hop = []
 
         node_ids = [int(nid) for nid in nids]
-        frontier_set = {int(nid) for nid in (self._current_frontier_nodes or [])}
         edge_pairs = self._current_sampled_edge_pairs or []
-        target_nid_set = {
-            int(pair[1])
-            for pair in edge_pairs
-            if pair is not None and len(pair) >= 2 and int(pair[0]) in frontier_set
-        }
-        raw_nids = [nid for nid in node_ids if nid not in frontier_set]
-        target_nids = [nid for nid in node_ids if nid in target_nid_set]
+        target_nid_set = {int(nid) for nid in (nodes_by_hop[-2] if len(nodes_by_hop) >= 2 else [])}
 
         feature_map, label_map, preagg_map = self._fetch_sampled_gcnnorm_bundle(
-            node_ids=node_ids,
-            raw_node_ids=raw_nids if frontier_set else node_ids,
-            target_ids=target_nids,
+            nodes_by_hop=nodes_by_hop,
             edge_pairs=edge_pairs,
-            frontier_ids=list(frontier_set),
             include_label=True,
         )
 
@@ -252,31 +283,25 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
             return super()._get_value_from_db(nids, attr, **kwargs)
 
         if self.sampler is not None:
+            nodes_by_hop = getattr(self.sampler, "last_nodes_by_hop", None) or []
             self.set_sampled_subgraph_context(
                 sampled_nodes=getattr(self.sampler, "last_sampled_nodes", None),
                 edge_pairs=getattr(self.sampler, "last_sampled_edge_pairs", None),
-                frontier_nodes=getattr(self.sampler, "last_frontier_nodes", None),
+                frontier_nodes=None,
             )
+        else:
+            nodes_by_hop = []
 
-        frontier_set = {int(nid) for nid in (self._current_frontier_nodes or [])}
+        frontier_set = {int(nid) for nid in (nodes_by_hop[-1] if nodes_by_hop else [])}
+        target_nid_set = {int(nid) for nid in (nodes_by_hop[-2] if len(nodes_by_hop) >= 2 else [])}
         edge_pairs = self._current_sampled_edge_pairs or []
-        target_nid_set = {
-            int(pair[1])
-            for pair in edge_pairs
-            if pair is not None and len(pair) >= 2 and int(pair[0]) in frontier_set
-        }
 
         node_ids = [int(nid) for nid in nids]
-        raw_nids = [nid for nid in node_ids if nid not in frontier_set]
         deepest_nids = [nid for nid in node_ids if nid in frontier_set]
-        target_nids = [nid for nid in node_ids if nid in target_nid_set]
 
         result_map, _, preagg_map = self._fetch_sampled_gcnnorm_bundle(
-            node_ids=node_ids,
-            raw_node_ids=raw_nids if frontier_set else node_ids,
-            target_ids=target_nids,
+            nodes_by_hop=nodes_by_hop,
             edge_pairs=edge_pairs,
-            frontier_ids=list(frontier_set),
             include_label=False,
         )
 
@@ -309,25 +334,21 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
 
     def _fetch_sampled_gcnnorm_bundle(
         self,
-        node_ids: List[int],
-        raw_node_ids: List[int],
-        target_ids: List[int],
+        nodes_by_hop: List[List[int]],
         edge_pairs: List[List[int]],
-        frontier_ids: List[int],
         include_label: bool,
     ) -> tuple[Dict[int, np.ndarray], Dict[int, int], Dict[int, np.ndarray]]:
-        if not node_ids:
+        if not nodes_by_hop:
             return {}, {}, {}
+        if not self.use_java_preagg:
+            return self._fetch_sampled_gcnnorm_bundle_cypher(nodes_by_hop, include_label)
 
         with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
             t_send = time.monotonic()
             result = session.run(
                 self._query_sampled_gcnnorm_fetch if include_label else self._query_sampled_gcnnorm_fetch_no_label,
-                node_ids=node_ids,
-                raw_node_ids=raw_node_ids,
-                target_ids=target_ids,
+                nodes_by_hop=nodes_by_hop,
                 edge_pairs=edge_pairs,
-                frontier_ids=frontier_ids,
             )
             if self.measurer is not None:
                 self.measurer.log_event("start_deserialise", 1)
@@ -358,11 +379,11 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
         record = records[0]
 
         raw_ids = [int(nid) for nid in (record["rawNodeIds"] or [])]
-        raw_features = record["rawNodeFeatures"] or []
+        raw_features = record["rawNodeFeatures"]
         feature_map: Dict[int, np.ndarray] = {}
         raw_matrix: Optional[np.ndarray] = None
         if raw_ids:
-            raw_matrix = self._decode_packed_feature_rows(raw_features)
+            raw_matrix = self._decode_packed_feature_rows(raw_features, len(raw_ids))
             for i, nid in enumerate(raw_ids):
                 feature_map[nid] = raw_matrix[i]
 
@@ -380,10 +401,10 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
 
         preagg_map: Dict[int, np.ndarray] = {}
         target_ids_out = [int(nid) for nid in (record["targetNodeIds"] or [])]
-        aggregated_features = record["aggregatedFeatures"] or []
+        aggregated_features = record["aggregatedFeatures"]
         agg_matrix: Optional[np.ndarray] = None
         if target_ids_out:
-            agg_matrix = self._decode_packed_feature_rows(aggregated_features)
+            agg_matrix = self._decode_packed_feature_rows(aggregated_features, len(target_ids_out))
             for i, nid in enumerate(target_ids_out):
                 preagg_map[nid] = agg_matrix[i]
 
@@ -396,19 +417,98 @@ class Neo4jPreAggFeatureStore(Neo4jFS):
 
         return feature_map, label_map, preagg_map
 
-    def _decode_packed_feature_rows(self, rows: List[object]) -> np.ndarray:
-        if not rows:
+    def _fetch_sampled_gcnnorm_bundle_cypher(
+        self,
+        nodes_by_hop: List[List[int]],
+        include_label: bool,
+    ) -> tuple[Dict[int, np.ndarray], Dict[int, int], Dict[int, np.ndarray]]:
+        """Cypher fallback: fetch raw features for all nodes in nodes_by_hop.
+
+        No server-side aggregation is performed; preagg_map is always empty.
+        PyG's GCNConv uses the sampled edge_index to aggregate locally.
+        """
+        all_nodes = list({int(nid) for hop in nodes_by_hop for nid in hop})
+        if not all_nodes:
+            return {}, {}, {}
+
+        lf = f":{self.node_label}" if self.node_label else ""
+        prefix = "PROFILE " if self.profile else ""
+        if include_label:
+            query = (
+                f"{prefix}UNWIND $node_ids AS nid "
+                f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+                f"RETURN nid AS id, n.{self.feature_property} AS feature, "
+                f"n.{self.target_property} AS label"
+            )
+        else:
+            query = (
+                f"{prefix}UNWIND $node_ids AS nid "
+                f"MATCH (n{lf} {{{self.nodeid_property}: nid}}) "
+                f"RETURN nid AS id, n.{self.feature_property} AS feature"
+            )
+
+        with self._get_driver().session(database=self.database_name, fetch_size=1000) as session:
+            t_send = time.monotonic()
+            result = session.run(query, node_ids=all_nodes)
+            if self.measurer is not None:
+                self.measurer.log_event("start_deserialise", 1)
+                self.measurer.set_phase("deserialise")
+            records = list(result)
+            t_all_records = time.monotonic()
+            summary = result.consume()
+            if self.measurer is not None:
+                self.measurer.log_event("end_deserialise", 1)
+                self.measurer.set_phase("etl")
+                self.measurer.log_event("start_etl", 1)
+
+        if not records:
+            if self.measurer is not None:
+                self.measurer.log_event("end_etl", 1)
+                self.measurer.set_phase("db_wait")
+            return {}, {}, {}
+
+        total_fetch_ms = (t_all_records - t_send) * 1000
+        if self.measurer is not None:
+            self.measurer.log_event("remote_feature_recieved", 1)
+            self.measurer.log_event("feat_fetch_ms", total_fetch_ms)
+            self.measurer.log_event("udp_agg_ms", total_fetch_ms)
+            self.measurer.log_event("udp_records", len(records))
+        if self.profile_accumulator is not None:
+            self.profile_accumulator.add(summary, "feat_x", t_send, t_all_records)
+
+        feat_matrix = self._decode_feature_matrix(records, "feature")
+        if self.measurer is not None:
+            self.measurer.log_event("feat_bytes", feat_matrix.nbytes)
+
+        feature_map: Dict[int, np.ndarray] = {}
+        label_map: Dict[int, int] = {}
+        for i, rec in enumerate(records):
+            nid = int(rec["id"])
+            feature_map[nid] = feat_matrix[i]
+            if include_label:
+                lbl = rec["label"]
+                if isinstance(lbl, str):
+                    if lbl not in self._labels:
+                        self._labels[lbl] = len(self._labels)
+                    label_map[nid] = self._labels[lbl]
+                elif lbl is not None:
+                    label_map[nid] = int(lbl)
+
+        if self.measurer is not None:
+            self.measurer.log_event("end_etl", 1)
+            self.measurer.set_phase("db_wait")
+
+        return feature_map, label_map, {}  # empty preagg_map — aggregation done by PyG
+
+    def _decode_packed_feature_rows(self, flat_bytes, n: int) -> np.ndarray:
+        if not flat_bytes or n == 0:
             feature_dim = self._feature_dim or 0
             return np.empty((0, feature_dim), dtype=np.float32)
-
-        first_row = rows[0]
-        if isinstance(first_row, (bytes, bytearray, memoryview)):
-            return np.stack([
-                np.frombuffer(memoryview(row), dtype=np.float32)
-                for row in rows
-            ])
-
-        return np.asarray(rows, dtype=np.float32)
+        # New format: single flat byte[] from Java (one Bolt bytes value).
+        if isinstance(flat_bytes, (bytes, bytearray, memoryview)):
+            return np.frombuffer(memoryview(flat_bytes), dtype=np.float32).reshape(n, -1)
+        # Fallback: old List<byte[]> format (plugin not yet rebuilt).
+        return np.stack([np.frombuffer(memoryview(row), dtype=np.float32) for row in flat_bytes])
 
     def _decode_feature_matrix(self, records: List[object], field_name: str) -> np.ndarray:
         first_value = records[0][field_name]
