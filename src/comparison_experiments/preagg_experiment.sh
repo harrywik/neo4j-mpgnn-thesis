@@ -8,7 +8,7 @@ fi
 
 COMMAND=$1
 shift
-DATASET=$2
+DATASET=$1
 shift
 BATCH_SIZES=("$@")
 
