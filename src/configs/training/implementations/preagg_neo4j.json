@@ -2,10 +2,7 @@
   "needs_sampler_in_fs": true,
   "feature_store": {
     "class_name": "Neo4jPreAggFeatureStore",
-    "connection_mode": "driver",
-    "extra_kwargs": {
-      "aggregation_mode": "sampledGcnNorm"
-    }
+    "connection_mode": "driver"
   },
   "graph_store": {
     "class_name": "Neo4jSingleGS",
@@ -14,8 +11,8 @@
   "sampler": {
     "class_name": "Neo4jJavaNeighborSampler",
     "num_neighbors": [
-      20,
-      10
+      10,
+      5
     ]
   },
   "model": {

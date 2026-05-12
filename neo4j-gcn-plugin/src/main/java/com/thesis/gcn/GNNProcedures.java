@@ -85,89 +85,10 @@ public class GNNProcedures {
     // Generic GNN inference infrastructure
     // -------------------------------------------------------------------------
 
-    /**
-     * A single aggregation primitive: graph-dependent, executed in Java.
-     *
-     * <p>Implementations receive the target node's ID, the IDs of its sampled
-     * incoming neighbours, the current per-node feature map, and the stored
-     * in-degree map.  They return the aggregated feature vector for the target
-     * node (including any self-loop weighting), or {@code null} if no features
-     * are available.
-     */
-    @FunctionalInterface
-    private interface AggregationFn {
-        double[] aggregate(Long nodeId,
-                           List<Long> neighborIds,
-                           Map<Long, double[]> features,
-                           Map<Long, Long> inDegrees);
-    }
-
-    /**
-     * Registry of named aggregation functions.
-     *
-     * <p>To support a new GNN type (e.g. GraphSAGE):
-     * <ol>
-     *   <li>Add an entry here mapping a string key to an {@link AggregationFn}.</li>
-     *   <li>Add the matching entry to {@code CONV_AGGREGATION_MAP} in
-     *       {@code create_inference_spec.py}.</li>
-     *   <li>Export a new spec — no new procedure required.</li>
-     * </ol>
-     */
-    private static final Map<String, AggregationFn> AGGREGATION_REGISTRY;
-    static {
-        Map<String, AggregationFn> r = new HashMap<>();
-
-        // GCN-normalised aggregation with self-loop:
-        //   self-weight  = 1 / (d̂_v)
-        //   neighbour u  = 1 / sqrt(d̂_v · d̂_u)   where d̂ = in_degree + 1
-        r.put("gcn_norm", (nodeId, neighborIds, features, inDegrees) -> {
-            double[] selfFeat = features.get(nodeId);
-            double   selfDeg  = inDegrees.getOrDefault(nodeId, 0L) + 1.0;
-            double[] agg      = null;
-
-            if (selfFeat != null) {
-                agg = new double[selfFeat.length];
-                accumulateScaledStatic(agg, selfFeat, 1.0 / selfDeg);
-            }
-            for (Long nbrId : neighborIds) {
-                double[] nbrFeat = features.get(nbrId);
-                if (nbrFeat == null) continue;
-                if (agg == null) agg = new double[nbrFeat.length];
-                double nbrDeg = inDegrees.getOrDefault(nbrId, 0L) + 1.0;
-                accumulateScaledStatic(agg, nbrFeat, 1.0 / Math.sqrt(selfDeg * nbrDeg));
-            }
-            return agg;
-        });
-
-        // Mean aggregation (no self-loop, no normalisation):
-        r.put("mean", (nodeId, neighborIds, features, inDegrees) -> {
-            double[] sum = null;
-            int count = 0;
-            for (Long nbrId : neighborIds) {
-                double[] nbrFeat = features.get(nbrId);
-                if (nbrFeat == null) continue;
-                if (sum == null) sum = new double[nbrFeat.length];
-                accumulateScaledStatic(sum, nbrFeat, 1.0);
-                count++;
-            }
-            if (sum == null || count == 0) return features.get(nodeId); // fall back to self
-            for (int i = 0; i < sum.length; i++) sum[i] /= count;
-            return sum;
-        });
-
-        AGGREGATION_REGISTRY = Collections.unmodifiableMap(r);
-    }
-
-    /** Static accumulate used inside lambda closures (lambdas cannot call instance methods). */
-    private static void accumulateScaledStatic(double[] acc, double[] feat, double scale) {
-        for (int i = 0; i < acc.length; i++) acc[i] += scale * feat[i];
-    }
-
     // ── Float-precision aggregation registry (inference engine) ──────────────
 
     /**
-     * Float counterpart of {@link AggregationFn} used exclusively by the
-     * inference engine ({@link #runEngine}) to avoid double↔float conversions.
+     * Aggregation primitive used by the inference engine ({@link #runEngine}).
      */
     @FunctionalInterface
     private interface AggregationFnF {
@@ -744,6 +665,8 @@ public class GNNProcedures {
         // rawNodeSet removed: requestedIds IS the raw node set, so contains() is always true.
 
         Map<Long, List<Long>> incoming = new HashMap<>();
+        // Compute in-degree from the FULL sampled subgraph edge_index to match
+        // PyG's GCNConv normalization (deg = # times node appears as destination).
         Map<Long, Long> sampledInDegree = new HashMap<>();
         Set<Long> requiredNodeIds = new HashSet<>(requestedIds);
         requiredNodeIds.addAll(frontierSet);
@@ -757,16 +680,49 @@ public class GNNProcedures {
                 if (srcId == null || dstId == null) {
                     continue;
                 }
-                if (!frontierSet.isEmpty() && !frontierSet.contains(srcId)) {
-                    continue;
-                }
-                incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
+                // Count in-degree from ALL edges (not just frontier edges).
                 sampledInDegree.put(dstId, sampledInDegree.getOrDefault(dstId, 0L) + 1L);
+<<<<<<< HEAD
                 sampledInDegree.putIfAbsent(srcId, sampledInDegree.getOrDefault(srcId, 0L));
+=======
+                sampledInDegree.putIfAbsent(srcId, 0L);
+                // Build adjacency for ALL edges pointing to target nodes (not just
+                // frontier edges). PyG's GCNConv aggregates from every neighbor in
+                // the sampled subgraph, including seeds/hop-1 nodes that were
+                // re-discovered as neighbors during BFS expansion.
+                if (targetSet.contains(dstId)) {
+                    incoming.computeIfAbsent(dstId, ignored -> new ArrayList<>()).add(srcId);
+                }
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
             }
         }
 
         Map<Long, Node> nodesById = preloadNodesById(label, nodeIdKey, requiredNodeIds);
+
+        // Build feature cache for all nodes upfront: one property read per node.
+        // Covers both requestedIds (raw output + aggregation targets) and
+        // frontierSet (neighbor sources in the aggregation inner loop).
+        boolean isByteType = "byte[]".equals(featureType);
+        Map<Long, float[]> featureCache = new HashMap<>(requiredNodeIds.size() * 2);
+        Map<Long, byte[]>  rawBytesCache = isByteType ? new HashMap<>(requiredNodeIds.size() * 2) : null;
+        for (Long nid : requiredNodeIds) {
+            Node n = nodesById.get(nid);
+            if (n == null) continue;
+            if (isByteType) {
+                byte[] raw = (byte[]) n.getProperty(featureKey, null);
+                if (raw != null) {
+                    rawBytesCache.put(nid, raw);
+                    featureCache.put(nid, parseFloat32Bytes(raw));
+                }
+            } else {
+                double[] d = (double[]) n.getProperty(featureKey, null);
+                if (d != null) {
+                    float[] f = new float[d.length];
+                    for (int i = 0; i < d.length; i++) f[i] = (float) d[i];
+                    featureCache.put(nid, f);
+                }
+            }
+        }
 
         List<Long> outRawIds = new ArrayList<>();
         ByteArrayOutputStream rawFeatOut = new ByteArrayOutputStream(requestedIds.size() * 512);
@@ -782,6 +738,7 @@ public class GNNProcedures {
                 continue;
             }
 
+<<<<<<< HEAD
             // Single property access: extract float[] once and derive bytes from it.
             float[] nodeFeatures = extractFeaturesF(node, featureKey, featureType);
             if (nodeFeatures != null) {
@@ -789,6 +746,13 @@ public class GNNProcedures {
                 byte[] raw = "byte[]".equals(featureType)
                         ? (byte[]) node.getProperty(featureKey, null)
                         : packFloat32Bytes(nodeFeatures);
+=======
+            float[] nodeFeatures = featureCache.get(nodeId);
+            if (nodeFeatures != null) {
+                outRawIds.add(nodeId);
+                // For byte[] type the raw bytes are already cached; no second property read.
+                byte[] raw = isByteType ? rawBytesCache.get(nodeId) : packFloat32Bytes(nodeFeatures);
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
                 if (raw != null) rawFeatOut.write(raw, 0, raw.length);
             }
 
@@ -801,6 +765,10 @@ public class GNNProcedures {
                 continue;
             }
 
+<<<<<<< HEAD
+=======
+            // Use sampled subgraph in-degree for normalization (matches PyG GCNConv).
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
             float targetDegreeHat = sampledInDegree.getOrDefault(nodeId, 0L) + selfLoopWeightF;
             float[] agg = null;
 
@@ -812,6 +780,7 @@ public class GNNProcedures {
 
             // Hoist 1/sqrt(targetDegreeHat) out of the neighbor loop.
             float invSqrtTargetDeg = 1.0f / (float) Math.sqrt(targetDegreeHat);
+<<<<<<< HEAD
 
             for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
                 Node srcNode = nodesById.get(srcId);
@@ -820,6 +789,12 @@ public class GNNProcedures {
                 }
 
                 float[] srcFeatures = extractFeaturesF(srcNode, featureKey, featureType);
+=======
+
+            for (Long srcId : incoming.getOrDefault(nodeId, Collections.emptyList())) {
+                // Use cache: avoids re-reading the property for each edge.
+                float[] srcFeatures = featureCache.get(srcId);
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
                 if (srcFeatures == null) {
                     continue;
                 }
@@ -828,6 +803,10 @@ public class GNNProcedures {
                     agg = new float[srcFeatures.length];
                 }
 
+<<<<<<< HEAD
+=======
+                // Use sampled subgraph in-degree for neighbor normalization.
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
                 float srcDegreeHat = sampledInDegree.getOrDefault(srcId, 0L) + selfLoopWeightF;
                 float weight = invSqrtTargetDeg / (float) Math.sqrt(srcDegreeHat);
                 accumulateScaledF(agg, srcFeatures, weight);
@@ -931,7 +910,7 @@ public class GNNProcedures {
     @Procedure(name = "gnnProcedures.inference.run", mode = Mode.READ)
     @Description(
         "GNN inference for any architecture whose aggregation types are in "
-        + "AGGREGATION_REGISTRY. Resolves modelName to $NEO4J_GNN_MODEL_DIR/<modelName>/."
+        + "AGG_REGISTRY_F. Resolves modelName to $NEO4J_GNN_MODEL_DIR/<modelName>/."
     )
     public Stream<GNNInferenceResult> gnnInfer(
             @Name("seedIds")                                     List<Long> seedIds,
@@ -1194,48 +1173,6 @@ public class GNNProcedures {
     }
 
     /**
-     * Sample up to {@code k} relationships without replacement.
-     *
-     * <p>Applies optional neighbour label filtering before sampling so fanout is
-     * computed over the same candidate set as the Cypher sampler.
-     */
-    private List<Relationship> sampleRelationships(
-            Iterable<Relationship> rels,
-            long k,
-            Random rng,
-            Label requiredNeighborLabel
-    ) {
-        List<Relationship> reservoir = new ArrayList<>();
-        long seen = 0L;
-
-        for (Relationship rel : rels) {
-            Node nbr = rel.getStartNode();
-            if (requiredNeighborLabel != null && !nbr.hasLabel(requiredNeighborLabel)) {
-                continue;
-            }
-
-            seen++;
-
-            if (k < 0) {
-                reservoir.add(rel);
-                continue;
-            }
-
-            int kk = (int) Math.min(k, Integer.MAX_VALUE);
-            if (reservoir.size() < kk) {
-                reservoir.add(rel);
-            } else if (kk > 0) {
-                long slot = (long) (rng.nextDouble() * seen);
-                if (slot < kk) {
-                    reservoir.set((int) slot, rel);
-                }
-            }
-        }
-
-        return reservoir;
-    }
-
-    /**
      * Reservoir-sample up to {@code k} neighbour nodes from a relationship iterable.
      * When {@code k < 0} all neighbours are collected.
      */
@@ -1396,18 +1333,22 @@ public class GNNProcedures {
         if (prop == null) return null;
 
         if ("byte[]".equals(featureType)) {
-            byte[] bytes = (byte[]) prop;
-            int n = bytes.length / Float.BYTES;
-            ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-            float[] result = new float[n];
-            for (int i = 0; i < n; i++) result[i] = buf.getFloat();
-            return result;
+            return parseFloat32Bytes((byte[]) prop);
         } else {
             double[] d = (double[]) prop;
             float[] result = new float[d.length];
             for (int i = 0; i < d.length; i++) result[i] = (float) d[i];
             return result;
         }
+    }
+
+    /** Parse a little-endian IEEE-754 float32 byte array into a float[]. */
+    private static float[] parseFloat32Bytes(byte[] bytes) {
+        int n = bytes.length / Float.BYTES;
+        ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        float[] result = new float[n];
+        buf.asFloatBuffer().get(result);
+        return result;
     }
 
     /** Return node features as packed little-endian float32 bytes for transport efficiency. */
@@ -1608,435 +1549,348 @@ public class GNNProcedures {
         ch.read(buf);
         return buf.array();
     }
-
-    // =========================================================================
-    // METIS-style multilevel k-way graph partitioning
-    // =========================================================================
-
-    /**
-     * Result row for {@link #metisPartition}.
-     */
-    public static class PartitionResult {
-        /** Total number of nodes that received a partition assignment. */
-        public final Long nodesPartitioned;
-        /** Number of partitions (= numPartitions argument). */
-        public final Long numPartitions;
-        /** Edge cut of the final partition (each undirected edge counted once). */
-        public final Long edgeCut;
-
-        public PartitionResult(Long nodesPartitioned, Long numPartitions, Long edgeCut) {
-            this.nodesPartitioned = nodesPartitioned;
-            this.numPartitions    = numPartitions;
-            this.edgeCut          = edgeCut;
-        }
-    }
-
-    /**
-     * Compressed-Sparse-Row graph used internally by the METIS algorithm.
-     * Plain int[] arrays throughout to minimise GC pressure during coarsening.
-     */
-    private static final class MetisGraph {
-        final int   n;       // number of vertices
-        final int[] xadj;    // xadj[i]..xadj[i+1]-1 → neighbour range in adjncy/adjwgt
-        final int[] adjncy;  // packed neighbour list
-        final int[] adjwgt;  // edge weights (≥ 1)
-        final int[] vwgt;    // vertex weights (≥ 1)
-
-        MetisGraph(int n, int[] xadj, int[] adjncy, int[] adjwgt, int[] vwgt) {
-            this.n = n; this.xadj = xadj; this.adjncy = adjncy;
-            this.adjwgt = adjwgt; this.vwgt = vwgt;
-        }
-
-        int totalWeight() { int s = 0; for (int w : vwgt) s += w; return s; }
-    }
-
-    /**
-     * Multilevel k-way graph partitioning (METIS-style).
-     *
-     * <p>Three phases:
-     * <ol>
-     *   <li><b>Coarsening</b> — Heavy-Edge Matching (HEM) repeatedly contracts the
-     *       graph until it has ≤ max(40, 20k) nodes.</li>
-     *   <li><b>Initial partition</b> — greedy BFS-based balanced k-way split on the
-     *       coarsest graph.</li>
-     *   <li><b>Uncoarsening + refinement</b> — partition is projected back to each
-     *       finer level and improved with Fiduccia-Mattheyses (FM) boundary moves.</li>
-     * </ol>
-     *
-     * <p>Writes an integer property ({@code rankIdProperty}, default {@code "rankId"})
-     * in range {@code [0, numPartitions)} to every matched node.  Call this once before
-     * training and use the property to shard seed nodes per worker.
-     *
-     * <h3>Example</h3>
-     * <pre>{@code
-     * CALL gnnProcedures.partition.metis(4, "Paper", "id", "CITES")
-     * YIELD nodesPartitioned, numPartitions, edgeCut
-     * }</pre>
-     */
-    @Procedure(name = "gnnProcedures.partition.metis", mode = Mode.WRITE)
-    @Description(
-        "Multilevel k-way graph partitioning (HEM coarsening + FM refinement). "
-        + "Writes rankId ∈ [0, numPartitions) to every node."
-    )
-    public Stream<PartitionResult> metisPartition(
-            @Name("numPartitions")                                     Long   numPartitions,
-            @Name("nodeLabel")                                         String nodeLabel,
-            @Name("nodeIdProperty")                                    String nodeIdProperty,
-            @Name(value = "relType",        defaultValue = "")         String relType,
-            @Name(value = "rankIdProperty", defaultValue = "rankId")   String rankIdProperty
-    ) {
-        int k = (int)(long) numPartitions;
-        if (k < 2) throw new IllegalArgumentException("numPartitions must be >= 2");
-
-        Label            lbl   = Label.label(nodeLabel);
-        boolean          hasRt = relType != null && !relType.isEmpty();
-        RelationshipType rt    = hasRt ? RelationshipType.withName(relType) : null;
-
-        // ── 1. Assign contiguous indices to nodes ─────────────────────────────
-        List<Long>        neoIds   = new ArrayList<>();
-        Map<Long,Integer> idxOfNeo = new HashMap<>();
-
-        try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
-            while (it.hasNext()) {
-                Node   nd = it.next();
-                Object r  = nd.getProperty(nodeIdProperty, null);
-                if (r == null) continue;
-                long nid = ((Number) r).longValue();
-                if (idxOfNeo.putIfAbsent(nid, neoIds.size()) == null)
-                    neoIds.add(nid);
-            }
-        }
-
-        int n = neoIds.size();
-        if (n == 0) return Stream.of(new PartitionResult(0L, (long) k, 0L));
-        k = Math.min(k, n);   // can't have more partitions than nodes
-
-        // ── 2. Build undirected adjacency ─────────────────────────────────────
-        // Each undirected edge is processed once (u < v) and stored in both
-        // directions in adjBuilder so the CSR is symmetric.
-        @SuppressWarnings("unchecked")
-        Map<Integer,Integer>[] adjBuilder = new HashMap[n];
-        for (int i = 0; i < n; i++) adjBuilder[i] = new HashMap<>();
-
-        try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
-            while (it.hasNext()) {
-                Node   src    = it.next();
-                Object rawSrc = src.getProperty(nodeIdProperty, null);
-                if (rawSrc == null) continue;
-                int u = idxOfNeo.get(((Number) rawSrc).longValue());
-
-                Iterable<Relationship> rels = hasRt
-                        ? src.getRelationships(rt)
-                        : src.getRelationships();
-
-                for (Relationship rel : rels) {
-                    Node   dst    = rel.getOtherNode(src);
-                    if (!dst.hasLabel(lbl)) continue;
-                    Object rawDst = dst.getProperty(nodeIdProperty, null);
-                    if (rawDst == null) continue;
-                    Integer v = idxOfNeo.get(((Number) rawDst).longValue());
-                    if (v == null || v == u) continue;
-                    if (u >= v) continue;   // each undirected edge once
-                    adjBuilder[u].merge(v, 1, Integer::sum);
-                    adjBuilder[v].merge(u, 1, Integer::sum);
-                }
-            }
-        }
-
-        // ── 3. Convert to CSR ─────────────────────────────────────────────────
-        MetisGraph graph = buildMetisCSR(n, adjBuilder);
-
-        // ── 4. Multilevel k-way partition ─────────────────────────────────────
-        int[] part = multilevelKwayPartition(graph, k, new Random(42L));
-
-        // ── 5. Write rankId back to Neo4j ─────────────────────────────────────
-        long edgeCut = computeMetisEdgeCut(graph, part);
-
-        try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
-            while (it.hasNext()) {
-                Node   nd  = it.next();
-                Object raw = nd.getProperty(nodeIdProperty, null);
-                if (raw == null) continue;
-                Integer idx = idxOfNeo.get(((Number) raw).longValue());
-                if (idx == null) continue;
-                nd.setProperty(rankIdProperty, part[idx]);
-            }
-        }
-
-        return Stream.of(new PartitionResult((long) n, (long) k, edgeCut));
-    }
-
-    // ── METIS: graph construction helpers ────────────────────────────────────
-
-    private static MetisGraph buildMetisCSR(int n, Map<Integer,Integer>[] adj) {
-        int[] xadj  = new int[n + 1];
-        for (int i = 0; i < n; i++) xadj[i + 1] = xadj[i] + adj[i].size();
-        int   m      = xadj[n];
-        int[] adjncy = new int[m];
-        int[] adjwgt = new int[m];
-        int[] vwgt   = new int[n];
-        Arrays.fill(vwgt, 1);
-        for (int i = 0; i < n; i++) {
-            int pos = xadj[i];
-            for (Map.Entry<Integer,Integer> e : adj[i].entrySet()) {
-                adjncy[pos] = e.getKey();
-                adjwgt[pos] = e.getValue();
-                pos++;
-            }
-        }
-        return new MetisGraph(n, xadj, adjncy, adjwgt, vwgt);
-    }
-
-    private static long computeMetisEdgeCut(MetisGraph g, int[] part) {
-        long cut = 0;
-        for (int u = 0; u < g.n; u++)
-            for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++)
-                if (part[u] != part[g.adjncy[j]]) cut += g.adjwgt[j];
-        return cut / 2;   // each undirected edge counted from both sides
-    }
-
-    // ── METIS: multilevel orchestration ──────────────────────────────────────
-
-    private static int[] multilevelKwayPartition(MetisGraph g, int k, Random rng) {
-        // Coarsening phase: stack of (cmap, finer graph) pairs
-        List<int[]>      cmapStack = new ArrayList<>();
-        List<MetisGraph> fineStack = new ArrayList<>();
-        MetisGraph cur = g;
-
-        while (cur.n > Math.max(20 * k, 40)) {
-            int prevN = cur.n;
-            int[] cmap = hemCoarsen(cur, rng);
-            int cn = 0;
-            for (int c : cmap) if (c + 1 > cn) cn = c + 1;
-            if (cn >= prevN) break;   // no further coarsening possible
-            MetisGraph coarse = buildCoarseMetisGraph(cur, cmap, cn);
-            cmapStack.add(cmap);
-            fineStack.add(cur);
-            cur = coarse;
-        }
-
-        // Initial k-way partition on the coarsest graph
-        int[] part = bfsKwayPartition(cur, k);
-
-        // Uncoarsening + refinement
-        for (int lvl = cmapStack.size() - 1; lvl >= 0; lvl--) {
-            int[]      cmap  = cmapStack.get(lvl);
-            MetisGraph finer = fineStack.get(lvl);
-            int[]      fp    = new int[finer.n];
-            for (int u = 0; u < finer.n; u++) fp[u] = part[cmap[u]];
-            fmRefine(finer, fp, k);
-            part = fp;
-        }
-        return part;
-    }
-
-    // ── METIS: Heavy-Edge Matching coarsening ─────────────────────────────────
-
-    /**
-     * Returns {@code cmap[fine_node] = coarse_node} (0-based).
-     *
-     * <p>Processes nodes in random order.  For each unmatched node u, picks the
-     * unmatched neighbour v with the highest edge weight (heavy-edge criterion).
-     * Unmatched nodes are self-matched.
-     */
-    private static int[] hemCoarsen(MetisGraph g, Random rng) {
-        int   n     = g.n;
-        int[] match = new int[n];
-        Arrays.fill(match, -1);
-
-        // Fisher-Yates shuffle for random processing order
-        int[] order = new int[n];
-        for (int i = 0; i < n; i++) order[i] = i;
-        for (int i = n - 1; i > 0; i--) {
-            int j = rng.nextInt(i + 1), tmp = order[i];
-            order[i] = order[j]; order[j] = tmp;
-        }
-
-        int[] cmap = new int[n];
-        int   cn   = 0;
-
-        for (int u : order) {
-            if (match[u] != -1) continue;
-
-            // Heaviest unmatched neighbour
-            int bestV = -1, bestW = -1;
-            for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++) {
-                int v = g.adjncy[j], w = g.adjwgt[j];
-                if (match[v] == -1 && w > bestW) { bestV = v; bestW = w; }
-            }
-
-            if (bestV >= 0) {
-                match[u] = bestV; match[bestV] = u;
-                cmap[u] = cmap[bestV] = cn++;
-            } else {
-                match[u] = u;
-                cmap[u]  = cn++;
-            }
-        }
-        return cmap;
-    }
-
-    /**
-     * Build the coarsened graph from a fine graph and its HEM coarsening map.
-     *
-     * <p>Coarse vertex weight = sum of fine vertex weights in the matched pair.
-     * Coarse edge weight = sum of fine edge weights between the two coarse vertices.
-     * Internal edges (both endpoints map to the same coarse vertex) are dropped.
-     */
-    private static MetisGraph buildCoarseMetisGraph(MetisGraph g, int[] cmap, int cn) {
-        int[] cvwgt = new int[cn];
-        for (int u = 0; u < g.n; u++) cvwgt[cmap[u]] += g.vwgt[u];
-
-        // Aggregate cross-partition edge weights; process each undirected edge once.
-        // Key encodes the sorted coarse node pair: lo * cn + hi.
-        Map<Long,Integer> edgeMap = new HashMap<>();
-        for (int u = 0; u < g.n; u++) {
-            int cu = cmap[u];
-            for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++) {
-                int v = g.adjncy[j];
-                if (u >= v) continue;          // each fine edge once
-                int cv = cmap[v];
-                if (cu == cv) continue;        // absorbed into coarse node
-                int lo = Math.min(cu, cv), hi = Math.max(cu, cv);
-                edgeMap.merge((long) lo * cn + hi, g.adjwgt[j], Integer::sum);
-            }
-        }
-
-        // Build coarse CSR
-        int[] deg = new int[cn];
-        for (long key : edgeMap.keySet()) {
-            int cu = (int)(key / cn), cv = (int)(key % cn);
-            deg[cu]++; deg[cv]++;
-        }
-        int[] xadj = new int[cn + 1];
-        for (int i = 0; i < cn; i++) xadj[i + 1] = xadj[i] + deg[i];
-
-        int[] adjncy = new int[xadj[cn]];
-        int[] adjwgt = new int[xadj[cn]];
-        int[] pos    = Arrays.copyOf(xadj, cn);
-
-        for (Map.Entry<Long,Integer> e : edgeMap.entrySet()) {
-            long key = e.getKey(); int w = e.getValue();
-            int  cu  = (int)(key / cn), cv = (int)(key % cn);
-            adjncy[pos[cu]] = cv; adjwgt[pos[cu]] = w; pos[cu]++;
-            adjncy[pos[cv]] = cu; adjwgt[pos[cv]] = w; pos[cv]++;
-        }
-
-        return new MetisGraph(cn, xadj, adjncy, adjwgt, cvwgt);
-    }
-
-    // ── METIS: initial BFS-based k-way partition ──────────────────────────────
-
-    /**
-     * Greedy balanced k-way partition via simultaneous BFS from k evenly-spaced seeds.
-     *
-     * <p>At each step, expands the lightest non-empty BFS queue, subject to a balance
-     * guard that prevents any partition from exceeding 2× the target weight.
-     * Disconnected components are handled by re-seeding into the lightest partition.
-     */
-    @SuppressWarnings("unchecked")
-    private static int[] bfsKwayPartition(MetisGraph g, int k) {
-        int   n      = g.n;
-        int[] part   = new int[n];
-        int[] partW  = new int[k];
-        Arrays.fill(part, -1);
-
-        int totalW  = g.totalWeight();
-        int targetW = (totalW + k - 1) / k;
-
-        Queue<Integer>[] queues = new ArrayDeque[k];
-        int assigned = 0;
-        for (int p = 0; p < k; p++) {
-            queues[p] = new ArrayDeque<>();
-            int seed = (int)((long) p * n / k);
-            if (part[seed] == -1) {
-                part[seed] = p; partW[p] += g.vwgt[seed];
-                queues[p].add(seed); assigned++;
-            }
-        }
-
-        while (assigned < n) {
-            // Expand the lightest partition with a non-empty queue
-            int chosen = -1;
-            for (int p = 0; p < k; p++) {
-                if (!queues[p].isEmpty() &&
-                        (chosen == -1 || partW[p] < partW[chosen])) chosen = p;
-            }
-
-            if (chosen == -1) {
-                // All queues empty (disconnected graph): restart from an unassigned node
-                int minP = 0;
-                for (int p = 1; p < k; p++) if (partW[p] < partW[minP]) minP = p;
-                for (int u = 0; u < n; u++) {
-                    if (part[u] == -1) {
-                        part[u] = minP; partW[minP] += g.vwgt[u];
-                        queues[minP].add(u); assigned++; break;
-                    }
-                }
-                continue;
-            }
-
-            int u = queues[chosen].poll();
-            for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++) {
-                int v = g.adjncy[j];
-                if (part[v] != -1) continue;
-                if (partW[chosen] + g.vwgt[v] > 2 * targetW) continue;
-                part[v] = chosen; partW[chosen] += g.vwgt[v];
-                queues[chosen].add(v); assigned++;
-            }
-        }
-        return part;
-    }
-
-    // ── METIS: Fiduccia-Mattheyses boundary refinement ───────────────────────
-
-    /**
-     * FM-style refinement: sweep all nodes and greedily move each boundary node to
-     * the adjacent partition that gives the largest positive gain, subject to a 5%
-     * balance tolerance.  Repeats until no improvement or {@code MAX_PASSES} reached.
-     *
-     * <p>Gain of moving node {@code u} from partition {@code p} to {@code q}:
-     * <pre>  gain = edgeWeightsTo(q) − edgeWeightsTo(p)</pre>
-     */
-    private static void fmRefine(MetisGraph g, int[] part, int k) {
-        int   n        = g.n;
-        int   totalW   = g.totalWeight();
-        int   maxPartW = (int)(1.05 * totalW / k);   // 5% imbalance tolerance
-        int[] partW    = new int[k];
-        for (int u = 0; u < n; u++) partW[part[u]] += g.vwgt[u];
-
-        final int MAX_PASSES = 10;
-        for (int pass = 0; pass < MAX_PASSES; pass++) {
-            boolean improved = false;
-
-            for (int u = 0; u < n; u++) {
-                int p = part[u];
-
-                // Tally edge weight from u to each partition
-                int[] edgesTo = new int[k];
-                for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++)
-                    edgesTo[part[g.adjncy[j]]] += g.adjwgt[j];
-
-                int selfEdges = edgesTo[p];
-
-                // Best destination: highest gain within balance constraints
-                int bestQ = -1, bestGain = 0;
-                for (int q = 0; q < k; q++) {
-                    if (q == p) continue;
-                    if (partW[q] + g.vwgt[u] > maxPartW) continue;
-                    if (partW[p] - g.vwgt[u] < 0)        continue;
-                    int gain = edgesTo[q] - selfEdges;
-                    if (gain > bestGain) { bestGain = gain; bestQ = q; }
-                }
-
-                if (bestQ >= 0) {
-                    partW[p]     -= g.vwgt[u];
-                    partW[bestQ] += g.vwgt[u];
-                    part[u]       = bestQ;
-                    improved      = true;
-                }
-            }
-            if (!improved) break;
-        }
-    }
 }
+
+    // // =========================================================================
+    // // METIS-style multilevel k-way graph partitioning
+    // // =========================================================================
+
+    // /**
+    //  * Result row for {@link #metisPartition}.
+    //  */
+    // public static class PartitionResult {
+    //     /** Total number of nodes that received a partition assignment. */
+    //     public final Long nodesPartitioned;
+    //     /** Number of partitions (= numPartitions argument). */
+    //     public final Long numPartitions;
+    //     /** Edge cut of the final partition (each undirected edge counted once). */
+    //     public final Long edgeCut;
+
+    //     public PartitionResult(Long nodesPartitioned, Long numPartitions, Long edgeCut) {
+    //         this.nodesPartitioned = nodesPartitioned;
+    //         this.numPartitions    = numPartitions;
+    //         this.edgeCut          = edgeCut;
+    //     }
+    // }
+
+    // /**
+    //  * Compressed-Sparse-Row graph used internally by the METIS algorithm.
+    //  * Plain int[] arrays throughout to minimise GC pressure during coarsening.
+    //  */
+    // private static final class MetisGraph {
+    //     final int   n;       // number of vertices
+    //     final int[] xadj;    // xadj[i]..xadj[i+1]-1 → neighbour range in adjncy/adjwgt
+    //     final int[] adjncy;  // packed neighbour list
+    //     final int[] adjwgt;  // edge weights (≥ 1)
+    //     final int[] vwgt;    // vertex weights (≥ 1)
+
+    //     MetisGraph(int n, int[] xadj, int[] adjncy, int[] adjwgt, int[] vwgt) {
+    //         this.n = n; this.xadj = xadj; this.adjncy = adjncy;
+    //         this.adjwgt = adjwgt; this.vwgt = vwgt;
+    //     }
+
+    //     int totalWeight() { int s = 0; for (int w : vwgt) s += w; return s; }
+    // }
+
+//     /**
+//      * Multilevel k-way graph partitioning (METIS-style).
+//      *
+//      * <p>Three phases:
+//      * <ol>
+//      *   <li><b>Coarsening</b> — Heavy-Edge Matching (HEM) repeatedly contracts the
+//      *       graph until it has ≤ max(40, 20k) nodes.</li>
+//      *   <li><b>Initial partition</b> — greedy BFS-based balanced k-way split on the
+//      *       coarsest graph.</li>
+//      *   <li><b>Uncoarsening + refinement</b> — partition is projected back to each
+//      *       finer level and improved with Fiduccia-Mattheyses (FM) boundary moves.</li>
+//      * </ol>
+//      *
+//      * <p>Writes an integer property ({@code rankIdProperty}, default {@code "rankId"})
+//      * in range {@code [0, numPartitions)} to every matched node.  Call this once before
+//      * training and use the property to shard seed nodes per worker.
+//      *
+//      * <h3>Example</h3>
+//      * <pre>{@code
+//      * CALL gnnProcedures.partition.metis(4, "Paper", "id", "CITES")
+//      * YIELD nodesPartitioned, numPartitions, edgeCut
+//      * }</pre>
+//      */
+//     @Procedure(name = "gnnProcedures.partition.metis", mode = Mode.WRITE)
+//     @Description(
+//         "Multilevel k-way graph partitioning (HEM coarsening + FM refinement). "
+//         + "Writes rankId ∈ [0, numPartitions) to every node."
+//     )
+//     public Stream<PartitionResult> metisPartition(
+//             @Name("numPartitions")                                     Long   numPartitions,
+//             @Name("nodeLabel")                                         String nodeLabel,
+//             @Name("nodeIdProperty")                                    String nodeIdProperty,
+//             @Name(value = "relType",        defaultValue = "")         String relType,
+//             @Name(value = "rankIdProperty", defaultValue = "rankId")   String rankIdProperty
+//     ) {
+//         int k = (int)(long) numPartitions;
+//         if (k < 2) throw new IllegalArgumentException("numPartitions must be >= 2");
+
+//         Label            lbl   = Label.label(nodeLabel);
+//         boolean          hasRt = relType != null && !relType.isEmpty();
+//         RelationshipType rt    = hasRt ? RelationshipType.withName(relType) : null;
+
+//         // ── 1. Assign contiguous indices to nodes ─────────────────────────────
+//         List<Long>        neoIds   = new ArrayList<>();
+//         Map<Long,Integer> idxOfNeo = new HashMap<>();
+
+//         try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
+//             while (it.hasNext()) {
+//                 Node   nd = it.next();
+//                 Object r  = nd.getProperty(nodeIdProperty, null);
+//                 if (r == null) continue;
+//                 long nid = ((Number) r).longValue();
+//                 if (idxOfNeo.putIfAbsent(nid, neoIds.size()) == null)
+//                     neoIds.add(nid);
+//             }
+//         }
+
+//         int n = neoIds.size();
+//         if (n == 0) return Stream.of(new PartitionResult(0L, (long) k, 0L));
+//         k = Math.min(k, n);   // can't have more partitions than nodes
+
+//         // ── 2. Build undirected adjacency ─────────────────────────────────────
+//         // Each undirected edge is processed once (u < v) and stored in both
+//         // directions in adjBuilder so the CSR is symmetric.
+//         @SuppressWarnings("unchecked")
+//         Map<Integer,Integer>[] adjBuilder = new HashMap[n];
+//         for (int i = 0; i < n; i++) adjBuilder[i] = new HashMap<>();
+
+//         try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
+//             while (it.hasNext()) {
+//                 Node   src    = it.next();
+//                 Object rawSrc = src.getProperty(nodeIdProperty, null);
+//                 if (rawSrc == null) continue;
+//                 int u = idxOfNeo.get(((Number) rawSrc).longValue());
+
+//                 Iterable<Relationship> rels = hasRt
+//                         ? src.getRelationships(rt)
+//                         : src.getRelationships();
+
+//                 for (Relationship rel : rels) {
+//                     Node   dst    = rel.getOtherNode(src);
+//                     if (!dst.hasLabel(lbl)) continue;
+//                     Object rawDst = dst.getProperty(nodeIdProperty, null);
+//                     if (rawDst == null) continue;
+//                     Integer v = idxOfNeo.get(((Number) rawDst).longValue());
+//                     if (v == null || v == u) continue;
+//                     if (u >= v) continue;   // each undirected edge once
+//                     adjBuilder[u].merge(v, 1, Integer::sum);
+//                     adjBuilder[v].merge(u, 1, Integer::sum);
+//                 }
+//             }
+//         }
+
+//         // ── 3. Convert to CSR ─────────────────────────────────────────────────
+//         MetisGraph graph = buildMetisCSR(n, adjBuilder);
+
+//         // ── 4. Multilevel k-way partition ─────────────────────────────────────
+//         int[] part = multilevelKwayPartition(graph, k, new Random(42L));
+
+//         // ── 5. Write rankId back to Neo4j ─────────────────────────────────────
+//         long edgeCut = computeMetisEdgeCut(graph, part);
+
+//         try (ResourceIterator<Node> it = tx.findNodes(lbl)) {
+//             while (it.hasNext()) {
+//                 Node   nd  = it.next();
+//                 Object raw = nd.getProperty(nodeIdProperty, null);
+//                 if (raw == null) continue;
+//                 Integer idx = idxOfNeo.get(((Number) raw).longValue());
+//                 if (idx == null) continue;
+//                 nd.setProperty(rankIdProperty, part[idx]);
+//             }
+//         }
+
+//         return Stream.of(new PartitionResult((long) n, (long) k, edgeCut));
+//     }
+
+//     // ── METIS: graph construction helpers ────────────────────────────────────
+
+//     private static MetisGraph buildMetisCSR(int n, Map<Integer,Integer>[] adj) {
+//         int[] xadj  = new int[n + 1];
+//         for (int i = 0; i < n; i++) xadj[i + 1] = xadj[i] + adj[i].size();
+//         int   m      = xadj[n];
+//         int[] adjncy = new int[m];
+//         int[] adjwgt = new int[m];
+//         int[] vwgt   = new int[n];
+//         Arrays.fill(vwgt, 1);
+//         for (int i = 0; i < n; i++) {
+//             int pos = xadj[i];
+//             for (Map.Entry<Integer,Integer> e : adj[i].entrySet()) {
+//                 adjncy[pos] = e.getKey();
+//                 adjwgt[pos] = e.getValue();
+//                 pos++;
+//             }
+//         }
+//         return new MetisGraph(n, xadj, adjncy, adjwgt, vwgt);
+//     }
+
+//     private static long computeMetisEdgeCut(MetisGraph g, int[] part) {
+//         long cut = 0;
+//         for (int u = 0; u < g.n; u++)
+//             for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++)
+//                 if (part[u] != part[g.adjncy[j]]) cut += g.adjwgt[j];
+//         return cut / 2;   // each undirected edge counted from both sides
+//     }
+
+//     // ── METIS: multilevel orchestration ──────────────────────────────────────
+
+//     private static int[] multilevelKwayPartition(MetisGraph g, int k, Random rng) {
+//         // Coarsening phase: stack of (cmap, finer graph) pairs
+//         List<int[]>      cmapStack = new ArrayList<>();
+//         List<MetisGraph> fineStack = new ArrayList<>();
+//         MetisGraph cur = g;
+
+//         while (cur.n > Math.max(20 * k, 40)) {
+//             int prevN = cur.n;
+//             int[] cmap = hemCoarsen(cur, rng);
+//             int cn = 0;
+//             for (int c : cmap) if (c + 1 > cn) cn = c + 1;
+//             if (cn >= prevN) break;   // no further coarsening possible
+//             MetisGraph coarse = buildCoarseMetisGraph(cur, cmap, cn);
+//             cmapStack.add(cmap);
+//             fineStack.add(cur);
+//             cur = coarse;
+//         }
+
+//         // Initial k-way partition on the coarsest graph
+//         int[] part = bfsKwayPartition(cur, k);
+
+//         // Uncoarsening + refinement
+//         for (int lvl = cmapStack.size() - 1; lvl >= 0; lvl--) {
+//             int[]      cmap  = cmapStack.get(lvl);
+//             MetisGraph finer = fineStack.get(lvl);
+//             int[]      fp    = new int[finer.n];
+//             for (int u = 0; u < finer.n; u++) fp[u] = part[cmap[u]];
+//             fmRefine(finer, fp, k);
+//             part = fp;
+//         }
+//         return part;
+//     }
+
+//     // ── METIS: Heavy-Edge Matching coarsening ─────────────────────────────────
+
+//     /**
+//      * Returns {@code cmap[fine_node] = coarse_node} (0-based).
+//      *
+//      * <p>Processes nodes in random order.  For each unmatched node u, picks the
+//      * unmatched neighbour v with the highest edge weight (heavy-edge criterion).
+//      * Unmatched nodes are self-matched.
+//      */
+//     private static int[] hemCoarsen(MetisGraph g, Random rng) {
+//         int   n     = g.n;
+//         int[] match = new int[n];
+//         Arrays.fill(match, -1);
+
+//         // Fisher-Yates shuffle for random processing order
+//         int[] order = new int[n];
+//         for (int i = 0; i < n; i++) order[i] = i;
+//         for (int i = n - 1; i > 0; i--) {
+//             int j = rng.nextInt(i + 1), tmp = order[i];
+//             order[i] = order[j]; order[j] = tmp;
+//         }
+
+//         int[] cmap = new int[n];
+//         int   cn   = 0;
+
+//         for (int u : order) {
+//             if (match[u] != -1) continue;
+
+//             // Heaviest unmatched neighbour
+//             int bestV = -1, bestW = -1;
+//             for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++) {
+//                 int v = g.adjncy[j], w = g.adjwgt[j];
+//                 if (match[v] == -1 && w > bestW) { bestV = v; bestW = w; }
+//             }
+
+//             if (bestV >= 0) {
+//                 match[u] = bestV; match[bestV] = u;
+//                 cmap[u] = cmap[bestV] = cn++;
+//             } else {
+//                 match[u] = u;
+//                 cmap[u]  = cn++;
+//             }
+//         }
+//         return cmap;
+//     }
+
+//     /**
+//      * Build the coarsened graph from a fine graph and its HEM coarsening map.
+//      *
+//      * <p>Coarse vertex weight = sum of fine vertex weights in the matched pair.
+//      * Coarse edge weight = sum of fine edge weights between the two coarse vertices.
+//      * Internal edges (both endpoints map to the same coarse vertex) are dropped.
+//      */
+//     private static MetisGraph buildCoarseMetisGraph(MetisGraph g, int[] cmap, int cn) {
+//         int[] cvwgt = new int[cn];
+//         for (int u = 0; u < g.n; u++) cvwgt[cmap[u]] += g.vwgt[u];
+
+//         // Aggregate cross-partition edge weights; process each undirected edge once.
+//         // Key encodes the sorted coarse node pair: lo * cn + hi.
+//         Map<Long,Integer> edgeMap = new HashMap<>();
+//         for (int u = 0; u < g.n; u++) {
+//             int cu = cmap[u];
+//             for (int j = g.xadj[u]; j < g.xadj[u + 1]; j++) {
+//                 int v = g.adjncy[j];
+//                 if (u >= v) continue;          // each fine edge once
+//                 int cv = cmap[v];
+//                 if (cu == cv) continue;        // absorbed into coarse node
+//                 int lo = Math.min(cu, cv), hi = Math.max(cu, cv);
+//                 edgeMap.merge((long) lo * cn + hi, g.adjwgt[j], Integer::sum);
+//             }
+//         }
+
+//         // Build coarse CSR
+//         int[] deg = new int[cn];
+//         for (long key : edgeMap.keySet()) {
+//             int cu = (int)(key / cn), cv = (int)(key % cn);
+//             deg[cu]++; deg[cv]++;
+//         }
+//         int[] xadj = new int[cn + 1];
+//         for (int i = 0; i < cn; i++) xadj[i + 1] = xadj[i] + deg[i];
+
+//         int[] adjncy = new int[xadj[cn]];
+//         int[] adjwgt = new int[xadj[cn]];
+//         int[] pos    = Arrays.copyOf(xadj, cn);
+
+//         for (Map.Entry<Long,Integer> e : edgeMap.entrySet()) {
+//             long key = e.getKey(); int w = e.getValue();
+//             int  cu  = (int)(key / cn), cv = (int)(key % cn);
+//             adjncy[pos[cu]] = cv; adjwgt[pos[cu]] = w; pos[cu]++;
+//             adjncy[pos[cv]] = cu; adjwgt[pos[cv]] = w; pos[cv]++;
+//         }
+
+//         return new MetisGraph(cn, xadj, adjncy, adjwgt, cvwgt);
+//     }
+
+//     // ── METIS: initial BFS-based k-way partition ──────────────────────────────
+
+//     /**
+//      * Greedy balanced k-way partition via simultaneous BFS from k evenly-spaced seeds.
+//      *
+//      * <p>At each step, expands the lightest non-empty BFS queue, subject to a balance
+//      * guard that prevents any partition from exceeding 2× the target weight.
+//      * Disconnected components are handled by re-seeding into the lightest partition.
+//      */
+//     @SuppressWarnings("unchecked")
+//     private static int[] bfsKwayPartition(MetisGraph g, int k) {
+//         int   n      = g.n;
+//         int[] part   = new int[n];
+//         int[] partW  = new int[k];
+//         Arrays.fill(part, -1);
+
+//         int totalW  = g.totalWeight();
+//         int targetW = (totalW + k - 1) / k;
+
+//         Queue<Integer>[] queues = new ArrayDeque[k];
+//         int assigned = 0;
+//         for (int p = 0; p < k; p++) {
+//             queues[p] = new ArrayDeque<>();
+//             int seed = (int)((long) p * n / k);
+//             if (part[seed] == -1) {
+//                 part[seed] = p; partW[p] += g.vwgt[seed];
+//  

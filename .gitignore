@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+*.pt
 .DS_Store
 # Build/dist folders
 build/
