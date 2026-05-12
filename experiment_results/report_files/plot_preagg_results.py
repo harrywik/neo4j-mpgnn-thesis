@@ -20,14 +20,18 @@ def build_df(dir: Path, batch_sizes: list[int], fanout: list[int]) -> pd.DataFra
     data = []
 
     def parse_subdir(dir, dataset, batch_size, techniques, fanout) -> dict:
-        fandir = fanout.join("_")
-        baseline = json.parse(str(dir / techniques[0] / dataset / fandir / batch_size / "measurements.json"))
-        improvement = json.parse(str(dir / techniques[1] / dataset / fandir / batch_size / "measurements.json"))
+        fandir = "_".join(map(str, fanout))
+        baseline = json.loads(
+            (dir / techniques[0] / dataset / fandir / str(batch_size) / "measurements.json").read_text(encoding="utf-8")
+        )
+        improvement = json.loads(
+            (dir / techniques[1] / dataset / fandir / str(batch_size) / "measurements.json").read_text(encoding="utf-8")
+        )
 
-        a = baseline["avg_feat_bytes"]
-        b = improvement["avg_feat_bytes"]
-        c = baseline["remote_feature_latency_s"]["mean_s"]
-        d = improvement["remote_feature_latency_s"]["mean_s"]
+        a = baseline["metrics"]["avg_feat_bytes"]
+        b = improvement["metrics"]["avg_feat_bytes"]
+        c = baseline["metrics"]["remote_feature_latency_s"]["mean_s"]
+        d = improvement["metrics"]["remote_feature_latency_s"]["mean_s"]
 
         return {
             "Batch Size": batch_size,
