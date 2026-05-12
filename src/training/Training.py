@@ -1,5 +1,6 @@
 import time
 from typing import Tuple, Union
+import numpy as np
 import torch
 import torch.nn.functional as F
 import torch_geometric.typing as T
@@ -227,20 +228,23 @@ class Trainer:
         if self.feature_store is None or not hasattr(batch, "n_id"):
             return {}
 
-        frontier_nodes = set(getattr(self.feature_store, "_current_frontier_nodes", []) or [])
+        frontier_nodes = getattr(self.feature_store, "_current_frontier_nodes", None) or []
         preagg_map = getattr(self.feature_store, "_last_hybrid_preagg", {})
-        node_ids = batch.n_id.detach().cpu().tolist()
+        n_id_cpu = batch.n_id.detach().cpu()
+        node_ids = n_id_cpu.tolist()
 
-        frontier_mask = torch.tensor(
-            [int(nid) in frontier_nodes for nid in node_ids],
-            dtype=torch.bool,
-            device=batch.x.device,
-        )
+        frontier_tensor = torch.tensor(frontier_nodes, dtype=n_id_cpu.dtype)
+        frontier_mask = torch.isin(n_id_cpu, frontier_tensor).to(batch.x.device)
+
         aggregated_neighbors = torch.zeros_like(batch.x)
-        for i, nid in enumerate(node_ids):
-            preagg = preagg_map.get(int(nid))
-            if preagg is not None:
-                aggregated_neighbors[i] = torch.tensor(preagg, device=batch.x.device, dtype=batch.x.dtype)
+        nid_to_pos = {nid: i for i, nid in enumerate(node_ids)}
+        hits = [(nid_to_pos[nid], vec) for nid, vec in preagg_map.items() if nid in nid_to_pos]
+        if hits:
+            indices, vecs = zip(*hits)
+            agg_np = np.stack(vecs).astype(np.float32, copy=False)
+            aggregated_neighbors[list(indices)] = torch.from_numpy(agg_np).to(
+                device=batch.x.device, dtype=batch.x.dtype
+            )
 
         return {
             "frontier_mask": frontier_mask,
