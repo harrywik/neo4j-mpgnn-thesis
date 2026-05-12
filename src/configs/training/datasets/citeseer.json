@@ -17,7 +17,7 @@
   "planetoid_name": "CiteSeer",
   "lr": 1e-3,
   "batch_size": 32,
-  "max_epochs": 100,
+  "max_epochs": 20,
   "patience": 20,
   "min_delta": 0.01,
   "shuffle": true,
