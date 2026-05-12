@@ -7,7 +7,7 @@ from pathlib import Path
 
 FANOUT = [10, 5]
 
-dir = Path(__file__).resolve().parent / "rq_preagg"
+dir = Path(__file__).resolve().parent
 batch_sizes = [32, 64, 128, 256, 512]
 
 def build_df(dir: Path, batch_sizes: list[int], fanout: list[int]) -> pd.DataFrame:
@@ -20,19 +20,23 @@ def build_df(dir: Path, batch_sizes: list[int], fanout: list[int]) -> pd.DataFra
     data = []
 
     def parse_subdir(dir, dataset, batch_size, techniques, fanout) -> dict:
-        fandir = fanout.join("_")
-        baseline = json.parse(str(dir / techniques[0] / dataset / fandir / batch_size / "measurements.json"))
-        improvement = json.parse(str(dir / techniques[1] / dataset / fandir / batch_size / "measurements.json"))
+        fandir = "_".join(map(str, fanout))
+        baseline = json.loads(
+            (dir / techniques[0] / dataset / fandir / str(batch_size) / "measurements.json").read_text(encoding="utf-8")
+        )
+        improvement = json.loads(
+            (dir / techniques[1] / dataset / fandir / str(batch_size) / "measurements.json").read_text(encoding="utf-8")
+        )
 
-        a = baseline["avg_feat_bytes"]
-        b = improvement["avg_feat_bytes"]
-        c = baseline["remote_feature_latency_s"]["mean_s"]
-        d = improvement["remote_feature_latency_s"]["mean_s"]
+        a = baseline["metrics"]["avg_feat_bytes"]
+        b = improvement["metrics"]["avg_feat_bytes"]
+        c = baseline["metrics"]["remote_feature_latency_s"]["mean_s"]
+        d = improvement["metrics"]["remote_feature_latency_s"]["mean_s"]
 
         return {
             "Batch Size": batch_size,
-            "Bytes Fraction": (a - b) / a,
-            "Relative Mean Latency": c / d,
+            "Bytes Fraction": b / a,
+            "Relative Mean Latency": d / c,
             "Dataset": dataset_displayname[dataset]
         }
 
@@ -59,11 +63,12 @@ sns.lineplot(
     linewidth=2.5,
     ax=ax1
 )
-ax1.set_title("Fraction of Bytes Transferred vs. Batch Size", fontsize=14, pad=15)
+ax1.set_title(r"Fraction of Bytes Transferred (Pre-Agg. $\div$ no Pre-Agg.)", fontsize=14, pad=15)
 ax1.set_xlabel("Batch Size", fontsize=12)
 ax1.set_ylabel("Fraction of Bytes Transferred", fontsize=12)
 ax1.set_xticks(batch_sizes)
-ax1.set_ylim(0, 100)
+ax1.set_ylim(0.2, 1.7)
+ax1.axhline(1.0, color="gray", linestyle="--", label="No difference")
 ax1.legend(title="Dataset")
 
 sns.lineplot(
@@ -75,16 +80,18 @@ sns.lineplot(
     linewidth=2.5,
     ax=ax2
 )
-ax2.set_title("Relative Mean Latency vs. Batch Size", fontsize=14, pad=15)
+ax2.set_title(r"Relative Mean Latency (Pre-Agg. $\div$ no Pre-Agg.)", fontsize=14, pad=15)
 ax2.set_xlabel("Batch Size", fontsize=12)
 ax2.set_ylabel("Relative Mean Latency", fontsize=12)
 ax2.set_xticks(batch_sizes)
+ax2.set_ylim(0.2, 1.7)
+ax2.axhline(1.0, color="gray", linestyle="--", label="No difference")
 ax2.legend(title="Dataset")
 
 # Adjust layout
 plt.tight_layout()
 
 # Save the plot
-output_path = str(dir.parent / "preagg_fanout_and_latency_vs_batch_size.png")
+output_path = str(dir / f"preagg_{"_".join(map(str, FANOUT))}_bytes_and_latency_vs_batch_size.png")
 plt.savefig(output_path, dpi=300, bbox_inches="tight")
 print(f"Plot saved to {output_path}")
