@@ -3,7 +3,7 @@
 
 IMPL1=preagg_neo4j
 IMPL2=java_neo4j
-DATASET=citeseer
+DATASET=coauthor
 
 IMPL1_CONFIG="src/configs/training/implementations/$IMPL1.json"
 IMPL2_CONFIG="src/configs/training/implementations/$IMPL2.json"
