@@ -223,6 +223,7 @@ def _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, s
         max_training_size=dataset_cfg.get("max_training_size"),
         max_validation_size=dataset_cfg.get("max_validation_size"),
         max_test_size=dataset_cfg.get("max_test_size"),
+        use_all_labeled_data=dataset_cfg.get("use_all_labeled_data", False)
     )
     trainer.train(max_epochs=dataset_cfg["max_epochs"])
 
@@ -254,6 +255,7 @@ def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
         batch_size=dataset_cfg["batch_size"],
         nodeloader_args=nodeloader_args,
         num_neighbors=num_neighbors,
+        use_all_labeled_data=dataset_cfg.get("use_all_labeled_data", False)
     )
     trainer.train(max_epochs=dataset_cfg["max_epochs"])
 

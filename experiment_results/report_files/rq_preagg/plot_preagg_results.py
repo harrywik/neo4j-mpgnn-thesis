@@ -67,7 +67,7 @@ ax1.set_title(r"Fraction of Bytes Transferred (Pre-Agg. $\div$ no Pre-Agg.)", fo
 ax1.set_xlabel("Batch Size", fontsize=12)
 ax1.set_ylabel("Fraction of Bytes Transferred", fontsize=12)
 ax1.set_xticks(batch_sizes)
-ax1.set_ylim(0.2, 1.7)
+ax1.set_ylim(0.0, 1.5)
 ax1.axhline(1.0, color="gray", linestyle="--", label="No difference")
 ax1.legend(title="Dataset")
 
@@ -84,7 +84,7 @@ ax2.set_title(r"Relative Mean Latency (Pre-Agg. $\div$ no Pre-Agg.)", fontsize=1
 ax2.set_xlabel("Batch Size", fontsize=12)
 ax2.set_ylabel("Relative Mean Latency", fontsize=12)
 ax2.set_xticks(batch_sizes)
-ax2.set_ylim(0.2, 1.7)
+ax2.set_ylim(0.0, 1.5)
 ax2.axhline(1.0, color="gray", linestyle="--", label="No difference")
 ax2.legend(title="Dataset")
 

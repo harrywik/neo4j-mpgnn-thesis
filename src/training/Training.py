@@ -39,6 +39,7 @@ class Trainer:
         max_training_size: int | None = None,
         max_validation_size: int | None = None,
         max_test_size: int | None = None,
+        use_all_labeled_data: bool = False
     ) -> None:
         self.batch_size = batch_size
         self.measurer = measurer
@@ -48,7 +49,7 @@ class Trainer:
             if sampler is None:
                 raise ValueError("Sampler cannot be None when data is a tuple of (FeatureStore, GraphStore)")
             self.feature_store, self.graph_store = data
-            self.train_indices = train_indices if train_indices is not None else self._get_train_indices(max_training_size)
+            self.train_indices = train_indices if train_indices is not None else self._get_train_indices(max_training_size, use_all_labeled_data=use_all_labeled_data)
             self.sampler = sampler
             self.data = None
             self.nodeloader_args = nodeloader_args
@@ -198,13 +199,27 @@ class Trainer:
         torch.save(snapshot, self.snapshot_path)
         print(f"Epoch {epoch} | Training snapshot saved at {self.snapshot_path}")
 
-    def _get_train_indices(self, limit: int | None = None) -> torch.Tensor:
-        indices = self.graph_store.get_split(
-            limit=limit,
-            split="train",
-            # shuffle=True,
+    def _get_train_indices(self, limit: int | None = None, use_all_labeled_data: bool = False) -> torch.Tensor:
+        if not use_all_labeled_data:
+            indices = self.graph_store.get_split(
+                limit=limit,
+                split="train",
+                # shuffle=True,
+            ).to(torch.long)
+            return indices
+        
+        train = self.graph_store.get_split(
+            split="train"
         ).to(torch.long)
-        return indices
+        val = self.graph_store.get_split(
+            split="val"
+        ).to(torch.long)
+        test = self.graph_store.get_split(
+            split="test"
+        ).to(torch.long)
+
+        return torch.cat((train, val, test))
+
 
     def _get_model_kwargs(self, batch) -> dict:
         if not getattr(self.model, "_uses_hybrid_last_hop_preaggregation", False):
