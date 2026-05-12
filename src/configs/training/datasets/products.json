@@ -14,7 +14,7 @@
   "default_hidden_dim1": 32,
   "default_hidden_dim2": 32,
   "lr": 0.001,
-  "batch_size": 512,
+  "batch_size": 32,
   "max_epochs": 1,
   "patience": 200,
   "min_delta": 0.01,
