@@ -9,10 +9,7 @@
   },
   "sampler": {
     "class_name": "Neo4jJavaNeighborSampler",
-    "num_neighbors": [
-      20,
-      10
-    ],
+    "num_neighbors": [20, 10],
     "extra_kwargs": {
       "random_seed": 42
     }
