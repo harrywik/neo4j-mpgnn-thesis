@@ -283,19 +283,26 @@ class Trainer:
             batch = next(it)
             self.measurer.log_event("end_batch_fetch", 1)
 
+            # Determine which attribute holds the global node IDs
+            n_id = None
             if hasattr(batch, "n_id"):
-                self.measurer.log_node_visits(batch.n_id.tolist())
+                n_id = batch.n_id
+            elif hasattr(batch, "node_idx"):
+                n_id = batch.node_idx
 
-            if hasattr(batch, "edge_index") and hasattr(batch, "n_id"):
-                ei = batch.edge_index.detach().cpu()
-                nid = batch.n_id.detach().cpu()
-                row = nid[ei[0]].tolist()
-                col = nid[ei[1]].tolist()
-                edge_keys = [
-                    f"{a}_{b}" if a <= b else f"{b}_{a}"
-                    for a, b in zip(row, col)
-                ]
-                self.measurer.log_edge_visits(edge_keys)
+            if n_id is not None:
+                self.measurer.log_node_visits(n_id.tolist())
+
+                if hasattr(batch, "edge_index"):
+                    ei = batch.edge_index.detach().cpu()
+                    nid = n_id.detach().cpu()
+                    row = nid[ei[0]].tolist()
+                    col = nid[ei[1]].tolist()
+                    edge_keys = [
+                        f"{a}_{b}" if a <= b else f"{b}_{a}"
+                        for a, b in zip(row, col)
+                    ]
+                    self.measurer.log_edge_visits(edge_keys)
 
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))

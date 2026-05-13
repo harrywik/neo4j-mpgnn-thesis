@@ -18,6 +18,7 @@
   "num_steps": 5,
   "sample_coverage": 100,
   "samplers": [
-    ["Neo4jSampler",                       "Neo4j (Cypher) graphSAGE sampler"]
+    ["Neo4jGraphSAINTRandomWalkSampler", "Neo4j GraphSAINT sampler"],
+    ["PyGGraphSAINTRandomWalkSampler", "PyG GraphSAINT sampler"]
   ]
 }

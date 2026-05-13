@@ -275,6 +275,7 @@ class Neo4jGraphSAINTSampler(torch.utils.data.DataLoader):
         data = Data(
             x=x,
             y=y,
+            n_id=torch.tensor(node_ids, dtype=torch.long),
             edge_index=edge_index,
             train_mask=train_mask,
             num_nodes=len(node_ids),
