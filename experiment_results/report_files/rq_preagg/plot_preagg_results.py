@@ -5,17 +5,17 @@ import json
 
 from pathlib import Path
 
-FANOUT = [20, 10]
+FANOUT = [10, 5]
 
 dir = Path(__file__).resolve().parent
 batch_sizes = [32, 64, 128, 256, 512]
 
 def build_df(dir: Path, batch_sizes: list[int], fanout: list[int]) -> pd.DataFrame:
     techniques = ["no_preagg", "preagg"]
-    datasets = ["products", "citeseer"]
+    datasets = ["products", "coauthor"]
     dataset_displayname = {
         "products": "obgn-products",
-        "citeseer": "CiteSeer"
+        "coauthor": "coauthor"
     }
     data = []
 
