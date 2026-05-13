@@ -14,8 +14,8 @@
   "sampler": {
     "class_name": "Neo4jJavaNeighborSampler",
     "num_neighbors": [
-      20,
-      10
+      10,
+      5
     ]
   },
   "model": {
