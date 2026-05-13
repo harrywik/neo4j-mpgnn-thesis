@@ -36,6 +36,8 @@ class ExperimentMeasurer(Measurer):
         self.coarse_cpu_interval = float(config.get("coarse_cpu_interval", 5))
         self.intensive_cpu_epochs = int(config.get("intensive_cpu_epochs", 3))
         self.cpu_burst_batches = int(config.get("cpu_burst_batches", 3))
+        self.cpu_burst_period_ms = float(config.get("cpu_burst_period_ms", 1.0))
+        self.cpu_burst_max_samples = int(config.get("cpu_burst_max_samples", 8192))
         self._current_phase = "idle"
 
         self._csvfile = open(self.measurements_path, "w", newline="\n")
