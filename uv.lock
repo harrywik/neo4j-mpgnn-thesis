@@ -1519,7 +1519,10 @@ dependencies = [
     { name = "psutil" },
     { name = "pyarrow" },
     { name = "pyg-lib", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'" },
+<<<<<<< HEAD
+=======
     { name = "python-dotenv" },
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
     { name = "redis" },
     { name = "scipy" },
     { name = "seaborn" },
@@ -1544,7 +1547,10 @@ requires-dist = [
     { name = "psutil", specifier = ">=5.9.0" },
     { name = "pyarrow", specifier = "==22.0.0" },
     { name = "pyg-lib", marker = "platform_machine == 'x86_64' and sys_platform == 'linux'", specifier = ">=0.5.0", index = "https://data.pyg.org/whl/torch-2.7.1+cpu.html" },
+<<<<<<< HEAD
+=======
     { name = "python-dotenv", specifier = ">=1.2.2" },
+>>>>>>> fb415b49cd4b80f2a79a085949072d68cc6f672e
     { name = "redis", specifier = ">=5.0.0" },
     { name = "scipy", specifier = "==1.13.1" },
     { name = "seaborn", specifier = ">=0.13.2" },
