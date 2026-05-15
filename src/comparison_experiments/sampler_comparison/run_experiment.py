@@ -379,8 +379,8 @@ def main() -> None:
                 eval_sampler = Neo4jSampler(
                     neo4j_graph_store,
                     num_neighbors=num_neighbors,
-                    # node_label=dataset_cfg["node_label"],
-                    # rel_type=dataset_cfg["rel_type"],
+                    node_label=dataset_cfg["node_label"],
+                    rel_type=dataset_cfg["rel_type"],
                     profile=profile,
                 )
                 trainer = GraphSAINTTrainer(
