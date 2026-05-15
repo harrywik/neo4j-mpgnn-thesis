@@ -41,7 +41,7 @@ class Neo4jFS(FeatureStore):
         profile: bool = False,
         profile_accumulator: Optional[QueryProfileAccumulator] = None,
         node_label: str = None,
-        use_java_fetch: bool = True,
+        use_java_fetch: bool = False,
     ):
         super().__init__()
         self.driver = driver
@@ -185,8 +185,8 @@ class Neo4jFS(FeatureStore):
                 feat_dim = feat_matrix.shape[1]
                 self._feature_dim = feat_dim
 
-            feat_out = np.empty((n, feat_dim), dtype=np.float32)
-            y_out = np.empty(n, dtype=np.int64)
+            feat_out = np.zeros((n, feat_dim), dtype=np.float32)
+            y_out = np.full(n, -1, dtype=np.int64)
 
             for nid, val in cached_x.items():
                 feat_out[nid_to_pos[nid]] = val
@@ -210,8 +210,8 @@ class Neo4jFS(FeatureStore):
                 self.measurer.log_event("start_etl", 1)
                 self.measurer.set_phase("etl")
 
-            feat_out = np.empty((n, feat_dim), dtype=np.float32)
-            y_out = np.empty(n, dtype=np.int64)
+            feat_out = np.zeros((n, feat_dim), dtype=np.float32)
+            y_out = np.full(n, -1, dtype=np.int64)
             for nid, val in cached_x.items():
                 feat_out[nid_to_pos[nid]] = val
             for nid, val in cached_y.items():
@@ -296,6 +296,13 @@ class Neo4jFS(FeatureStore):
         flat_bytes = rec["features"]
 
         n = len(fetched_nids)
+        if n == 0:
+            if self.measurer is not None:
+                self.measurer.log_event("feat_bytes", 0)
+            feat_matrix = np.empty((0, self._feature_dim or 0), dtype=np.float32)
+            y_array = np.empty(0, dtype=np.int64)
+            return fetched_nids, feat_matrix, y_array
+
         feat_matrix = np.frombuffer(memoryview(flat_bytes), dtype=np.float32).reshape(n, -1)
 
         if self.measurer is not None:

@@ -1,0 +1,1909 @@
+{
+  "config": {
+    "dataset_name": "cora",
+    "training_dataset_config": "cora",
+    "training_implementation_config": "baseline_neo4j",
+    "node_label": "Paper",
+    "edge_type": "CITES",
+    "feature_property": "embedding_bytes",
+    "feature_property_type": "byte[]",
+    "target_property": "subject",
+    "nodeid_property": "id",
+    "split_property_name": "split",
+    "split_property_type": "str",
+    "feature_dim": 1433,
+    "nbr_classes": 7,
+    "node_counts": [
+      1,
+      2,
+      4,
+      8,
+      16,
+      32,
+      64,
+      128,
+      256,
+      512,
+      1024,
+      2048
+    ],
+    "nbr_runs": [
+      10,
+      5,
+      2,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ],
+    "inference_batch_size": 256,
+    "num_neighbors": [
+      10,
+      5
+    ],
+    "num_hops": 2,
+    "planetoid_root": "data/Planetoid",
+    "planetoid_name": "Cora"
+  },
+  "model": {
+    "model_class": "GCN",
+    "hidden_dim1": 64,
+    "hidden_dim2": 64,
+    "checkpoint_path": null,
+    "model_name": "experiment_gcn",
+    "strategies": [
+      "full_graph",
+      "neighborhood_sampling",
+      "in_db_java",
+      "in_db_cypher",
+      "in_db_cypher_opt"
+    ]
+  },
+  "results": {
+    "1": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.6,
+          "ci95": 0.32006665972366855
+        },
+        "total_time_s": {
+          "mean": 0.020954641234129667,
+          "ci95": 0.001509209138827915
+        },
+        "ms_per_node": {
+          "mean": 20.954641234129667,
+          "ci95": 1.509209138827915
+        },
+        "throughput_nodes_per_s": {
+          "mean": 48.19353930986385,
+          "ci95": 2.80532741891378
+        },
+        "peak_memory_mb": {
+          "mean": 0.015570831298828126,
+          "ci95": 0.009246757292097176
+        },
+        "p50_batch_ms": {
+          "mean": 2.8149942867457867,
+          "ci95": 0.47033881040826836
+        },
+        "p95_batch_ms": {
+          "mean": 2.8149942867457867,
+          "ci95": 0.47033881040826836
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.7,
+          "ci95": 0.2993949454037815
+        },
+        "total_time_s": {
+          "mean": 0.009794380189850927,
+          "ci95": 0.0008819967925018559
+        },
+        "ms_per_node": {
+          "mean": 9.794380189850926,
+          "ci95": 0.881996792501856
+        },
+        "throughput_nodes_per_s": {
+          "mean": 103.94634871040402,
+          "ci95": 8.8044815350073
+        },
+        "peak_memory_mb": {
+          "mean": 0.19298915863037108,
+          "ci95": 0.07631596009791762
+        },
+        "p50_batch_ms": {
+          "mean": 2.1480430848896503,
+          "ci95": 0.13523542164701527
+        },
+        "p95_batch_ms": {
+          "mean": 2.1480430848896503,
+          "ci95": 0.13523542164701527
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.6,
+          "ci95": 0.32006665972366855
+        },
+        "total_time_s": {
+          "mean": 0.00254633822478354,
+          "ci95": 0.00031387089509382724
+        },
+        "ms_per_node": {
+          "mean": 2.5463382247835398,
+          "ci95": 0.31387089509382726
+        },
+        "throughput_nodes_per_s": {
+          "mean": 405.88667796204584,
+          "ci95": 45.91200511912067
+        },
+        "peak_memory_mb": {
+          "mean": 0.013240623474121093,
+          "ci95": 0.000250303217833117
+        },
+        "p50_batch_ms": {
+          "mean": 2.5294465478509665,
+          "ci95": 0.3137374541929205
+        },
+        "p95_batch_ms": {
+          "mean": 2.5294465478509665,
+          "ci95": 0.3137374541929205
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.8,
+          "ci95": 0.26133333333333336
+        },
+        "total_time_s": {
+          "mean": 0.5069738181307912,
+          "ci95": 0.07663749526847063
+        },
+        "ms_per_node": {
+          "mean": 506.9738181307912,
+          "ci95": 76.63749526847064
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2.0619259306543407,
+          "ci95": 0.25625184834801684
+        },
+        "peak_memory_mb": {
+          "mean": 4.38108196258545,
+          "ci95": 0.00018377741291287193
+        },
+        "p50_batch_ms": {
+          "mean": 506.9627280347049,
+          "ci95": 76.637848077431
+        },
+        "p95_batch_ms": {
+          "mean": 506.9627280347049,
+          "ci95": 76.637848077431
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.7,
+          "ci95": 0.2993949454037815
+        },
+        "total_time_s": {
+          "mean": 0.34951735655777155,
+          "ci95": 0.021632499780131754
+        },
+        "ms_per_node": {
+          "mean": 349.51735655777156,
+          "ci95": 21.632499780131752
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2.885913422254178,
+          "ci95": 0.17153669049214898
+        },
+        "peak_memory_mb": {
+          "mean": 4.38096866607666,
+          "ci95": 0.00037720174570725416
+        },
+        "p50_batch_ms": {
+          "mean": 349.5071369688958,
+          "ci95": 21.632390620726508
+        },
+        "p95_batch_ms": {
+          "mean": 349.5071369688958,
+          "ci95": 21.632390620726508
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 90.0,
+        "ci95": 19.599999999999998
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 80.0,
+        "ci95": 26.13333333333333
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 90.0,
+        "ci95": 19.599999999999998
+      }
+    },
+    "2": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.8,
+          "ci95": 0.24004999479275144
+        },
+        "total_time_s": {
+          "mean": 0.020587824750691652,
+          "ci95": 0.0007065593094454508
+        },
+        "ms_per_node": {
+          "mean": 10.293912375345826,
+          "ci95": 0.3532796547227253
+        },
+        "throughput_nodes_per_s": {
+          "mean": 97.2595274286645,
+          "ci95": 3.2115732187017474
+        },
+        "peak_memory_mb": {
+          "mean": 0.010007286071777343,
+          "ci95": 0.0004247900497857863
+        },
+        "p50_batch_ms": {
+          "mean": 2.6842440478503704,
+          "ci95": 0.24298509145200253
+        },
+        "p95_batch_ms": {
+          "mean": 2.6842440478503704,
+          "ci95": 0.24298509145200253
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.7,
+          "ci95": 0.39199999999999996
+        },
+        "total_time_s": {
+          "mean": 0.00948856035247445,
+          "ci95": 0.0005856620748731684
+        },
+        "ms_per_node": {
+          "mean": 4.7442801762372255,
+          "ci95": 0.2928310374365841
+        },
+        "throughput_nodes_per_s": {
+          "mean": 211.55937867678253,
+          "ci95": 12.13487049253856
+        },
+        "peak_memory_mb": {
+          "mean": 0.3689279556274414,
+          "ci95": 0.2799508106642138
+        },
+        "p50_batch_ms": {
+          "mean": 2.2029335610568523,
+          "ci95": 0.12566239245195723
+        },
+        "p95_batch_ms": {
+          "mean": 2.2029335610568523,
+          "ci95": 0.12566239245195723
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.9,
+          "ci95": 0.19599999999999998
+        },
+        "total_time_s": {
+          "mean": 0.0025634988211095332,
+          "ci95": 0.00028264956547474434
+        },
+        "ms_per_node": {
+          "mean": 1.2817494105547667,
+          "ci95": 0.14132478273737217
+        },
+        "throughput_nodes_per_s": {
+          "mean": 789.5062989554351,
+          "ci95": 81.39701357205246
+        },
+        "peak_memory_mb": {
+          "mean": 0.013426780700683594,
+          "ci95": 0.00034451774994574024
+        },
+        "p50_batch_ms": {
+          "mean": 2.5470872409641743,
+          "ci95": 0.28302202763637413
+        },
+        "p95_batch_ms": {
+          "mean": 2.5470872409641743,
+          "ci95": 0.28302202763637413
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.7,
+          "ci95": 0.39199999999999996
+        },
+        "total_time_s": {
+          "mean": 0.5852106091566384,
+          "ci95": 0.13097803361517293
+        },
+        "ms_per_node": {
+          "mean": 292.6053045783192,
+          "ci95": 65.48901680758647
+        },
+        "throughput_nodes_per_s": {
+          "mean": 3.5656543001863112,
+          "ci95": 0.6412526156676661
+        },
+        "peak_memory_mb": {
+          "mean": 4.381124687194824,
+          "ci95": 0.0002490393988785978
+        },
+        "p50_batch_ms": {
+          "mean": 585.2017131634057,
+          "ci95": 130.97817079356915
+        },
+        "p95_batch_ms": {
+          "mean": 585.2017131634057,
+          "ci95": 130.97817079356915
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.7,
+          "ci95": 0.39199999999999996
+        },
+        "total_time_s": {
+          "mean": 0.34620192693546414,
+          "ci95": 0.025288777440282385
+        },
+        "ms_per_node": {
+          "mean": 173.10096346773207,
+          "ci95": 12.644388720141196
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5.807043605560432,
+          "ci95": 0.39577305283024605
+        },
+        "peak_memory_mb": {
+          "mean": 4.3808595657348635,
+          "ci95": 0.0005211414681337655
+        },
+        "p50_batch_ms": {
+          "mean": 346.1912830360234,
+          "ci95": 25.288369676492234
+        },
+        "p95_batch_ms": {
+          "mean": 346.1912830360234,
+          "ci95": 25.288369676492234
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 80.0,
+        "ci95": 24.004999479275142
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 80.0,
+        "ci95": 24.004999479275142
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 100.0,
+        "ci95": 0.0
+      }
+    },
+    "4": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.875,
+          "ci95": 0.24499999999999997
+        },
+        "total_time_s": {
+          "mean": 0.020224797539412975,
+          "ci95": 4.224870353937149e-05
+        },
+        "ms_per_node": {
+          "mean": 5.056199384853244,
+          "ci95": 0.010562175884842873
+        },
+        "throughput_nodes_per_s": {
+          "mean": 197.77723539010333,
+          "ci95": 0.41314785814542515
+        },
+        "peak_memory_mb": {
+          "mean": 0.010088920593261719,
+          "ci95": 0.0008018875122070313
+        },
+        "p50_batch_ms": {
+          "mean": 2.5752962101250887,
+          "ci95": 0.03817853517830372
+        },
+        "p95_batch_ms": {
+          "mean": 2.5752962101250887,
+          "ci95": 0.03817853517830372
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.011392171029001474,
+          "ci95": 0.0003371435590088367
+        },
+        "ms_per_node": {
+          "mean": 2.8480427572503686,
+          "ci95": 0.08428588975220917
+        },
+        "throughput_nodes_per_s": {
+          "mean": 351.19839179479834,
+          "ci95": 10.393477716095697
+        },
+        "peak_memory_mb": {
+          "mean": 0.8926777839660645,
+          "ci95": 0.5903322029113769
+        },
+        "p50_batch_ms": {
+          "mean": 2.176329493522644,
+          "ci95": 0.048812814056873315
+        },
+        "p95_batch_ms": {
+          "mean": 2.176329493522644,
+          "ci95": 0.048812814056873315
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.875,
+          "ci95": 0.24499999999999997
+        },
+        "total_time_s": {
+          "mean": 0.0031721307896077633,
+          "ci95": 0.0003350662626326084
+        },
+        "ms_per_node": {
+          "mean": 0.7930326974019408,
+          "ci95": 0.08376656565815209
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1264.6550395473016,
+          "ci95": 133.583154581405
+        },
+        "peak_memory_mb": {
+          "mean": 0.012801170349121094,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.1569269485771656,
+          "ci95": 0.33510915935039515
+        },
+        "p95_batch_ms": {
+          "mean": 3.1569269485771656,
+          "ci95": 0.33510915935039515
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.875,
+          "ci95": 0.24499999999999997
+        },
+        "total_time_s": {
+          "mean": 1.0126883864868432,
+          "ci95": 0.23843468152917918
+        },
+        "ms_per_node": {
+          "mean": 253.1720966217108,
+          "ci95": 59.6086703822948
+        },
+        "throughput_nodes_per_s": {
+          "mean": 4.0077148523479735,
+          "ci95": 0.9436053846676213
+        },
+        "peak_memory_mb": {
+          "mean": 4.380877494812012,
+          "ci95": 0.00047851562499999994
+        },
+        "p50_batch_ms": {
+          "mean": 1012.679306557402,
+          "ci95": 238.43372046016157
+        },
+        "p95_batch_ms": {
+          "mean": 1012.679306557402,
+          "ci95": 238.43372046016157
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.875,
+          "ci95": 0.24499999999999997
+        },
+        "total_time_s": {
+          "mean": 0.42469519353471696,
+          "ci95": 0.04057680168189108
+        },
+        "ms_per_node": {
+          "mean": 106.17379838367924,
+          "ci95": 10.14420042047277
+        },
+        "throughput_nodes_per_s": {
+          "mean": 9.440953482997884,
+          "ci95": 0.9020203265762852
+        },
+        "peak_memory_mb": {
+          "mean": 4.3809709548950195,
+          "ci95": 0.0005383300781249999
+        },
+        "p50_batch_ms": {
+          "mean": 424.6837059035897,
+          "ci95": 40.574796944856644
+        },
+        "p95_batch_ms": {
+          "mean": 424.6837059035897,
+          "ci95": 40.574796944856644
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 87.5,
+        "ci95": 24.499999999999996
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 100.0,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 100.0,
+        "ci95": 0.0
+      }
+    },
+    "8": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.021544232964515686,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 2.6930291205644608,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 371.3290704373814,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.011234283447265625,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.0889292247593403,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.0889292247593403,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.0152288181707263,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 1.9036022713407874,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 525.319818669715,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 1.3492975234985352,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 2.6704659685492516,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 2.6704659685492516,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.004654802847653627,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.5818503559567034,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1718.6549595827898,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.013930320739746094,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 4.638021811842918,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 4.638021811842918,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 1.2638741247355938,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 157.98426559194922,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 6.329744270754514,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.381274223327637,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 1263.8639751821756,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 1263.8639751821756,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.4494479149580002,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 56.18098936975002,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 17.799615336401285,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3807268142700195,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 449.43838799372315,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 449.43838799372315,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 62.5,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 62.5,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 100.0,
+        "ci95": 0.0
+      }
+    },
+    "16": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.020758253056555986,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 1.2973908160347492,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 770.7777699986556,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.012049674987792969,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 2.8955540619790554,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 2.8955540619790554,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.5625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.022168889176100492,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 1.3855555735062808,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 721.7321478267411,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 3.8844118118286133,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 2.7408539317548275,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 2.7408539317548275,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.00641088280826807,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.4006801755167544,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2495.7561194793507,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.014502525329589844,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 6.395596079528332,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 6.395596079528332,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 3.5677108061499894,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 222.98192538437434,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 4.484668424475251,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.379488945007324,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3567.7019357681274,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3567.7019357681274,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.7749370620585978,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 48.43356637866236,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 20.646838025137765,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3807878494262695,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 774.9238554388285,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 774.9238554388285,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 87.5,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 81.25,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 100.0,
+        "ci95": 0.0
+      }
+    },
+    "32": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.71875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.02120313048362732,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.6625978276133537,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1509.211105629418,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.013918876647949219,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.1454828567802906,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.1454828567802906,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.71875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.03297676518559456,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 1.03052391204983,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 970.3802001167402,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 6.226706504821777,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.4510549157857895,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.4510549157857895,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.71875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.0093994727358222,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.2937335229944438,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 3404.446281124391,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.014769554138183594,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 9.384052827954292,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 9.384052827954292,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.71875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 6.145402415189892,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 192.04382547468413,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5.207144762547044,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.380846977233887,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 6145.393445156515,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 6145.393445156515,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.71875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 1.1228878069669008,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 35.09024396771565,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 28.49794948476385,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3812150955200195,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 1122.8773789480329,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 1122.8773789480329,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 87.5,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 84.375,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 96.875,
+        "ci95": 0.0
+      }
+    },
+    "64": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.796875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.021582198329269886,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.33722184889484197,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2965.4069072844577,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.017889022827148438,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.5034380853176117,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.5034380853176117,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.8125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.04793837107717991,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.7490370480809361,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1335.0474486703179,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 11.81805419921875,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.7710489705204964,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.7710489705204964,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.015234904829412699,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.23804538795957342,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 4200.879540543029,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.017035484313964844,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 15.217871870845556,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 15.217871870845556,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.8125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 11.889308573212475,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 185.77044645644492,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5.3829875476692495,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.381091117858887,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 11889.298235997558,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 11889.298235997558,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.78125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 2.087783270981163,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 32.62161360908067,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 30.654522856638717,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3814592361450195,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 2087.772618047893,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 2087.772618047893,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 89.0625,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 89.0625,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 96.875,
+        "ci95": 0.0
+      }
+    },
+    "128": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.828125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.022360726725310087,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.17469317754148506,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5724.322003144777,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.026897430419921875,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 4.129796754568815,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 4.129796754568815,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.828125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.08027534885331988,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.6271511629165616,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1594.5119121672483,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 17.91104221343994,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.9397701621055603,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.9397701621055603,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.7890625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.02437330922111869,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.19041647828998975,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5251.6463332394815,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.021788597106933594,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 24.356640875339508,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 24.356640875339508,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.8046875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 21.438856716267765,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 167.4910680958419,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5.970467627729134,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.381579399108887,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 21438.844942022115,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 21438.844942022115,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.8046875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 3.5245267106220126,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 27.535364926734474,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 36.31693288470225,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3819475173950195,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3524.5157252065837,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3524.5157252065837,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 92.96875,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 92.96875,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 97.65625,
+        "ci95": 0.0
+      }
+    },
+    "256": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.78515625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.022438751067966223,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.08765137135924306,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 11408.834619386105,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.045909881591796875,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 3.860530909150839,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 3.860530909150839,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.7890625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.1136074848473072,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.44377923768479377,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2253.3726571279503,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 27.833650588989258,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 4.74183214828372,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 4.74183214828372,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.75,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.040864726062864065,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.15962783618306275,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 6264.5715428554095,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.031073570251464844,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 40.84597807377577,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 40.84597807377577,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.76953125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 38.829888192005455,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 151.6792507500213,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 6.592859570806256,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.382555961608887,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 38829.8767786473,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 38829.8767786473,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.7578125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 6.581051892600954,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 25.707233955472475,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 38.89955651129565,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.3829240798950195,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 6581.038453150541,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 6581.038453150541,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 93.75,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 95.3125,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 98.046875,
+        "ci95": 0.0
+      }
+    },
+    "512": {
+      "full_graph": {
+        "accuracy": {
+          "mean": 0.765625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.028984055388718843,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.05660948318109149,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 17664.884817991355,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.08463573455810547,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 4.265782656148076,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 4.484397568739951,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 2.0,
+          "ci95": 0.0
+        }
+      },
+      "neighborhood_sampling": {
+        "accuracy": {
+          "mean": 0.76171875,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.2268258472904563,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.44301923298917245,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 2257.2383443777944,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 26.241368293762207,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 4.859796958044171,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 4.870388121344149,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 2.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.76953125,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 0.10195307293906808,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 0.19912709558411734,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 5021.918273184322,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 0.06066322326660156,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 50.955417566001415,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 51.074679056182504,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 2.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher": {
+        "accuracy": {
+          "mean": 0.775390625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 75.43864161614329,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 147.34109690652986,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 6.786972684439694,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.412727355957031,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 37719.307388411835,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 37908.21587413084,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 2.0,
+          "ci95": 0.0
+        }
+      },
+      "in_db_cypher_opt": {
+        "accuracy": {
+          "mean": 0.775390625,
+          "ci95": 0.0
+        },
+        "total_time_s": {
+          "mean": 12.447047044988722,
+          "ci95": 0.0
+        },
+        "ms_per_node": {
+          "mean": 24.310638759743597,
+          "ci95": 0.0
+        },
+        "throughput_nodes_per_s": {
+          "mean": 41.13425442592307,
+          "ci95": 0.0
+        },
+        "peak_memory_mb": {
+          "mean": 4.413095474243164,
+          "ci95": 0.0
+        },
+        "p50_batch_ms": {
+          "mean": 6223.512628348544,
+          "ci95": 0.0
+        },
+        "p95_batch_ms": {
+          "mean": 6310.973925772123,
+          "ci95": 0.0
+        },
+        "n_batches": {
+          "mean": 2.0,
+          "ci95": 0.0
+        }
+      },
+      "_ns_vs_java_agreement": {
+        "mean": 92.96875,
+        "ci95": 0.0
+      },
+      "_java_vs_cypher_agreement": {
+        "mean": 91.796875,
+        "ci95": 0.0
+      },
+      "_cypher_vs_opt_agreement": {
+        "mean": 97.8515625,
+        "ci95": 0.0
+      }
+    }
+  }
+}
