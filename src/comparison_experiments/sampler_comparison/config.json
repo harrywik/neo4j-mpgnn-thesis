@@ -1,6 +1,6 @@
 {
   "profile": false,
-  "num_runs": 3,
+  "num_runs": 10,
   "max_epochs": 90,
   "batch_size": 30,
   "num_neighbors": [10, 5],
