@@ -947,6 +947,13 @@ def plot_node_visit_kl_divergence(
     fig.savefig(out_dir / "comparison_node_visit_kl.png", dpi=150)
     plt.close(fig)
 
+    # Also save as a CSV table
+    try:
+        df_kl = pd.DataFrame(kl_matrix, index=samplers, columns=samplers)
+        df_kl.to_csv(out_dir / "comparison_node_visit_kl.csv")
+    except Exception as e:
+        print(f"  WARNING: Failed to save node visit KL CSV: {e}")
+
 
 # ---------------------------------------------------------------------------
 # Edge visit distribution plots (canonical undirected ``minId_maxId`` keys)
@@ -1160,6 +1167,13 @@ def plot_edge_visit_kl_divergence(
     fig.tight_layout()
     fig.savefig(out_dir / "comparison_edge_visit_kl.png", dpi=150)
     plt.close(fig)
+
+    # Also save as a CSV table
+    try:
+        df_kl = pd.DataFrame(kl_matrix, index=samplers, columns=samplers)
+        df_kl.to_csv(out_dir / "comparison_edge_visit_kl.csv")
+    except Exception as e:
+        print(f"  WARNING: Failed to save edge visit KL CSV: {e}")
 
 
 # ---------------------------------------------------------------------------
