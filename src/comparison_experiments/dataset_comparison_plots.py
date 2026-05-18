@@ -170,6 +170,6 @@ def plot_all_dataset_comparisons(
             title="Training time decomposition per batch — datasets",
         )
     except Exception as e:
-        print(f"  Warning: time decomposition plot failed: {e}")
+        print(f"Warning: time decomposition plot failed: {e}")
 
-    print(f"  Dataset comparison plots written to: {output_dir}")
+    print(f"Dataset comparison plots written to: {output_dir}")

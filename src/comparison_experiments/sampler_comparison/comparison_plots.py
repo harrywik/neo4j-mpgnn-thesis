@@ -1529,4 +1529,4 @@ def plot_comparison(
         pairwise_edge_stats=pairwise_edge_stats,
     )
 
-    print(f"  Plots written to {experiment_dir}")
+    print(f"Plots written to {experiment_dir}")

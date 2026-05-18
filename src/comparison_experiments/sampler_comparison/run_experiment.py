@@ -305,6 +305,8 @@ def main() -> None:
             )
         dataset = Planetoid(root="data/Planetoid", name="Cora")
         pyg_graph = dataset[0]
+        # Ensure the graph has global node IDs for visit tracking
+        pyg_graph.n_id = torch.arange(pyg_graph.num_nodes)
         pyg_train_indices = torch.where(pyg_graph.train_mask.reshape(-1))[0]
 
     # ------------------------------------------------------------------
@@ -443,7 +445,7 @@ def main() -> None:
         sampler_dir = experiment_dir / sampler_name
         if sampler_dir.exists():
             shutil.rmtree(sampler_dir)
-            print(f"  Removed run data: {sampler_dir.name}/")
+            print(f"Removed run data: {sampler_dir.name}/")
 
     print(f"Done. Results in: {experiment_dir}")
 
