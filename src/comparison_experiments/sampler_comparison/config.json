@@ -1,7 +1,7 @@
 {
   "profile": false,
-  "num_runs": 10,
-  "max_epochs": 90,
+  "num_runs": 1,
+  "max_epochs": 30,
   "batch_size": 30,
   "num_neighbors": [10, 5],
   "lr": 1e-3,
