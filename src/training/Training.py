@@ -289,12 +289,15 @@ class Trainer:
                 n_id = batch.n_id
             elif hasattr(batch, "node_idx"):
                 n_id = batch.node_idx
+            elif isinstance(batch, dict):
+                n_id = batch.get("n_id") or batch.get("node_idx")
 
             if n_id is not None:
                 self.measurer.log_node_visits(n_id.tolist())
 
-                if hasattr(batch, "edge_index"):
-                    ei = batch.edge_index.detach().cpu()
+                if hasattr(batch, "edge_index") or (isinstance(batch, dict) and "edge_index" in batch):
+                    ei = batch.edge_index if hasattr(batch, "edge_index") else batch["edge_index"]
+                    ei = ei.detach().cpu()
                     nid = n_id.detach().cpu()
                     row = nid[ei[0]].tolist()
                     col = nid[ei[1]].tolist()
@@ -303,6 +306,9 @@ class Trainer:
                         for a, b in zip(row, col)
                     ]
                     self.measurer.log_edge_visits(edge_keys)
+            elif batch_idx == 0 and epoch == 0:
+                keys = getattr(batch, "keys", lambda: "no keys")()
+                print(f"[DEBUG] No node IDs found in batch. Available keys/attributes: {keys}")
 
             self.measurer.log_event("batch_nbr_nodes_total", int(batch.x.shape[0]))
             self.measurer.log_event("batch_nbr_edges_total", int(batch.edge_index.shape[1]))

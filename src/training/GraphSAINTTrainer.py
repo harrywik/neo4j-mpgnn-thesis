@@ -76,10 +76,12 @@ class GraphSAINTTrainer(Trainer):
         cpu_monitor_interval: float | None = 1,
         max_validation_size: int | None = None,
         max_test_size: int | None = None,
+        eval_every_epochs: int = 1,
     ) -> None:
         self.batch_size = batch_size
         self.measurer = measurer
         self.num_neighbors = None
+        self.eval_every_epochs = eval_every_epochs
 
         if isinstance(data, tuple) and len(data) == 2 and isinstance(data[0], FeatureStore):
             # Neo4j path: train_loader and eval_sampler are injected externally.

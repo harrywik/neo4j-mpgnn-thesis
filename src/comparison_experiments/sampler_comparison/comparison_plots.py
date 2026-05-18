@@ -895,6 +895,8 @@ def plot_node_visit_kl_divergence(
     samplers = [name for name, data in agg.items() if data.get("node_visit_counts")]
     if len(samplers) < 2:
         return
+    
+    print(f"  Generating KL divergence plots for {len(samplers)} samplers: {samplers}")
 
     # Union vocabulary
     all_nodes: set[int] = set()
