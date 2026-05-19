@@ -32,7 +32,7 @@ class Trainer:
         batch_size: int = 100,
         drop_last: bool = True,
         optimizer: optim.Optimizer = None,
-        max_train_seconds: int = 3600,
+        max_train_seconds: int = 2 * 3600,
         device: str = "cpu",
         nodeloader_args: dict | None = None,
         criterion = None,
@@ -40,7 +40,8 @@ class Trainer:
         max_training_size: int | None = None,
         max_validation_size: int | None = None,
         max_test_size: int | None = None,
-        use_all_labeled_data: bool = False
+        use_all_labeled_data: bool = False,
+        load_snapshot_path: str | None = None,
     ) -> None:
         self.batch_size = batch_size
         self.measurer = measurer
@@ -121,6 +122,7 @@ class Trainer:
             optimizer=optimizer,
             lr=lr,
             snapshot_path=snapshot_path,
+            load_snapshot_path=load_snapshot_path,
             max_train_seconds=max_train_seconds,
             device=device,
             patience=patience,
@@ -145,6 +147,7 @@ class Trainer:
         cpu_monitor_interval: float | None,
         max_validation_size: int | None,
         max_test_size: int | None,
+        load_snapshot_path: str | None = None,
     ) -> None:
         """Shared post-loader initialisation. Called by __init__ and subclass __init__."""
         self.model = model
@@ -155,6 +158,8 @@ class Trainer:
         self.max_train_seconds = max_train_seconds
         self.epochs_run = 0
         self.device = torch.device(device)
+        if load_snapshot_path:
+            self._load_snapshot(load_snapshot_path)
         self.model.to(self.device)
         self.nbr_training_datapoints = len(self.train_indices)
         self.early_stopping = EarlyStopping(min_delta=min_delta, patience=patience)
@@ -188,6 +193,13 @@ class Trainer:
         """Log the number of seed (training) nodes in a batch. Override in subclasses."""
         if hasattr(batch, "input_id"):
             self.measurer.log_event("batch_nbr_seed_nodes", int(batch.input_id.shape[0]))
+
+    def _load_snapshot(self, path: str) -> None:
+        snapshot = torch.load(path, map_location="cpu")
+        model = self.model.module if hasattr(self.model, "module") else self.model
+        model.load_state_dict(snapshot["MODEL_STATE"])
+        self.epochs_run = snapshot.get("EPOCHS_RUN", 0) + 1
+        print(f"Resumed from snapshot at {path} (epoch {self.epochs_run})")
 
     def _save_snapshot(self, epoch: int) -> None:
         if not self.snapshot_path:

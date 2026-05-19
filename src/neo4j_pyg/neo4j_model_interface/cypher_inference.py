@@ -147,16 +147,28 @@ def _build_init_block(ctx: SamplerCtx) -> str:
       h_map       : {toString(nodeId) → featureVector as List<Float>}
       in_degrees  : {toString(nodeId) → in_degree as Float}
       adj         : {toString(dstNodeId) → [toString(srcNodeId), ...]}
+
+    in_degrees mirrors Java's getStoredIncomingDegreeOrCount: use n.in_degree
+    when present, else count incoming relationships of the configured type
+    ending at neighbours of the configured label.
     """
-    nid  = ctx.nodeid_prop
-    feat = ctx.feature_prop
+    nid     = ctx.nodeid_prop
+    feat    = ctx.feature_prop
+    rel_flt = f":{ctx.edge_type}"  if ctx.edge_type  else ""
+    nbr_flt = f":{ctx.node_label}" if ctx.node_label else ""
     return f"""\
 WITH ordered_nodes, edges, nodes_by_hop,
     apoc.map.fromPairs(
         [n IN ordered_nodes | [toString(n.{nid}), n.{feat}]]
     ) AS h_map,
     apoc.map.fromPairs(
-        [n IN ordered_nodes | [toString(n.{nid}), toFloat(coalesce(n.in_degree, 0))]]
+        [n IN ordered_nodes |
+            [toString(n.{nid}),
+             CASE
+                 WHEN n.in_degree IS NOT NULL THEN toFloat(n.in_degree)
+                 ELSE toFloat(size([(n)<-[_dr{rel_flt}]-(_dnbr{nbr_flt}) | 1]))
+             END]
+        ]
     ) AS in_degrees,
     apoc.map.fromPairs(
         [dst IN ordered_nodes |

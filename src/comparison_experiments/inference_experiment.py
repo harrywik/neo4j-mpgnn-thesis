@@ -164,24 +164,28 @@ def _gnn_model_dir(cfg: dict) -> Path:
     return _CHECKPOINT_DIR.parent / "inference_spec" / f"{ds_name}_{model_class}"
 
 
-def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None:
-    # 1. Explicit checkpoint in config takes priority
+def train_or_load(model, cfg: dict, graph_store, feature_store, sampler, *, retrain: bool = False) -> None:
+    # 1. Explicit checkpoint in config takes priority — load weights first,
+    #    then fall through to training if --retrain was requested.
     explicit = cfg["model"].get("checkpoint_path")
     if explicit:
         state = torch.load(explicit, map_location="cpu")
         model.load_state_dict(state["MODEL_STATE"])
         print(f"Loaded checkpoint from {explicit}")
-        return
+        if not retrain:
+            return
+        print("[--retrain] Checkpoint loaded; continuing to train.")
 
     # 2. Auto-saved checkpoint from a previous inference experiment run
-    ckpt = _checkpoint_path(cfg)
-    if ckpt.exists():
-        state = torch.load(ckpt, map_location="cpu")
-        model.load_state_dict(state["MODEL_STATE"])
-        print(f"Loaded cached checkpoint from {ckpt}")
-        return
+    elif not retrain:
+        ckpt = _checkpoint_path(cfg)
+        if ckpt.exists():
+            state = torch.load(ckpt, map_location="cpu")
+            model.load_state_dict(state["MODEL_STATE"])
+            print(f"Loaded cached checkpoint from {ckpt}")
+            return
 
-    # 3. No checkpoint found — train and save
+    # 3. Train (either no checkpoint found, or --retrain requested)
     train_ds = cfg["train_ds"]
     train_impl = cfg["train_impl"]
 
@@ -204,11 +208,11 @@ def train_or_load(model, cfg: dict, graph_store, feature_store, sampler) -> None
         max_test_size=train_ds.get("max_test_size"),
     )
     trainer.train(max_epochs=train_ds["max_epochs"])
-
     # Save for next run
-    ckpt.parent.mkdir(parents=True, exist_ok=True)
-    torch.save({"MODEL_STATE": model.state_dict()}, ckpt)
-    print(f"Saved checkpoint to {ckpt}")
+    save_ckpt = _checkpoint_path(cfg)
+    save_ckpt.parent.mkdir(parents=True, exist_ok=True)
+    torch.save({"MODEL_STATE": model.state_dict()}, save_ckpt)
+    print(f"Saved checkpoint to {save_ckpt}")
 
 
 # ---------------------------------------------------------------------------
@@ -1228,6 +1232,15 @@ def main() -> None:
             "Example: --strategies neighborhood_sampling in_db_java"
         ),
     )
+    parser.add_argument(
+        "--retrain",
+        action="store_true",
+        default=False,
+        help=(
+            "Load the checkpoint (if any) and then train the model before running "
+            "inference. Without this flag, a found checkpoint skips training entirely."
+        ),
+    )
     args = parser.parse_args()
 
     cfg = load_all_configs(args.dataset, args.model)
@@ -1248,7 +1261,7 @@ def main() -> None:
     driver = Neo4jConnection(uri, user, password).get_driver()
 
     model, graph_store, feature_store, training_sampler = build_components(cfg, driver)
-    train_or_load(model, cfg, graph_store, feature_store, training_sampler)
+    train_or_load(model, cfg, graph_store, feature_store, training_sampler, retrain=args.retrain)
     model.eval()
 
     # Pre-export inference spec so verify_subgraph_match can call the Java
