@@ -258,38 +258,6 @@ def plot_accuracy(results: dict, output_dir: Path, config: dict | None = None) -
 
 
 # ---------------------------------------------------------------------------
-# 4. Memory usage vs N
-# ---------------------------------------------------------------------------
-
-def plot_memory(results: dict, output_dir: Path) -> None:
-    data = _extract(results, "peak_memory_mb")
-    # skip strategies where memory is always ~0 (full_graph pre-loads outside measurement)
-    data = {s: v for s, v in data.items() if max(v[1]) > 0.1}
-    if not data:
-        return
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        color = _color(i)
-        ax.plot(ns, means, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, np.maximum(means - cis, 0), means + cis,
-                        alpha=0.18, color=_lighten(color))
-
-    ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(_N_FMT)
-    ax.set_xlabel("N (number of seed nodes)", fontsize=11)
-    ax.set_ylabel("Peak memory (MB)", fontsize=11)
-    ax.set_title("Python-side peak memory vs N (± 95 % CI)", fontsize=12)
-    ax.legend(fontsize=10)
-    ax.grid(True, which="both", linestyle="--", alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(output_dir / "inference_memory.png", dpi=150)
-    plt.close(fig)
-
-
-# ---------------------------------------------------------------------------
 # 5. Batch P50 / P95 latency vs N  (batched strategies only)
 # ---------------------------------------------------------------------------
 

@@ -29,7 +29,6 @@ import random
 import sys
 import time
 import traceback
-import tracemalloc
 from datetime import date, datetime
 from pathlib import Path
 from typing import Any, List
@@ -282,7 +281,7 @@ def run_full_graph_pyg(
     -------
     preds   : {local_node_idx → predicted_class}
     labels  : {local_node_idx → true_class}  (from Planetoid)
-    metrics : timing / memory / batch-latency metrics
+    metrics : timing / batch-latency metrics
               (load_time_s is NOT included here; caller adds it)
     """
     data = pyg_loader.data
@@ -293,7 +292,6 @@ def run_full_graph_pyg(
 
     input_nodes = torch.tensor(seed_ids, dtype=torch.long)
 
-    tracemalloc.start()
     t0 = time.monotonic()
 
     loader = NeighborLoader(
@@ -326,15 +324,12 @@ def run_full_graph_pyg(
             batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
     elapsed = time.monotonic() - t0
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
 
     lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
         "ms_per_node": elapsed * 1000 / max(len(preds), 1),
         "throughput_nodes_per_s": len(preds) / max(elapsed, 1e-9),
-        "peak_memory_mb": peak / 1024 / 1024,
         "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
         "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
         "n_batches": len(batch_latencies),
@@ -355,7 +350,6 @@ def run_neighborhood_sampling(
     inference_sampler,
 ) -> tuple[dict[int, int], dict[str, Any]]:
     batch_size = cfg["dataset"].get("inference_batch_size", 256)
-    tracemalloc.start()
     t_total_start = time.monotonic()
 
     device = next(model.parameters()).device
@@ -385,15 +379,12 @@ def run_neighborhood_sampling(
             batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
     elapsed = time.monotonic() - t_total_start
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
 
     lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
         "ms_per_node": elapsed * 1000 / max(len(test_ids), 1),
         "throughput_nodes_per_s": len(test_ids) / max(elapsed, 1e-9),
-        "peak_memory_mb": peak / 1024 / 1024,
         "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
         "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
         "n_batches": len(batch_latencies),
@@ -445,7 +436,6 @@ def run_in_db_java(
     _mn = ds.get("num_neighbors", ds.get("max_neighbors", 10))
     max_neighbors = _mn if isinstance(_mn, list) else [_mn] * num_hops
 
-    tracemalloc.start()
     t_total_start = time.monotonic()
 
     preds: dict[int, int] = {}
@@ -476,15 +466,12 @@ def run_in_db_java(
         batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
     elapsed = time.monotonic() - t_total_start
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
 
     lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
         "ms_per_node": elapsed * 1000 / max(len(test_ids), 1),
         "throughput_nodes_per_s": len(test_ids) / max(elapsed, 1e-9),
-        "peak_memory_mb": peak / 1024 / 1024,
         "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
         "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
         "n_batches": len(batch_latencies),
@@ -861,8 +848,8 @@ def _fmt(mean, ci95, *, pct=False, decimals=2) -> str:
 def print_table(N: int, nbr_runs: int, results: dict[str, dict]) -> None:
     header = f"\nN = {N} nodes  ({nbr_runs} runs)"
     print(header)
-    col_w = [22, 14, 12, 12, 10, 12, 12]
-    cols = ["Strategy", "Accuracy", "ms/node", "Nodes/s", "Mem(MB)", "P50(ms)", "P95(ms)"]
+    col_w = [22, 14, 12, 12, 12, 12]
+    cols = ["Strategy", "Accuracy", "ms/node", "Nodes/s", "P50(ms)", "P95(ms)"]
     fmt_row = "".join(f"{{:<{w}}}" for w in col_w)
     sep = "─" * sum(col_w)
     print(fmt_row.format(*cols))
@@ -871,7 +858,6 @@ def print_table(N: int, nbr_runs: int, results: dict[str, dict]) -> None:
         acc  = agg.get("accuracy", {})
         ms   = agg.get("ms_per_node", {})
         thr  = agg.get("throughput_nodes_per_s", {})
-        mem  = agg.get("peak_memory_mb", {})
         p50  = agg.get("p50_batch_ms", {})
         p95  = agg.get("p95_batch_ms", {})
         row = [
@@ -879,7 +865,6 @@ def print_table(N: int, nbr_runs: int, results: dict[str, dict]) -> None:
             _fmt(acc.get("mean"), acc.get("ci95"), pct=True),
             _fmt(ms.get("mean"), ms.get("ci95"), decimals=2),
             _fmt(thr.get("mean"), thr.get("ci95"), decimals=1),
-            _fmt(mem.get("mean"), mem.get("ci95"), decimals=1),
             _fmt(p50.get("mean"), p50.get("ci95"), decimals=1),
             _fmt(p95.get("mean"), p95.get("ci95"), decimals=1),
         ]

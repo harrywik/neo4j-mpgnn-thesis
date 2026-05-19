@@ -25,7 +25,6 @@ from __future__ import annotations
 
 import struct
 import time
-import tracemalloc
 from dataclasses import dataclass
 from typing import Any, Callable
 import numpy as np
@@ -607,12 +606,11 @@ def run_cypher_inference(
     -------
     (preds, metrics)
         preds   : {nodeId → predicted_class}
-        metrics : timing / memory / batch-latency dict matching run_in_db_java output.
+        metrics : timing / batch-latency dict matching run_in_db_java output.
     """
     preds: dict[int, int] = {}
     batch_latencies: list[float] = []
 
-    tracemalloc.start()
     t_total = time.monotonic()
 
     for i in range(0, len(seed_ids), batch_size):
@@ -626,15 +624,12 @@ def run_cypher_inference(
         batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
     elapsed = time.monotonic() - t_total
-    _, peak = tracemalloc.get_traced_memory()
-    tracemalloc.stop()
 
     lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
         "ms_per_node": elapsed * 1000 / max(len(seed_ids), 1),
         "throughput_nodes_per_s": len(seed_ids) / max(elapsed, 1e-9),
-        "peak_memory_mb": peak / 1024 / 1024,
         "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
         "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
         "n_batches": len(batch_latencies),
