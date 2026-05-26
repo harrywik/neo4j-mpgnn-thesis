@@ -27,5 +27,6 @@
   "max_training_size": null,
   "max_validation_size": 1000,
   "max_test_size": 1000,
+  "load_snapshot_path": "checkpoints/inference/papers100M_GCN.pt",
   "nbr_runs": 1
 }

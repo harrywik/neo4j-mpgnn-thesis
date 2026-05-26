@@ -122,14 +122,14 @@ class Neo4jFS(FeatureStore):
         return {"node_ids": nids}
 
     def _decode_feature_matrix(self, records: List[object], field_name: str) -> np.ndarray:
-        """Convert raw DB records to a float32 ndarray. Supports ``byte[]`` and ``f64[]``."""
+        """Convert raw DB records to a float32 ndarray. Supports ``byte[]``, ``f64[]``, and ``float64[]``."""
         fpt = self.feature_property_type
         if fpt == "byte[]":
             return np.stack([
                 np.frombuffer(memoryview(rec[field_name]), dtype=np.float32)
                 for rec in records
             ])
-        if fpt == "f64[]":
+        if fpt in ("f64[]", "float64[]"):
             return np.asarray([rec[field_name] for rec in records], dtype=np.float32)
         raise ValueError(f"Unsupported feature_property_type: {fpt!r}")
 

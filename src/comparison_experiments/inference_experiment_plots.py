@@ -183,13 +183,28 @@ def plot_latency_per_node_linear(results: dict, output_dir: Path) -> None:
 # 3. Accuracy bar chart at the largest N
 # ---------------------------------------------------------------------------
 
-def plot_accuracy(results: dict, output_dir: Path) -> None:
-    """Bar chart of mean accuracy (± 95 % CI) at the largest measured N."""
+def plot_accuracy(results: dict, output_dir: Path, config: dict | None = None) -> None:
+    """Bar chart of mean accuracy (± 95 % CI) at the largest measured N.
+
+    The 95 % CI is computed as the Wald binomial CI over the predicted
+    nodes themselves (n = N · nbr_runs), rather than across run replicates.
+    """
     all_ns = sorted(int(n) for n in results)
     if not all_ns:
         return
     max_n = all_ns[-1]
     max_n_str = str(max_n)
+
+    # Total number of node predictions at max_n: N · nbr_runs.
+    nbr_runs_at_max = 1
+    if config is not None:
+        node_counts = config.get("node_counts") or []
+        nbr_runs_list = config.get("nbr_runs") or []
+        for nc, nr in zip(node_counts, nbr_runs_list):
+            if int(nc) == max_n:
+                nbr_runs_at_max = int(nr)
+                break
+    n_total = max_n * nbr_runs_at_max
 
     by_strat = results[max_n_str]
     # Collect only real strategies (skip internal _agreement keys)
@@ -201,8 +216,10 @@ def plot_accuracy(results: dict, output_dir: Path) -> None:
         mean = entry.get("mean")
         if mean is None:
             continue
+        # Wald 95 % CI on a proportion: 1.96 · sqrt(p(1-p)/n)
+        ci = 1.96 * np.sqrt(mean * (1 - mean) / n_total) if n_total > 0 else 0.0
         means.append(mean * 100)
-        cis.append((entry.get("ci95") or 0.0) * 100)
+        cis.append(ci * 100)
         labels.append(strat)
         colors.append(_color(i))
 
@@ -237,38 +254,6 @@ def plot_accuracy(results: dict, output_dir: Path) -> None:
     ax.grid(axis="y", linestyle="--", alpha=0.3)
     fig.tight_layout()
     fig.savefig(output_dir / "inference_accuracy.png", dpi=150)
-    plt.close(fig)
-
-
-# ---------------------------------------------------------------------------
-# 4. Memory usage vs N
-# ---------------------------------------------------------------------------
-
-def plot_memory(results: dict, output_dir: Path) -> None:
-    data = _extract(results, "peak_memory_mb")
-    # skip strategies where memory is always ~0 (full_graph pre-loads outside measurement)
-    data = {s: v for s, v in data.items() if max(v[1]) > 0.1}
-    if not data:
-        return
-
-    fig, ax = plt.subplots(figsize=(8, 4))
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        color = _color(i)
-        ax.plot(ns, means, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, np.maximum(means - cis, 0), means + cis,
-                        alpha=0.18, color=_lighten(color))
-
-    ax.set_xscale("log", base=2)
-    ax.xaxis.set_major_formatter(_N_FMT)
-    ax.set_xlabel("N (number of seed nodes)", fontsize=11)
-    ax.set_ylabel("Peak memory (MB)", fontsize=11)
-    ax.set_title("Python-side peak memory vs N (± 95 % CI)", fontsize=12)
-    ax.legend(fontsize=10)
-    ax.grid(True, which="both", linestyle="--", alpha=0.3)
-    fig.tight_layout()
-    fig.savefig(output_dir / "inference_memory.png", dpi=150)
     plt.close(fig)
 
 
@@ -465,6 +450,7 @@ def plot_all(results_json_path: str | Path, output_dir: Path | None = None) -> P
         data = json.load(f)
 
     results = data["results"]
+    config = data.get("config")
     if output_dir is None:
         output_dir = results_json_path.parent
     output_dir = Path(output_dir)
@@ -475,7 +461,7 @@ def plot_all(results_json_path: str | Path, output_dir: Path | None = None) -> P
 
     plot_latency_per_node(results, output_dir)
     plot_latency_per_node_linear(results, output_dir)
-    plot_accuracy(results, output_dir)
+    plot_accuracy(results, output_dir, config=config)
     plot_ms_per_node_scaling(results, output_dir)
 
     plots = [
