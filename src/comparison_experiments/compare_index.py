@@ -19,7 +19,7 @@ QUERY = """
 PROFILE 
 UNWIND range(0, 127) AS targetId
 MATCH (p:Paper {id: targetId}) 
-RETURN id(p);
+RETURN elementId(p);
 """
 
 NUM_RUNS = 20
