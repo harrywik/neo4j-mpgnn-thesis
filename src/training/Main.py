@@ -110,7 +110,7 @@ def _make_graph_store(impl_cfg: dict, common_kwargs: dict, driver, measurer, pro
     return cls(**filter_kwargs(cls, kwargs))
 
 
-def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
+def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer, profile: bool = False):
     s_cfg = impl_cfg["sampler"]
     cls = SAMPLERS[s_cfg["class_name"]]
     kwargs = dict(s_cfg.get("extra_kwargs", {}))
@@ -129,17 +129,19 @@ def _make_sampler(impl_cfg: dict, graph_store, dataset_cfg: dict, measurer):
     kwargs["feature_key"] = dataset_cfg["feature_property"]
     kwargs["feature_type"] = dataset_cfg["feature_property_type"]
     kwargs["measurer"] = measurer
+    kwargs["profile"] = profile
     return cls(**filter_kwargs(cls, {"graph_store": graph_store, **kwargs}))
 
 
 def _make_feature_store(impl_cfg: dict, common_kwargs: dict, driver, measurer,
-                        profile_accumulator, sampler):
+                        profile_accumulator, sampler, profile: bool = False):
     fs_cfg = impl_cfg["feature_store"]
     cls = FEATURE_STORES[fs_cfg["class_name"]]
     kwargs = dict(common_kwargs)
     kwargs.update(fs_cfg.get("extra_kwargs", {}))
     kwargs["measurer"] = measurer
     kwargs["profile_accumulator"] = profile_accumulator
+    kwargs["profile"] = profile
     if fs_cfg["connection_mode"] == "driver":
         kwargs["driver"] = driver
     if impl_cfg.get("needs_sampler_in_fs"):
@@ -485,12 +487,13 @@ def main():
         graph_store = _make_graph_store(impl_cfg, common_kwargs, driver, measurer, profile_accumulator)
         sampler = None
         if impl_cfg.get("sampler"):
-            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer)
+            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer, profile=profile)
 
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler,
+                profile=profile,
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
@@ -544,12 +547,13 @@ def main():
         )
         sampler = None
         if impl_cfg.get("sampler"):
-            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer)
+            sampler = _make_sampler(impl_cfg, graph_store, dataset_cfg, measurer, profile=profile)
 
         feature_store = None
         if impl_cfg.get("feature_store"):
             feature_store = _make_feature_store(
-                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler
+                impl_cfg, common_kwargs, driver, measurer, profile_accumulator, sampler,
+                profile=profile,
             )
 
         _log_config(measurer, impl_cfg, dataset_cfg, sampler, model)
