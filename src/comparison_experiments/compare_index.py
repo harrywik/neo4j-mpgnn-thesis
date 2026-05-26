@@ -14,81 +14,81 @@ AUTH = (USER, PASSWORD)
 
 DATABASES = ["arxiv2", "papers100M"]
 
-# The isolated index-seek query
+# Increased range to get better signal-to-noise ratio
+# We'll use a parameter for the range size to keep it flexible
 QUERY = """
-PROFILE 
-UNWIND range(0, 127) AS targetId
+UNWIND range(0, $limit) AS targetId
 MATCH (p:Paper {id: targetId}) 
 RETURN elementId(p) AS internal_id;
 """
 
-NUM_RUNS = 20
-WARMUP_RUNS = 5
+PROFILE_QUERY = "PROFILE " + QUERY
+
+NUM_RUNS = 30
+WARMUP_RUNS = 10
+QUERY_LIMIT = 5000 # Increased from 127 to 5000
+
+def get_db_hits(profile):
+    """Recursively sum db_hits from a profile."""
+    hits = profile.get('dbHits', 0)
+    for child in profile.get('children', []):
+        hits += get_db_hits(child)
+    return hits
 
 def verify_schema(session, database):
-    print(f"\n--- Schema Verification for '{database}' ---")
+    print(f"\n--- Schema & Plan Verification for '{database}' ---")
     # Check for index
     result = session.run("SHOW INDEXES YIELD name, labelsOrTypes, properties, state, type WHERE 'Paper' IN labelsOrTypes")
     indexes = list(result)
-    if not indexes:
-        print("WARNING: No index found on :Paper")
     for idx in indexes:
-        print(f"Index: {idx['name']} | Labels: {idx['labelsOrTypes']} | Props: {idx['properties']} | State: {idx['state']} | Type: {idx['type']}")
-    
-    # Check count of nodes
-    result = session.run("MATCH (p:Paper) RETURN count(p) AS total")
-    print(f"Total :Paper nodes: {result.single()['total']}")
-    
-    result = session.run("MATCH (p:Paper) WHERE p.id IS NOT NULL RETURN count(p) AS with_id")
-    print(f"Nodes with 'id' property: {result.single()['with_id']}")
+        print(f"Index: {idx['name']} | Props: {idx['properties']} | State: {idx['state']}")
+
+    # Check plan and DB Hits once
+    result = session.run(PROFILE_QUERY, limit=QUERY_LIMIT)
+    records = list(result)
+    summary = result.consume()
+    total_hits = get_db_hits(summary.profile)
+
+    print(f"Nodes Found  : {len(records)}")
+    print(f"Total DB Hits: {total_hits}")
+    print(f"Main Operator: {summary.profile.get('operatorType')}")
+
+    return total_hits
 
 def run_benchmark(database):
     times = []
-    record_counts = []
-    
+
     with GraphDatabase.driver(URI, auth=AUTH) as driver:
         with driver.session(database=database) as session:
-            verify_schema(session, database)
-            
-            print(f"\nRunning {NUM_RUNS} iterations on '{database}'...")
-            
-            for i in range(NUM_RUNS):
-                result = session.run(QUERY)
-                records = list(result)
-                summary = result.consume()
-                
-                record_counts.append(len(records))
-                
-                # server-side execution time in milliseconds
-                db_time_ms = summary.result_available_after
-                times.append(db_time_ms)
-                
-                if i == 0:
-                    # Print simplified plan info
-                    print(f"First run plan info: {summary.profile.get('operatorType') if summary.profile else 'No profile'}")
-                    print(f"First run records found: {len(records)}")
+            db_hits = verify_schema(session, database)
 
-    # Check if we actually found any records
-    avg_records = sum(record_counts) / len(record_counts)
-    if avg_records == 0:
-        print(f"CRITICAL: No records found for query in '{database}'")
+            print(f"Running {NUM_RUNS} iterations (no PROFILE)...")
+
+            for i in range(NUM_RUNS):
+                # We measure the total time for the server to process and for us to receive
+                result = session.run(QUERY, limit=QUERY_LIMIT)
+                list(result) # Fully consume results
+                summary = result.consume()
+
+                # total_time = available_after + consumed_after
+                total_time_ms = summary.result_available_after + summary.result_consumed_after
+                times.append(total_time_ms)
 
     # Isolate the warm runs
     warm_times = times[WARMUP_RUNS:]
-    
+
     if not warm_times:
         return None
-        
+
     mu = statistics.mean(warm_times)
     std = statistics.stdev(warm_times) if len(warm_times) > 1 else 0
-    
+
     return {
         "database": database,
-        "cold_times": times[:WARMUP_RUNS],
         "warm_times": warm_times,
         "mean": mu,
         "std": std,
-        "avg_records": avg_records
+        "db_hits": db_hits
     }
 
 if __name__ == "__main__":
@@ -102,17 +102,17 @@ if __name__ == "__main__":
             print(f"Error benchmarking database '{db}': {e}")
 
     print("\n" + "="*40)
-    print("         BENCHMARK RESULTS")
+    print("         BENCHMARK RESULTS (Limit: " + str(QUERY_LIMIT) + ")")
     print("="*40)
-    
+
     for res in all_results:
         print(f"\nDatabase: {res['database']}")
-        print(f"Avg Records Found   : {res['avg_records']}")
-        print(f"Cold runs (discarded): {res['cold_times']} ms")
-        print(f"Warm runs evaluated : {res['warm_times']} ms")
+        print(f"Total DB Hits       : {res['db_hits']}")
+        print(f"Warm runs (ms)      : {res['warm_times']}")
         print(f"Mean (μ)            : {res['mean']:.3f} ms")
         print(f"Std Dev (σ)         : {res['std']:.3f} ms")
-    
+        print(f"Time per seek       : {res['mean']/QUERY_LIMIT*1000:.3f} μs")
+
     if len(all_results) == 2:
         r1, r2 = all_results
         diff = r2['mean'] - r1['mean']
@@ -121,4 +121,4 @@ if __name__ == "__main__":
         print(f"Comparison: {r2['database']} vs {r1['database']}")
         print(f"Difference: {diff:+.3f} ms")
         print(f"Factor    : {factor:.2f}x")
-        print("-"*40)
+        print("-" * 40)
