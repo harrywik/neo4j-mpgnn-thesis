@@ -63,7 +63,7 @@ def add_float_features(driver):
     WHERE n.feature_vector_floats IS NULL
     RETURN n.id AS nid, n.feature_vector AS raw
     ORDER BY n.id
-    SKIP $skip LIMIT $limit
+    LIMIT $limit
     """
     write_q = """
     UNWIND $rows AS row
@@ -73,12 +73,11 @@ def add_float_features(driver):
     """
 
     updated = 0
-    skip = 0
     t_start = time.monotonic()
 
     while True:
         with driver.session(database=DATABASE) as s:
-            records = s.run(fetch_q, skip=skip, limit=BATCH_SIZE).data()
+            records = s.run(fetch_q, limit=BATCH_SIZE).data()
 
         if not records:
             break
@@ -93,7 +92,6 @@ def add_float_features(driver):
             s.run(write_q, rows=rows)
 
         updated += len(rows)
-        skip += len(records)
 
         if updated % REPORT_EVERY < BATCH_SIZE:
             elapsed = time.monotonic() - t_start

@@ -25,7 +25,7 @@ NEO4J_PLUGINS_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_PLUGINS_D
 # GNN model artifact directory — must match server.jvm.additional=-DNEO4J_GNN_MODEL_DIR in neo4j.conf
 NEO4J_GNN_MODEL_DIR ?= $(shell [ -f .env ] && awk 'BEGIN{FS="="} /^NEO4J_GNN_MODEL_DIR=/{val=substr($$0, index($$0, "=")+1); gsub(/^"|"$$/, "", val); print val; exit}' .env)
 
-.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M add_float_features_papers100M summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp combine_results
+.PHONY: run help $(IMPLS) $(DATASET_TARGETS) baseline_db $(EXPERIMENTS) ingest_cora ingest_arxiv ingest_products ingest_papers100M add_float_features_cora add_float_features_papers100M add_float_features_arxiv add_float_features_coauthor summarise combine build-plugin inference_experiment inference_plots test redis-flush distributed-ddp combine_results
 
 help:
 	@echo "Usage: make <implementation> [DATASET=cora]"
@@ -45,11 +45,14 @@ help:
 	@echo "  (bare paths infer impl name from dir name; single-run dirs are handled automatically)"
 	@echo "  (use IMPL=PATH pairs to override the name: DIRS_CMP=\"my_name=path/to/dir\")"
 	@echo "Compare inference strategies:"
-	@echo "  make add_float_features_papers100M   add feature_vector_floats to all Paper nodes (one-time, resumable)"
+	@echo "  make add_float_features_cora         add embedding_bytes_floats to all Paper nodes in cora (one-time, resumable)"
+	@echo "  make add_float_features_papers100M   add feature_vector_floats to all Paper nodes in papers100M (one-time, resumable)"
+	@echo "  make add_float_features_arxiv        add feature_vector_floats to all Paper nodes in arxiv2 (one-time, resumable)"
+	@echo "  make add_float_features_coauthor     add feature_vector_floats to all Author nodes in coauthor (one-time, resumable)"
 	@echo ""
 	@echo "  make inference_experiment [INFERENCE_DATASET=cora] [INFERENCE_MODEL=gcn] [INFERENCE_OUTPUT=results/inference_comparison]"
-	@echo "  INFERENCE_DATASET variants: cora (default)  cora_quick (3 runs)  cora_thorough (high-rep)  arxiv  products  papers100M"
-	@echo "  INFERENCE_MODEL variants:   gcn (default, Cora)  gcn_arxiv  gcn_products  gcn_papers100M"
+	@echo "  INFERENCE_DATASET variants: cora (default)  cora_quick (3 runs)  cora_thorough (high-rep)  arxiv  products  papers100M  coauthor"
+	@echo "  INFERENCE_MODEL variants:   gcn (default, Cora)  gcn_arxiv  gcn_products  gcn_papers100M  gcn_coauthor"
 	@echo "  INFERENCE_FLAGS=--fast  skips the slow unoptimised in_db_cypher strategy"
 	@echo "  INFERENCE_FLAGS=\"--strategies neighborhood_sampling in_db_java\"  run only the listed strategies"
 	@echo "Re-plot from existing results JSON:"
@@ -159,8 +162,17 @@ ingest_products:
 ingest_papers100M:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-papers100M/ingest.py
 
+add_float_features_cora:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/cora/add_float_features.py
+
 add_float_features_papers100M:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-papers100M/add_float_features.py
+
+add_float_features_arxiv:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/arxiv/add_float_features.py
+
+add_float_features_coauthor:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/coauthor/add_float_features.py
 
 summarise:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) src/benchmarking_tools/summarise.py

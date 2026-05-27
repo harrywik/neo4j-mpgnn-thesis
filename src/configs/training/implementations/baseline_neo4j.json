@@ -9,7 +9,7 @@
   },
   "sampler": {
     "class_name": "Neo4jSampler",
-    "num_neighbors": [20, 10]
+    "num_neighbors": [10, 5]
   },
   "model": {
     "class_name": "GCN"

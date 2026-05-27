@@ -36,8 +36,11 @@ from typing import Any, List
 import numpy as np
 import torch
 from dotenv import load_dotenv
+from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid
 from torch_geometric.loader import NeighborLoader, NodeLoader
+from torch_geometric.loader.utils import filter_data as pyg_filter_data
+from torch_geometric.sampler import NodeSamplerInput
 
 from Neo4jConnection import Neo4jConnection
 from benchmarking_tools import Measurer
@@ -126,6 +129,14 @@ def build_components(cfg: dict, driver):
     user     = os.environ.get("USERNAME", "")
     password = os.environ.get("PASSWORD", "")
 
+    print(
+        f"[debug] merged train_ds: "
+        f"database_name={cfg['train_ds'].get('database_name')!r}  "
+        f"node_label={cfg['train_ds'].get('node_label')!r}  "
+        f"feature_property={cfg['train_ds'].get('feature_property')!r}  "
+        f"feature_property_type={cfg['train_ds'].get('feature_property_type')!r}  "
+        f"feature_dim={cfg['train_ds'].get('feature_dim')!r}"
+    )
     common_kwargs = _build_common_kwargs(cfg["train_ds"], uri, user, password)
     graph_store = _make_graph_store(cfg["train_impl"], common_kwargs, driver, None, None)
     sampler = _make_sampler(cfg["train_impl"], graph_store, cfg["train_ds"], None) \
@@ -236,23 +247,64 @@ def fetch_labels(node_ids: list[int], cfg: dict, driver) -> dict[int, int]:
 # ---------------------------------------------------------------------------
 
 class PyGGraphLoader:
-    """Loads a Planetoid dataset once and exposes test-node indices."""
+    """Loads a graph dataset once and exposes test-node indices.
 
-    def __init__(self, root: str, name: str):
+    Supports Planetoid datasets (Cora, CiteSeer, PubMed) and OGB node
+    property prediction datasets (ogbn-arxiv, ogbn-products, …).
+    Pass ``ogb_name`` (e.g. ``"ogbn-arxiv"``) to use the OGB loader;
+    otherwise the Planetoid loader is used with ``root``/``name``.
+    """
+
+    def __init__(
+        self,
+        root: str,
+        name: str,
+        ogb_name: str | None = None,
+        ogb_root: str | None = None,
+    ):
         self.root = root
         self.name = name
+        self.ogb_name = ogb_name
+        self.ogb_root = ogb_root or root
         self._data = None
         self.load_time_s: float = 0.0
 
     def load(self) -> None:
         t0 = time.monotonic()
-        dataset = Planetoid(root=self.root, name=self.name)
-        self._data = dataset[0]
+        if self.ogb_name:
+            self._data = self._load_ogb()
+        else:
+            dataset = Planetoid(root=self.root, name=self.name)
+            self._data = dataset[0]
         self.load_time_s = time.monotonic() - t0
         print(
             f"  [full_graph] Loaded {self._data.num_nodes} nodes, "
             f"{self._data.num_edges} edges in {self.load_time_s:.2f}s"
         )
+
+    def _load_ogb(self) -> Data:
+        """Load an OGB node-property-prediction dataset as a PyG Data object."""
+        from ogb.nodeproppred import NodePropPredDataset
+
+        # OGB uses torch.load internally; patch for PyTorch >= 2.6 compatibility.
+        _orig_load = torch.load
+        torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
+        try:
+            dataset = NodePropPredDataset(name=self.ogb_name, root=self.ogb_root)
+            graph, labels = dataset[0]
+            split_idx = dataset.get_idx_split()
+        finally:
+            torch.load = _orig_load
+
+        x = torch.tensor(graph["node_feat"], dtype=torch.float)
+        edge_index = torch.tensor(graph["edge_index"], dtype=torch.long)
+        y = torch.tensor(labels, dtype=torch.long).squeeze()
+
+        num_nodes = x.shape[0]
+        test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        test_mask[split_idx["test"]] = True
+
+        return Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
 
     @property
     def data(self):
@@ -264,36 +316,32 @@ class PyGGraphLoader:
 
 
 # ---------------------------------------------------------------------------
-# Strategy: full_graph  (PyG Planetoid + NeighborLoader)
+# Strategy: full_graph  (PyG NeighborLoader, graph pre-loaded once)
 # ---------------------------------------------------------------------------
 
 def run_full_graph_pyg(
     model: torch.nn.Module,
     N: int,
     run_i: int,
-    pyg_loader: PyGGraphLoader,
+    data: Data,
+    test_indices: list[int],
     num_neighbors: list[int],
     batch_size: int,
+    cold_load_time_s: float,
 ) -> tuple[dict[int, int], dict[int, int], dict[str, Any]]:
-    """Run inference via PyG NeighborLoader on Planetoid data.
+    """Run inference via PyG NeighborLoader.
 
-    Returns
-    -------
-    preds   : {local_node_idx → predicted_class}
-    labels  : {local_node_idx → true_class}  (from Planetoid)
-    metrics : timing / batch-latency metrics
-              (load_time_s is NOT included here; caller adds it)
+    The graph is pre-loaded once at experiment startup and passed in here.
+    ``cold_load_time_s`` is the measured first-load time and is added to
+    every run's ``total_time_s`` so it represents the full end-to-end cost
+    of loading + inference without reloading the file repeatedly.
     """
-    data = pyg_loader.data
-    test_indices = pyg_loader.test_node_indices()
     sample_size = min(N, len(test_indices))
     rng = random.Random(run_i * 10007 + N)
     seed_ids = rng.sample(test_indices, sample_size)
-
     input_nodes = torch.tensor(seed_ids, dtype=torch.long)
 
     t0 = time.monotonic()
-
     loader = NeighborLoader(
         data,
         num_neighbors=num_neighbors,
@@ -313,7 +361,6 @@ def run_full_graph_pyg(
             t_batch = time.monotonic()
             batch = batch.to(device)
             out = model(batch.x, batch.edge_index)
-            # Seed nodes are the first batch.batch_size entries
             n = batch.batch_size
             seed_global_ids = batch.n_id[:n].cpu().tolist()
             seed_preds = out[:n].argmax(dim=1).cpu().tolist()
@@ -323,8 +370,83 @@ def run_full_graph_pyg(
                 labels_out[nid] = label
             batch_latencies.append((time.monotonic() - t_batch) * 1000)
 
-    elapsed = time.monotonic() - t0
+    inference_elapsed = time.monotonic() - t0
+    total_elapsed = cold_load_time_s + inference_elapsed
+    lat = np.array(batch_latencies)
+    metrics = {
+        "total_time_s": total_elapsed,
+        "ms_per_node": total_elapsed * 1000 / max(len(preds), 1),
+        "throughput_nodes_per_s": len(preds) / max(total_elapsed, 1e-9),
+        "p50_batch_ms": float(np.percentile(lat, 50)) if len(lat) else None,
+        "p95_batch_ms": float(np.percentile(lat, 95)) if len(lat) else None,
+        "n_batches": len(batch_latencies),
+        "load_time_s": cold_load_time_s,
+        "inference_only_time_s": inference_elapsed,
+    }
+    return preds, labels_out, metrics
 
+
+# ---------------------------------------------------------------------------
+# Strategy: full_graph_direct  (pre-built NeighborSampler, no DataLoader)
+# ---------------------------------------------------------------------------
+
+def run_full_graph_direct(
+    model: torch.nn.Module,
+    N: int,
+    run_i: int,
+    data: Data,
+    test_indices: list[int],
+    neighbor_sampler,
+    batch_size: int,
+) -> tuple[dict[int, int], dict[int, int], dict[str, Any]]:
+    """Run inference using NeighborSampler directly — no DataLoader overhead.
+
+    Calls ``sample_from_nodes`` + ``filter_data`` + forward pass per mini-batch,
+    bypassing PyTorch DataLoader entirely.  This removes the ~1–2 ms per-call
+    DataLoader bootstrap cost and gives the fairest possible comparison to
+    ``in_db_java`` at small N.
+
+    The graph and sampler index must be pre-built and passed in — this function
+    measures only sampling + feature gather + forward pass.
+    """
+    sample_size = min(N, len(test_indices))
+    rng = random.Random(run_i * 10007 + N)
+    seed_ids = rng.sample(test_indices, sample_size)
+
+    device = next(model.parameters()).device
+    model.eval()
+    preds: dict[int, int] = {}
+    labels_out: dict[int, int] = {}
+    batch_latencies: list[float] = []
+
+    t0 = time.monotonic()
+
+    with torch.no_grad():
+        for i in range(0, len(seed_ids), batch_size):
+            t_batch = time.monotonic()
+            batch_seeds = seed_ids[i : i + batch_size]
+            n = len(batch_seeds)
+
+            inp = NodeSamplerInput(
+                input_id=None,
+                node=torch.tensor(batch_seeds, dtype=torch.long),
+            )
+            out = neighbor_sampler.sample_from_nodes(inp)
+            subgraph = pyg_filter_data(data, out.node, out.row, out.col, out.edge)
+            subgraph = subgraph.to(device)
+
+            logits = model(subgraph.x, subgraph.edge_index)
+
+            # Seed nodes are the first n entries in out.node
+            seed_global_ids = out.node[:n].cpu().tolist()
+            seed_preds = logits[:n].argmax(dim=1).cpu().tolist()
+            seed_labels = subgraph.y[:n].cpu().tolist()
+            for nid, pred, label in zip(seed_global_ids, seed_preds, seed_labels):
+                preds[nid] = pred
+                labels_out[nid] = label
+            batch_latencies.append((time.monotonic() - t_batch) * 1000)
+
+    elapsed = time.monotonic() - t0
     lat = np.array(batch_latencies)
     metrics = {
         "total_time_s": elapsed,
@@ -936,15 +1058,41 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
         inference_sampler = _build_inference_sampler(cfg, graph_store)
         print(f"Inference sampler fanout: {num_neighbors}")
 
-    # --- Load PyG Planetoid dataset once if needed ---
-    pyg_loader: PyGGraphLoader | None = None
-    if "full_graph" in strategies:
+    # --- Load PyG graph once ---
+    # The first load in the process is the cold-load reference: its measured
+    # time is stored as cold_load_time_s and added to every full_graph run's
+    # total_time_s without reloading the file each time.
+    # Both full_graph and full_graph_direct share this single loaded Data object.
+    pyg_data: Data | None = None
+    pyg_test_indices: list[int] = []
+    pyg_cold_load_time_s: float = 0.0
+    pyg_neighbor_sampler = None
+    needs_pyg = any(s in strategies for s in ("full_graph", "full_graph_direct"))
+    if needs_pyg:
+        ogb_name = ds.get("ogb_name")
+        ogb_root = ds.get("ogb_root", "data")
         planetoid_root = ds.get("planetoid_root", "data/Planetoid")
         planetoid_name = ds.get("planetoid_name", "Cora")
-        print(f"\nLoading {planetoid_name} via PyG Planetoid (one-time cost)...")
-        pyg_loader = PyGGraphLoader(root=planetoid_root, name=planetoid_name)
-        pyg_loader.load()
-        print(f"  Load time ({pyg_loader.load_time_s:.2f}s) will be added to all full_graph timings")
+        loader_cfg = dict(
+            root=planetoid_root,
+            name=planetoid_name,
+            ogb_name=ogb_name,
+            ogb_root=ogb_root,
+        )
+        print(f"\nLoading PyG graph (first load = cold-load reference)...")
+        _loader = PyGGraphLoader(**loader_cfg)
+        _loader.load()
+        pyg_data = _loader.data
+        pyg_cold_load_time_s = _loader.load_time_s
+        pyg_test_indices = _loader.test_node_indices()
+        print(f"  Cold load time: {pyg_cold_load_time_s:.3f}s  ({len(pyg_test_indices):,} test nodes)")
+        print(f"  This time will be added to every full_graph run's total_time_s.")
+
+        if "full_graph_direct" in strategies:
+            from torch_geometric.sampler import NeighborSampler as _NeighborSampler
+            t_ns = time.monotonic()
+            pyg_neighbor_sampler = _NeighborSampler(pyg_data, num_neighbors=num_neighbors)
+            print(f"  NeighborSampler index built in {(time.monotonic() - t_ns)*1000:.0f}ms")
 
     spec_exported = False
     all_results: dict[int, dict] = {}
@@ -979,9 +1127,7 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
             traceback.print_exc()
             strategies = [s for s in strategies if s != "in_db_cypher_opt"]
 
-    pyg_test_pool_size = len(pyg_loader.test_node_indices()) if pyg_loader else 0
-    if pyg_loader:
-        print(f"PyG test pool: {pyg_test_pool_size} nodes")
+    pyg_test_pool_size = len(pyg_test_indices)
 
     print(f"Node counts to test: {node_counts}")
     print(f"Strategies: {strategies}")
@@ -993,7 +1139,10 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
             any(s in strategies for s in ("neighborhood_sampling", "in_db_java", "in_db_cypher", "in_db_cypher_opt"))
             and N > len(neo4j_test_pool)
         )
-        pyg_skip = "full_graph" in strategies and pyg_loader and N > pyg_test_pool_size
+        pyg_skip = (
+            any(s in strategies for s in ("full_graph", "full_graph_direct"))
+            and pyg_data is not None and N > pyg_test_pool_size
+        )
         if neo4j_skip or pyg_skip:
             print(f"Skipping N={N}: not enough test nodes")
             continue
@@ -1018,12 +1167,16 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
                 try:
                     if strategy == "full_graph":
                         preds, pyg_labels, metrics = run_full_graph_pyg(
-                            model, N, run_i, pyg_loader, num_neighbors, batch_size
+                            model, N, run_i, pyg_data, pyg_test_indices,
+                            num_neighbors, batch_size, pyg_cold_load_time_s,
                         )
-                        # Add one-time load cost to inference time for fair comparison
-                        metrics["total_time_s"] += pyg_loader.load_time_s
-                        metrics["ms_per_node"] = metrics["total_time_s"] * 1000 / max(len(preds), 1)
-                        metrics["throughput_nodes_per_s"] = len(preds) / max(metrics["total_time_s"], 1e-9)
+                        acc = compute_accuracy(preds, pyg_labels)
+
+                    elif strategy == "full_graph_direct":
+                        preds, pyg_labels, metrics = run_full_graph_direct(
+                            model, N, run_i, pyg_data, pyg_test_indices,
+                            pyg_neighbor_sampler, batch_size,
+                        )
                         acc = compute_accuracy(preds, pyg_labels)
 
                     elif strategy == "neighborhood_sampling":
@@ -1129,9 +1282,8 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
 
     print_scaling_summary(all_results)
 
-    if pyg_loader is not None:
-        print(f"\n[full_graph] One-time graph load: {pyg_loader.load_time_s:.2f}s "
-              f"(included in all per-N timings above)")
+    if pyg_cold_load_time_s > 0:
+        print(f"\n[full_graph] Cold load time used: {pyg_cold_load_time_s:.3f}s (added to every full_graph run)")
 
     return all_results
 

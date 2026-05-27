@@ -24,29 +24,49 @@ import numpy as np
 # Colour / style  (same palette as the rest of the codebase)
 # ---------------------------------------------------------------------------
 
-_COLORS = [
-    "#4C78A8",  # blue     — full_graph
-    "#F58518",  # orange   — neighborhood_sampling
-    "#54A24B",  # green    — in_db_java
-    "#E45756",  # red
-    "#B279A2",  # purple
-]
+_STRATEGY_COLORS = {
+    "full_graph":            "#4C78A8",  # blue
+    "full_graph_direct":     "#72B7B2",  # teal
+    "neighborhood_sampling": "#F58518",  # orange
+    "in_db_java":            "#54A24B",  # green
+    "in_db_cypher":          "#E45756",  # red
+    "in_db_cypher_opt":      "#B279A2",  # purple
+}
+_FALLBACK_COLORS = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#B279A2", "#72B7B2"]
 
 _STRATEGY_LABELS = {
-    "full_graph":            "Full-graph (in-memory)",
+    "full_graph":            "Full-graph in RAM (cold)",
+    "full_graph_direct":     "Full-graph in RAM (hot)",
     "neighborhood_sampling": "Neighborhood sampling",
     "in_db_java":            "In-DB Java",
 }
 
-_MARKERS = ["o", "s", "^", "D", "v"]
+_STRATEGY_MARKERS = {
+    "full_graph":            "o",
+    "full_graph_direct":     "s",
+    "neighborhood_sampling": "^",
+    "in_db_java":            "D",
+    "in_db_cypher":          "v",
+    "in_db_cypher_opt":      "P",
+}
+
+_MARKERS = ["o", "s", "^", "D", "v", "P"]
 
 # Integer formatter for the N (seed-node count) x-axis so ticks render as
 # "1, 2, 4, ..." rather than "1.0, 2.0, 4.0, ...".
 _N_FMT = mticker.FuncFormatter(lambda x, _: str(int(x)))
 
 
-def _color(i: int) -> str:
-    return _COLORS[i % len(_COLORS)]
+def _color(strat_or_idx) -> str:
+    if isinstance(strat_or_idx, str):
+        return _STRATEGY_COLORS.get(strat_or_idx, _FALLBACK_COLORS[0])
+    return _FALLBACK_COLORS[strat_or_idx % len(_FALLBACK_COLORS)]
+
+
+def _marker(strat_or_idx) -> str:
+    if isinstance(strat_or_idx, str):
+        return _STRATEGY_MARKERS.get(strat_or_idx, _MARKERS[0])
+    return _MARKERS[strat_or_idx % len(_MARKERS)]
 
 
 def _lighten(color: str, amount: float = 0.5) -> tuple:
@@ -81,6 +101,8 @@ def _extract(results: dict, metric: str) -> dict[str, tuple[list, list, list]]:
     return strategies
 
 
+
+
 # ---------------------------------------------------------------------------
 # 1. Throughput vs N  (log-log)
 # ---------------------------------------------------------------------------
@@ -89,11 +111,11 @@ def plot_throughput_scaling(results: dict, output_dir: Path) -> None:
     data = _extract(results, "throughput_nodes_per_s")
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
+    for strat, (ns, means, cis) in data.items():
         ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        color = _color(i)
+        color = _color(strat)
         ax.plot(ns, means, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
+                linewidth=2, marker=_marker(strat), markersize=6)
         ax.fill_between(ns, np.maximum(means - cis, 1e-3), means + cis,
                         alpha=0.18, color=_lighten(color))
 
@@ -115,39 +137,35 @@ def plot_throughput_scaling(results: dict, output_dir: Path) -> None:
 # 2. ms / node vs N
 # ---------------------------------------------------------------------------
 
+def _plot_strat(ax, strat, ns, means, cis, ms_scale=1.0, log_y=False):
+    """Draw one strategy line."""
+    ns = np.array(ns); means = np.array(means) * ms_scale; cis = np.array(cis) * ms_scale
+    color = _color(strat)
+    ax.plot(ns, means, label=_label(strat), color=color,
+            linewidth=2, linestyle="-", marker=_marker(strat), markersize=6)
+    lower = np.maximum(means - cis, means * 0.5) if log_y else means - cis
+    ax.fill_between(ns, lower, means + cis, alpha=0.10, color=_lighten(color))
+    return means
+
+
 def plot_latency_per_node(results: dict, output_dir: Path) -> None:
     data = _extract(results, "total_time_s")
     fig, ax = plt.subplots(figsize=(8, 5))
 
     all_means_ms: list[float] = []
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        means_ms = means * 1000
-        cis_ms   = cis   * 1000
-        all_means_ms.extend(means_ms.tolist())
-        color = _color(i)
-        ax.plot(ns, means_ms, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        # Clip the lower CI bound to half the local mean so bands never
-        # collapse to near-zero and distort the log axis.
-        lower = np.maximum(means_ms - cis_ms, means_ms * 0.5)
-        upper = means_ms + cis_ms
-        ax.fill_between(ns, lower, upper, alpha=0.18, color=_lighten(color))
+    for strat, (ns, means, cis) in data.items():
+        m = _plot_strat(ax, strat, ns, means, cis, ms_scale=1000.0, log_y=True)
+        all_means_ms.extend(m.tolist())
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
     ax.xaxis.set_major_formatter(_N_FMT)
-    # Use '%g' so tick labels like 10, 100, 1000 render cleanly without
-    # trailing zeros or scientific-notation "0" artefacts from ScalarFormatter.
     ax.yaxis.set_major_formatter(mticker.FuncFormatter(lambda x, _: f"{x:g}"))
-
-    # Anchor the bottom of the y-axis just below the smallest mean value.
     if all_means_ms:
         ax.set_ylim(bottom=min(all_means_ms) * 0.4)
-
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Total inference time (ms)", fontsize=11)
-    ax.set_title("Total inference latency vs N (± 95 % CI)", fontsize=12)
+    ax.set_title("Inference latency vs N (± 95 % CI)", fontsize=12)
     ax.legend(fontsize=10)
     ax.grid(True, which="both", linestyle="--", alpha=0.3)
     fig.tight_layout()
@@ -159,19 +177,12 @@ def plot_latency_per_node_linear(results: dict, output_dir: Path) -> None:
     data = _extract(results, "total_time_s")
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        means_ms = means * 1000
-        cis_ms   = cis   * 1000
-        color = _color(i)
-        ax.plot(ns, means_ms, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        ax.fill_between(ns, means_ms - cis_ms, means_ms + cis_ms,
-                        alpha=0.18, color=_lighten(color))
+    for strat, (ns, means, cis) in data.items():
+        _plot_strat(ax, strat, ns, means, cis, ms_scale=1000.0)
 
     ax.set_xlabel("N (number of seed nodes)", fontsize=11)
     ax.set_ylabel("Total inference time (ms)", fontsize=11)
-    ax.set_title("Total inference latency vs N (± 95 % CI)", fontsize=12)
+    ax.set_title("Inference latency vs N (± 95 % CI)", fontsize=12)
     ax.legend(fontsize=10)
     ax.grid(True, linestyle="--", alpha=0.3)
     fig.tight_layout()
@@ -211,7 +222,7 @@ def plot_accuracy(results: dict, output_dir: Path, config: dict | None = None) -
     strategies = [s for s in by_strat if not s.startswith("_")]
 
     means, cis, labels, colors = [], [], [], []
-    for i, strat in enumerate(strategies):
+    for strat in strategies:
         entry = by_strat[strat].get("accuracy", {})
         mean = entry.get("mean")
         if mean is None:
@@ -221,7 +232,7 @@ def plot_accuracy(results: dict, output_dir: Path, config: dict | None = None) -
         means.append(mean * 100)
         cis.append(ci * 100)
         labels.append(strat)
-        colors.append(_color(i))
+        colors.append(_color(strat))
 
     if not means:
         return
@@ -272,14 +283,13 @@ def plot_batch_latency(results: dict, output_dir: Path) -> None:
 
     fig, ax = plt.subplots(figsize=(8, 5))
 
-    color_idx = 0
     for strat in batched:
-        color = _color(color_idx)
+        color = _color(strat)
         if strat in p50_data:
             ns, means, cis = p50_data[strat]
             ns = np.array(ns); means = np.array(means); cis = np.array(cis)
             ax.plot(ns, means, label=f"{_label(strat)} P50",
-                    color=color, linewidth=2, marker=_MARKERS[color_idx], markersize=6)
+                    color=color, linewidth=2, marker=_marker(strat), markersize=6)
             ax.fill_between(ns, np.maximum(means - cis, 0), means + cis,
                             alpha=0.15, color=_lighten(color))
         if strat in p95_data:
@@ -287,8 +297,7 @@ def plot_batch_latency(results: dict, output_dir: Path) -> None:
             ns = np.array(ns); means = np.array(means); cis = np.array(cis)
             ax.plot(ns, means, label=f"{_label(strat)} P95",
                     color=color, linewidth=1.5, linestyle="--",
-                    marker=_MARKERS[color_idx], markersize=5)
-        color_idx += 1
+                    marker=_marker(strat), markersize=5)
 
     ax.set_xscale("log", base=2)
     ax.xaxis.set_major_formatter(_N_FMT)
@@ -365,7 +374,6 @@ def plot_speedup(results: dict, output_dir: Path) -> None:
     baseline_map = dict(zip(baseline_ns, baseline_means))
 
     fig, ax = plt.subplots(figsize=(8, 4))
-    color_idx = 0
     for strat, (ns, means, _) in strat_data.items():
         ratios = []
         valid_ns = []
@@ -376,9 +384,8 @@ def plot_speedup(results: dict, output_dir: Path) -> None:
                 valid_ns.append(N)
         if not valid_ns:
             continue
-        ax.plot(valid_ns, ratios, label=_label(strat), color=_color(color_idx),
-                linewidth=2, marker=_MARKERS[color_idx], markersize=6)
-        color_idx += 1
+        ax.plot(valid_ns, ratios, label=_label(strat), color=_color(strat),
+                linewidth=2, marker=_marker(strat), markersize=6)
 
     ax.axhline(1.0, color="#888888", linewidth=1.2, linestyle="--", label="Baseline (neighborhood_sampling)")
     ax.set_xscale("log", base=2)
@@ -407,14 +414,9 @@ def plot_ms_per_node_scaling(results: dict, output_dir: Path) -> None:
     fig, ax = plt.subplots(figsize=(8, 5))
 
     all_means: list[float] = []
-    for i, (strat, (ns, means, cis)) in enumerate(data.items()):
-        ns = np.array(ns); means = np.array(means); cis = np.array(cis)
-        all_means.extend(means.tolist())
-        color = _color(i)
-        ax.plot(ns, means, label=_label(strat), color=color,
-                linewidth=2, marker=_MARKERS[i], markersize=6)
-        lower = np.maximum(means - cis, means * 0.5)
-        ax.fill_between(ns, lower, means + cis, alpha=0.18, color=_lighten(color))
+    for strat, (ns, means, cis) in data.items():
+        m = _plot_strat(ax, strat, ns, means, cis, log_y=True)
+        all_means.extend(m.tolist())
 
     ax.set_xscale("log", base=2)
     ax.set_yscale("log")
