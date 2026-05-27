@@ -25,12 +25,12 @@ import numpy as np
 # ---------------------------------------------------------------------------
 
 _STRATEGY_COLORS = {
-    "full_graph":            "#4C78A8",  # blue
+    "neighborhood_sampling": "#4C78A8",  # blue
+    "in_db_java":            "#F58518",  # orange
+    "in_db_cypher":          "#54A24B",  # green
+    "in_db_cypher_opt":      "#E45756",  # red
+    "full_graph":            "#B279A2",  # purple
     "full_graph_direct":     "#72B7B2",  # teal
-    "neighborhood_sampling": "#F58518",  # orange
-    "in_db_java":            "#54A24B",  # green
-    "in_db_cypher":          "#E45756",  # red
-    "in_db_cypher_opt":      "#B279A2",  # purple
 }
 _FALLBACK_COLORS = ["#4C78A8", "#F58518", "#54A24B", "#E45756", "#B279A2", "#72B7B2"]
 
