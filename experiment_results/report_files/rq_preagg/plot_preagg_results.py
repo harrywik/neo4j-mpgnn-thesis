@@ -5,7 +5,7 @@ import json
 
 from pathlib import Path
 
-FANOUT = [20, 10]
+FANOUT = [10, 5]
 
 dir = Path(__file__).resolve().parent
 batch_sizes = [32, 64, 128, 256, 512]
