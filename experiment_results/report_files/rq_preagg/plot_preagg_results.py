@@ -73,7 +73,8 @@ sns.lineplot(
     marker="o",
     markersize=12,
     linewidth=3,
-    ax=ax1
+    ax=ax1,
+    legend=False  # Hide individual legend
 )
 ax1.set_title(r"Fraction of Bytes Transferred" + "\n" + r"(Pre-Agg. $\div$ no Pre-Agg.)", pad=20)
 ax1.set_xlabel("Batch Size", labelpad=15)
@@ -81,7 +82,6 @@ ax1.set_ylabel("Fraction of Bytes Transferred", labelpad=15)
 ax1.set_xticks(batch_sizes)
 ax1.set_ylim(0.0, 1.5)
 ax1.axhline(1.0, color="red", linestyle="--", linewidth=2, label="No difference", alpha=0.7)
-ax1.legend(title="Dataset", frameon=True)
 
 sns.lineplot(
     data=df, 
@@ -91,7 +91,8 @@ sns.lineplot(
     marker="s",
     markersize=12,
     linewidth=3,
-    ax=ax2
+    ax=ax2,
+    legend=True # Keep legend on one to extract handles
 )
 ax2.set_title(r"Relative Mean Latency" + "\n" + r"(Pre-Agg. $\div$ no Pre-Agg.)", pad=20)
 ax2.set_xlabel("Batch Size", labelpad=15)
@@ -99,10 +100,17 @@ ax2.set_ylabel("Relative Mean Latency", labelpad=15)
 ax2.set_xticks(batch_sizes)
 ax2.set_ylim(0.0, 1.5)
 ax2.axhline(1.0, color="red", linestyle="--", linewidth=2, label="No difference", alpha=0.7)
-ax2.legend(title="Dataset", frameon=True)
+
+# Create a unified legend
+handles, labels = ax2.get_legend_handles_labels()
+# Add the 'No difference' handle if it's not already there (it should be from ax2.axhline)
+ax2.get_legend().remove() # Remove the legend from ax2
+
+fig.legend(handles, labels, loc='lower center', ncol=3, bbox_to_anchor=(0.5, -0.05), frameon=True)
 
 # Adjust layout
 plt.tight_layout(pad=3.0)
+fig.subplots_adjust(bottom=0.15) # Make room for the legend
 
 # Save the plot
 output_path = str(dir / f"preagg_{"_".join(map(str, FANOUT))}_bytes_and_latency_vs_batch_size.png")
