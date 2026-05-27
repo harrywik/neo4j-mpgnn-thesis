@@ -50,7 +50,7 @@ def build_df(dir: Path, batch_sizes: list[int], fanout: list[int]) -> pd.DataFra
 
 df = pd.DataFrame(build_df(dir, batch_sizes, fanout=FANOUT))
 
-sns.set_theme(style="whitegrid")
+# sns.set_theme(style="whitegrid")
 # Create the side-by-side plots
 fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(18, 7))
 
@@ -60,7 +60,6 @@ sns.lineplot(
     y="Bytes Fraction", 
     hue="Dataset", 
     marker="o",
-    linewidth=2.5,
     ax=ax1
 )
 ax1.set_title(r"Fraction of Bytes Transferred (Pre-Agg. $\div$ no Pre-Agg.)")
@@ -77,7 +76,6 @@ sns.lineplot(
     y="Relative Mean Latency", 
     hue="Dataset", 
     marker="s",
-    linewidth=2.5,
     ax=ax2
 )
 ax2.set_title(r"Relative Mean Latency (Pre-Agg. $\div$ no Pre-Agg.)")
