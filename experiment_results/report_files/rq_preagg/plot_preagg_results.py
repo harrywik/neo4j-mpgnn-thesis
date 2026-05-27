@@ -63,9 +63,9 @@ sns.lineplot(
     linewidth=2.5,
     ax=ax1
 )
-ax1.set_title(r"Fraction of Bytes Transferred (Pre-Agg. $\div$ no Pre-Agg.)", fontsize=14, pad=15)
-ax1.set_xlabel("Batch Size", fontsize=12)
-ax1.set_ylabel("Fraction of Bytes Transferred", fontsize=12)
+ax1.set_title(r"Fraction of Bytes Transferred (Pre-Agg. $\div$ no Pre-Agg.)")
+ax1.set_xlabel("Batch Size")
+ax1.set_ylabel("Fraction of Bytes Transferred")
 ax1.set_xticks(batch_sizes)
 ax1.set_ylim(0.0, 1.5)
 ax1.axhline(1.0, color="gray", linestyle="--", label="No difference")
@@ -80,9 +80,9 @@ sns.lineplot(
     linewidth=2.5,
     ax=ax2
 )
-ax2.set_title(r"Relative Mean Latency (Pre-Agg. $\div$ no Pre-Agg.)", fontsize=14, pad=15)
-ax2.set_xlabel("Batch Size", fontsize=12)
-ax2.set_ylabel("Relative Mean Latency", fontsize=12)
+ax2.set_title(r"Relative Mean Latency (Pre-Agg. $\div$ no Pre-Agg.)")
+ax2.set_xlabel("Batch Size")
+ax2.set_ylabel("Relative Mean Latency")
 ax2.set_xticks(batch_sizes)
 ax2.set_ylim(0.0, 1.5)
 ax2.axhline(1.0, color="gray", linestyle="--", label="No difference")
