@@ -1110,6 +1110,9 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
         try:
             prepared_cypher = _prepare_cypher_inference(cfg, driver)
             print("  Combined Cypher query assembled successfully.")
+            print("  --- in_db_cypher query ---")
+            print(prepared_cypher.query)
+            print("  --------------------------")
         except Exception as exc:
             print(f"  WARNING: in_db_cypher setup failed: {exc}")
             traceback.print_exc()
@@ -1122,6 +1125,9 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
         try:
             prepared_cypher_opt = _prepare_optimized_cypher_inference(cfg, driver)
             print("  Optimised Cypher query assembled (vector_distance DOT linear blocks).")
+            print("  --- in_db_cypher_opt query ---")
+            print(prepared_cypher_opt.query)
+            print("  ------------------------------")
         except Exception as exc:
             print(f"  WARNING: in_db_cypher_opt setup failed: {exc}")
             traceback.print_exc()
