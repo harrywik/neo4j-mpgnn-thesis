@@ -248,8 +248,8 @@ def plot_comparison_best_accuracy(
 # Sub-phase latency
 # ---------------------------------------------------------------------------
 
-_C_DRIVER = "#D9D9D9"
-_C_ETL = "#F0F0F0"
+_C_DRIVER = "#ABABAB"
+_C_ETL = "#C8C8C8"
 
 
 def _avg_query_profile_globals(impl_dir: Path, nbr_runs: int) -> tuple[dict[str, float], dict[str, float]]:
@@ -387,14 +387,14 @@ def plot_comparison_subphase_latency(
                         f"{width:.1f}",
                         ha="center",
                         va="center",
-                        fontsize=7,
+                        fontsize=10,
                         color="white" if color not in (_C_DRIVER, _C_ETL) else "#333333",
                         fontweight="bold",
                     )
                 left += width
                 legend_handles[seg_label] = (seg_label, color)
 
-            ax.text(left, row_y, f" {left:.1f} ms", ha="left", va="center", fontsize=8)
+            ax.text(left, row_y, f" {left:.1f} ms", ha="left", va="center", fontsize=11)
 
         # One centered tick per implementation group
         group_center = current_y + (n - 1) * bar_height / 2
@@ -404,17 +404,18 @@ def plot_comparison_subphase_latency(
         current_y += n * bar_height + group_gap
 
     ax.set_yticks(group_ticks)
-    ax.set_yticklabels(group_labels, fontsize=9)
+    ax.set_yticklabels(group_labels, fontsize=12)
     ax.invert_yaxis()
-    ax.set_xlabel("mean ms per batch (avg across runs)")
-    ax.set_title("End-to-end latency breakdown by implementation")
+    ax.set_xlabel("mean ms per batch (avg across runs)", fontsize=12)
+    ax.set_title("End-to-end latency breakdown by implementation", fontsize=13)
+    ax.tick_params(axis="x", labelsize=11)
     ax.grid(axis="x", linestyle="--", alpha=0.3)
     if max_total > 0:
-        ax.set_xlim(0, max_total * 1.22)
+        ax.set_xlim(0, max_total + max_total * 0.12)
 
     legend_patches = [Patch(facecolor=color, label=label, edgecolor="white")
                       for label, color in legend_handles.values()]
-    ax.legend(handles=legend_patches, loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
+    ax.legend(handles=legend_patches, loc="lower right", fontsize=13, framealpha=0.85, ncol=1)
     fig.tight_layout()
     fig.savefig(output_dir / "comparison_subphase_latency.png", dpi=150)
     plt.close(fig)
@@ -740,24 +741,34 @@ def plot_comparison_end_to_end_latency(
             left = 0.0
             total = sum(s[1] for s in slices)
             max_total = max(max_total, total)
+            _LABELLED_SEGS = {
+                "DB server latency (topology)",
+                "DB server latency (features)",
+                "Network + driver recv",
+            }
             for seg_label, width, color in slices:
                 if width <= 0:
                     continue
                 ax.barh(row_y, width, left=left, height=bar_height, color=color,
                         edgecolor="white", linewidth=0.5)
-                if total > 0 and width / total > 0.08:
+                show_num = (
+                    seg_label in _LABELLED_SEGS
+                    and total > 0
+                    and width / total > 0.08
+                )
+                if show_num:
                     ax.text(
                         left + width / 2, row_y,
                         f"{width:.1f}",
-                        ha="center", va="center", fontsize=7,
+                        ha="center", va="center", fontsize=10,
                         color="white" if color not in (_C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
                         fontweight="bold",
                     )
                 left += width
                 legend_handles[seg_label] = (seg_label, color)
-            ax.text(left, row_y, f"  {left:.1f} ms", ha="left", va="center", fontsize=8)
+            ax.text(left, row_y, f"  {left:.1f} ms", ha="left", va="center", fontsize=13)
             ax.text(-max_total * 0.01 if max_total > 0 else -0.5, row_y,
-                    row_label, ha="right", va="center", fontsize=7, color="#555555")
+                    row_label, ha="right", va="center", fontsize=12, color="#555555")
             current_y += bar_height + 0.06
         group_center = current_y - (n * (bar_height + 0.06)) / 2
         group_ticks.append(group_center)
@@ -765,17 +776,18 @@ def plot_comparison_end_to_end_latency(
         current_y += group_gap
 
     ax.set_yticks(group_ticks)
-    ax.set_yticklabels(group_labels, fontsize=9)
+    ax.set_yticklabels(group_labels, fontsize=13, fontweight="bold")
     ax.invert_yaxis()
-    ax.set_xlabel("mean ms per batch")
-    ax.set_title("End-to-end latency breakdown by implementation")
+    ax.set_xlabel("mean ms per batch", fontsize=14)
+    ax.set_title("End-to-end latency breakdown by implementation (per batch)", fontsize=20)
+    ax.tick_params(axis="x", labelsize=11)
     ax.grid(axis="x", linestyle="--", alpha=0.3)
     if max_total > 0:
-        ax.set_xlim(0, max_total * 1.25)
+        ax.set_xlim(0, max_total + max_total * 0.12)
 
     legend_patches = [Patch(facecolor=color, label=label, edgecolor="white")
                       for label, color in legend_handles.values()]
-    ax.legend(handles=legend_patches, loc="upper right", fontsize=7, framealpha=0.85, ncol=1)
+    ax.legend(handles=legend_patches, loc="lower right", fontsize=13, framealpha=0.85, ncol=1)
     fig.tight_layout()
     fig.savefig(output_dir / "comparison_end_to_end_latency.png", dpi=150)
     plt.close(fig)
