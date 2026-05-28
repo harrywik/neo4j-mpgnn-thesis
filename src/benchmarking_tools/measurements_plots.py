@@ -1341,7 +1341,7 @@ def plot_end_to_end_latency(
                 ax.text(
                     left + width / 2, y,
                     f"{width:.1f}",
-                    ha="center", va="center", fontsize=7,
+                    ha="center", va="center", fontsize=10,
                     color="white" if color not in (_C_DRIVER, _C_ETL, "#B8EFB0") else "#333333",
                     fontweight="bold",
                 )
@@ -1350,30 +1350,33 @@ def plot_end_to_end_latency(
             legend_handles[seg_label] = (seg_label, color)
 
         ax.text(
-            left + (ax.get_xlim()[1] * 0.03 if ax.get_xlim()[1] > 0 else 0.5),
+            left + (ax.get_xlim()[1] * 0.01 if ax.get_xlim()[1] > 0 else 0.5),
             y, f"{left:.1f} ms",
-            ha="left", va="center", fontsize=8,
+            ha="left", va="center", fontsize=11,
         )
         yticks.append(y)
         ylabels.append(row_label)
 
     ax.set_yticks(yticks)
-    ax.set_yticklabels(ylabels, fontsize=9)
+    ax.set_yticklabels(ylabels, fontsize=12)
     ax.invert_yaxis()
-    ax.set_xlabel("mean ms per batch (cumulative timeline)")
-    ax.set_title("End-to-end per-batch latency breakdown")
+    ax.set_xlabel("mean ms per batch (cumulative timeline)", fontsize=12)
+    ax.set_title("End-to-end per-batch latency breakdown", fontsize=13)
+    ax.tick_params(axis="x", labelsize=11)
     ax.grid(axis="x", linestyle="--", alpha=0.3)
 
-    # Legend – upper right (topology bar is short, leaving whitespace there).
+    max_total = max(sum(s[1] for s in slices) for _, slices in rows)
+    # Leave just enough room for the end-label text (~10 characters wide).
+    label_pad_ms = max_total * 0.12
+    ax.set_xlim(0, max_total + label_pad_ms)
+
+    # Legend – bottom right, below the bars and outside the data region.
     legend_patches = [
         Patch(facecolor=color, label=label, edgecolor="white")
         for label, color in legend_handles.values()
     ]
-    ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+    ax.legend(handles=legend_patches, loc="lower right", fontsize=10,
               framealpha=0.85, ncol=1)
-
-    max_total = max(sum(s[1] for s in slices) for _, slices in rows)
-    ax.set_xlim(0, max_total * 1.22)
 
     fig.tight_layout()
     out = (output_dir or profile_json_path.parent) / "end_to_end_latency.png"
@@ -2051,27 +2054,28 @@ def _plot_avg_end_to_end_latency(
                     edgecolor="white", linewidth=0.5)
             if total > 0 and width / total > 0.08:
                 ax.text(left + width / 2, y, f"{width:.1f}",
-                        ha="center", va="center", fontsize=7,
+                        ha="center", va="center", fontsize=10,
                         color="white" if color not in (_C_DRIVER, _C_ETL) else "#333333",
                         fontweight="bold")
             left += width
             legend_handles[seg_label] = (seg_label, color)
-        ax.text(left + (ax.get_xlim()[1] * 0.03 if ax.get_xlim()[1] > 0 else 0.5),
-                y, f"{left:.1f} ms", ha="left", va="center", fontsize=8)
+        ax.text(left + (ax.get_xlim()[1] * 0.01 if ax.get_xlim()[1] > 0 else 0.5),
+                y, f"{left:.1f} ms", ha="left", va="center", fontsize=11)
         yticks.append(y)
         ylabels.append(row_label)
 
     ax.set_yticks(yticks)
-    ax.set_yticklabels(ylabels, fontsize=9)
+    ax.set_yticklabels(ylabels, fontsize=12)
     ax.invert_yaxis()
-    ax.set_xlabel("mean ms per batch (avg across runs)")
-    ax.set_title("End-to-end latency breakdown – averaged across runs")
+    ax.set_xlabel("mean ms per batch (avg across runs)", fontsize=12)
+    ax.set_title("End-to-end latency breakdown – averaged across runs", fontsize=13)
+    ax.tick_params(axis="x", labelsize=11)
     ax.grid(axis="x", linestyle="--", alpha=0.3)
     max_total = max(sum(s[1] for s in slices) for _, slices in rows)
-    ax.set_xlim(0, max_total * 1.22)
+    ax.set_xlim(0, max_total + max_total * 0.12)
     legend_patches = [Patch(facecolor=c, label=l, edgecolor="white")
                       for l, c in legend_handles.values()]
-    ax.legend(handles=legend_patches, loc="upper right", fontsize=7,
+    ax.legend(handles=legend_patches, loc="lower right", fontsize=10,
               framealpha=0.85, ncol=1)
     fig.tight_layout()
     fig.savefig(output_dir / "avg_end_to_end_latency.png", dpi=150)
