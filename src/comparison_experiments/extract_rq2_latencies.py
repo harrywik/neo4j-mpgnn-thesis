@@ -22,7 +22,7 @@ def get_latency(filepath):
         print(f"Error reading {filepath}: {e}")
         return None
 
-datasets = ["arxiv", "papers100M", "products"]
+datasets = ["arxiv", "papers100M", "products", "coauthor"]
 implementations = {
     "Baseline": "baseline_neo4j",
     "Java UDP": "java_neo4j",
@@ -36,11 +36,20 @@ output_file = f"{base_path}/rq2_total_latency_per_batch_comparison.csv"
 with open(output_file, 'w', newline='') as csvfile:
     writer = csv.writer(csvfile)
     writer.writerow(["Dataset", "Baseline", "Java UDP", "Pre-agg"])
-    
+
     for ds in datasets:
         row = [ds]
         for impl_name, impl_dir in implementations.items():
-            path = os.path.join(base_path, impl_dir, ds, "measurements.json")
+            if ds == "coauthor":
+                if impl_name == "Java UDP":
+                    path = "experiment_results/report_files/rq_preagg/no_preagg/coauthor/10_5/128/measurements.json"
+                elif impl_name == "Pre-agg":
+                    path = "experiment_results/report_files/rq_preagg/preagg/coauthor/10_5/128/measurements.json"
+                else:
+                    path = os.path.join(base_path, impl_dir, ds, "measurements.json")
+            else:
+                path = os.path.join(base_path, impl_dir, ds, "measurements.json")
+
             latency = get_latency(path)
             row.append(f"{latency:.2f}" if latency is not None else "N/A")
         writer.writerow(row)

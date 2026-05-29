@@ -11,11 +11,11 @@
   "split_property_type": "str",
   "feature_dim": 128,
   "nbr_classes": 172,
-  "default_hidden_dim1": 80,
-  "default_hidden_dim2": 80,
+  "default_hidden_dim1": 192,
+  "default_hidden_dim2": 192,
   "lr": 1e-3,
   "batch_size": 128,
-  "max_epochs": 10,
+  "max_epochs": 1,
   "patience": 5,
   "min_delta": 0.001,
   "shuffle": true,
@@ -27,6 +27,5 @@
   "max_training_size": null,
   "max_validation_size": 0,
   "max_test_size": 0,
-  "load_snapshot_path": "checkpoints/inference/papers100M_GCN.pt",
   "nbr_runs": 1
 }

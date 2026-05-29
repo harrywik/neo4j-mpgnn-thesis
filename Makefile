@@ -171,6 +171,9 @@ add_float_features_papers100M:
 add_float_features_arxiv:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/arxiv/add_float_features.py
 
+add_float_features_products:
+	@PYTHONPATH=$(PYTHONPATH) $(PY) data/ogbn-products/add_float_features.py
+
 add_float_features_coauthor:
 	@PYTHONPATH=$(PYTHONPATH) $(PY) data/coauthor/add_float_features.py
 

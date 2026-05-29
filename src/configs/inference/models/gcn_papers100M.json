@@ -1,7 +1,7 @@
 {
   "model_class": "GCN",
-  "hidden_dim1": 100,
-  "hidden_dim2": 100,
+  "hidden_dim1": 192,
+  "hidden_dim2": 192,
   "checkpoint_path": null,
   "model_name": "experiment_gcn_papers100M",
   "strategies": ["neighborhood_sampling", "in_db_java", "in_db_cypher", "in_db_cypher_opt"]
