@@ -25,9 +25,9 @@
   "drop_last": true,
   "profile": true,
   "logg_cpu_utilization": true,
-  "cpu_burst_batches": 5,
+  "cpu_burst_batches": 3,
   "max_training_size": null,
-  "max_validation_size": null,
-  "max_test_size": null,
+  "max_validation_size": 0,
+  "max_test_size": 0,
   "nbr_runs": 1
 }
