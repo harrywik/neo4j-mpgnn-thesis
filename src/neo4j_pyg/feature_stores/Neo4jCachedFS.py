@@ -49,6 +49,7 @@ class Neo4jCachedFS(Neo4jFS):
         cache_size_GB: float = 0.00001,
         hot_cache_k: int = 500,
         lru_max_entries: int = 100_000,
+        **kwargs,
     ) -> None:
         cache_db = database_name if database_name else dataset_name
 
@@ -88,5 +89,6 @@ class Neo4jCachedFS(Neo4jFS):
             nodeid_property=nodeid_property,
             feature_property_type=feature_property_type,
             cache=cache,
+            **kwargs,
         )
 

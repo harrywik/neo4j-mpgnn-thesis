@@ -1,7 +1,10 @@
 {
   "feature_store": {
     "class_name": "Neo4jNoCacheFS",
-    "connection_mode": "driver"
+    "connection_mode": "driver",
+    "extra_kwargs": {
+      "use_java_fetch": true
+    }
   },
   "graph_store": {
     "class_name": "Neo4jSingleGS",

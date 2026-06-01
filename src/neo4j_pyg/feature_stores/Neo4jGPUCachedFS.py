@@ -66,6 +66,7 @@ class Neo4jGPUCachedFS(Neo4jFS):
         auto_size: bool = False,
         device: str = "cuda",
         reserved_gb: float = 1.0,
+        **kwargs,
     ) -> None:
         cache_db = database_name if database_name else dataset_name
 
@@ -104,6 +105,7 @@ class Neo4jGPUCachedFS(Neo4jFS):
             nodeid_property=nodeid_property,
             feature_property_type=feature_property_type,
             cache=gpu_cache,
+            **kwargs,
         )
         self._gpu_cache: Neo4jGPUCache = gpu_cache
 

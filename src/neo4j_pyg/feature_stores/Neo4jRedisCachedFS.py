@@ -66,6 +66,7 @@ class Neo4jRedisCachedFS(Neo4jFS):
         redis_ttl_seconds: Optional[int] = None,
         l1_maxsize: int = 10_000,
         memory_GB: Optional[float] = None,
+        **kwargs,
     ) -> None:
         cache = Neo4jRedisCache(
             feature_dim=feature_dim,
@@ -90,6 +91,7 @@ class Neo4jRedisCachedFS(Neo4jFS):
             nodeid_property=nodeid_property,
             feature_property_type=feature_property_type,
             cache=cache,
+            **kwargs,
         )
         self._redis_cache: Neo4jRedisCache = cache
         self._feature_dim = feature_dim
