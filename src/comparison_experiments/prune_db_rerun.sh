@@ -11,7 +11,7 @@ else
     exit 1
 fi
 
-DATASETS=("papers100m")
+DATASETS=("arxiv2" "products" "papers100m")
 
 # Ensure the temp directory exists and is writable by neo4j
 mkdir -p /var/lib/neo4j/data/tmp
@@ -23,9 +23,9 @@ for DS in "${DATASETS[@]}"; do
     echo "Starting compaction process for database: $DS"
     echo "--------------------------------------------"
 
-    # Stop the database synchronously (Wait up to 5 minutes for a massive DB)
+    # Stop the database synchronously
     echo "Stopping database $DS and waiting for locks to clear..."
-    cypher-shell -u "$USERNAME" -p "$PASSWORD" -d system "STOP DATABASE $DS WAIT 300 SECONDS;"
+    cypher-shell -u "$USERNAME" -p "$PASSWORD" -d system "STOP DATABASE $DS WAIT 600 SECONDS;"
 
     # Run the compaction as the neo4j user
     echo "Running store compaction..."
@@ -33,7 +33,7 @@ for DS in "${DATASETS[@]}"; do
 
     # Start the database back up synchronously
     echo "Starting database $DS..."
-    cypher-shell -u "$USERNAME" -p "$PASSWORD" -d system "START DATABASE $DS WAIT 60 SECONDS;"
+    cypher-shell -u "$USERNAME" -p "$PASSWORD" -d system "START DATABASE $DS WAIT 600 SECONDS;"
 
     # Apply the schema file
     # We check for both exact case and lowercase filenames just in case Neo4j normalized it

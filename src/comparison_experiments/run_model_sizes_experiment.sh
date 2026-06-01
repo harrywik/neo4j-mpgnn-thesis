@@ -7,7 +7,7 @@ set -e
 # 3. Update configs to use float64[] and longer training for future runs.
 # 4. Run full inference benchmarking suite.
 
-DATASETS=("arxiv" "papers100M" "products" "coauthor")
+DATASETS=("arxiv" "papers100M" "products")
 
 # Ensure we are in the project root
 cd "$(git rev-parse --show-toplevel)"
