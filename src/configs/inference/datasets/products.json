@@ -1,7 +1,7 @@
 {
   "dataset_name": "products",
   "training_dataset_config": "products",
-  "training_implementation_config": "baseline_neo4j",
+  "training_implementation_config": "java_neo4j",
   "ogb_name": "ogbn-products",
   "ogb_root": "data/ogbn-products",
   "node_label": "Product",
@@ -14,9 +14,9 @@
   "split_property_type": "str",
   "feature_dim": 100,
   "nbr_classes": 47,
-  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
-  "nbr_runs":    [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
-  "inference_batch_size": 256,
+  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "nbr_runs":    [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+  "inference_batch_size": 4096,
   "num_neighbors": [10, 5],
   "num_hops": 2
 }

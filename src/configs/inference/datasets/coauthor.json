@@ -1,7 +1,7 @@
 {
   "dataset_name": "coauthor",
   "training_dataset_config": "coauthor",
-  "training_implementation_config": "baseline_neo4j",
+  "training_implementation_config": "java_neo4j",
   "coauthor_name": "Physics",
   "coauthor_root": "data/coauthor",
   "node_label": "Author",
@@ -14,9 +14,9 @@
   "split_property_type": "str",
   "feature_dim": 8415,
   "nbr_classes": 5,
-  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
-  "nbr_runs":    [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
-  "inference_batch_size": 8192,
+  "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096],
+  "nbr_runs":    [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
+  "inference_batch_size": 4096,
   "num_neighbors": [10, 5],
   "num_hops": 2
 }
