@@ -18,7 +18,7 @@ for DS in "${DATASETS[@]}"; do
     echo "========================================================================"
 
     # make baseline_neo4j DATASET=$DS
-    make java_neo4j DATASET=$DS
+    make baseline_neo4j DATASET=$DS
     make java_neo4j DATASET=$DS
     make preagg_neo4j DATASET=$DS
 
