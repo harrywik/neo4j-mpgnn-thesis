@@ -249,9 +249,11 @@ def fetch_labels(node_ids: list[int], cfg: dict, driver) -> dict[int, int]:
 class PyGGraphLoader:
     """Loads a graph dataset once and exposes test-node indices.
 
-    Supports Planetoid datasets (Cora, CiteSeer, PubMed) and OGB node
-    property prediction datasets (ogbn-arxiv, ogbn-products, …).
+    Supports Planetoid datasets (Cora, CiteSeer, PubMed), OGB node
+    property prediction datasets (ogbn-arxiv, ogbn-products, …), and
+    Coauthor datasets (CS, Physics).
     Pass ``ogb_name`` (e.g. ``"ogbn-arxiv"``) to use the OGB loader;
+    pass ``coauthor_name`` (e.g. ``"Physics"``) to use the Coauthor loader;
     otherwise the Planetoid loader is used with ``root``/``name``.
     """
 
@@ -261,11 +263,15 @@ class PyGGraphLoader:
         name: str,
         ogb_name: str | None = None,
         ogb_root: str | None = None,
+        coauthor_name: str | None = None,
+        coauthor_root: str | None = None,
     ):
         self.root = root
         self.name = name
         self.ogb_name = ogb_name
         self.ogb_root = ogb_root or root
+        self.coauthor_name = coauthor_name
+        self.coauthor_root = coauthor_root or root
         self._data = None
         self.load_time_s: float = 0.0
 
@@ -273,6 +279,8 @@ class PyGGraphLoader:
         t0 = time.monotonic()
         if self.ogb_name:
             self._data = self._load_ogb()
+        elif self.coauthor_name:
+            self._data = self._load_coauthor()
         else:
             dataset = Planetoid(root=self.root, name=self.name)
             self._data = dataset[0]
@@ -305,6 +313,26 @@ class PyGGraphLoader:
         test_mask[split_idx["test"]] = True
 
         return Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
+
+    def _load_coauthor(self) -> Data:
+        """Load a Coauthor dataset as a PyG Data object."""
+        from torch_geometric.datasets import Coauthor
+        dataset = Coauthor(root=self.coauthor_root, name=self.coauthor_name)
+        data = dataset[0]
+
+        # Reproduce splits from ingest.py (60/20/20 train/val/test split with seed 42)
+        import numpy as np
+        num_nodes = data.x.shape[0]
+        state = np.random.RandomState(42)
+        indices = state.permutation(num_nodes)
+        train_size = int(0.6 * num_nodes)
+        val_size = int(0.2 * num_nodes)
+
+        test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        test_mask[torch.tensor(indices[train_size + val_size:], dtype=torch.long)] = True
+
+        data.test_mask = test_mask
+        return data
 
     @property
     def data(self):
@@ -1073,11 +1101,15 @@ def run_experiment(cfg: dict, model, graph_store, feature_store, driver) -> dict
         ogb_root = ds.get("ogb_root", "data")
         planetoid_root = ds.get("planetoid_root", "data/Planetoid")
         planetoid_name = ds.get("planetoid_name", "Cora")
+        coauthor_name = ds.get("coauthor_name")
+        coauthor_root = ds.get("coauthor_root", "data/coauthor")
         loader_cfg = dict(
             root=planetoid_root,
             name=planetoid_name,
             ogb_name=ogb_name,
             ogb_root=ogb_root,
+            coauthor_name=coauthor_name,
+            coauthor_root=coauthor_root,
         )
         print(f"\nLoading PyG graph (first load = cold-load reference)...")
         _loader = PyGGraphLoader(**loader_cfg)
