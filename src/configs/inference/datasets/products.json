@@ -2,6 +2,8 @@
   "dataset_name": "products",
   "training_dataset_config": "products",
   "training_implementation_config": "baseline_neo4j",
+  "ogb_name": "ogbn-products",
+  "ogb_root": "data/ogbn-products",
   "node_label": "Product",
   "edge_type": "COPURCHASED",
   "feature_property": "feature_vector_floats",

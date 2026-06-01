@@ -2,6 +2,8 @@
   "dataset_name": "papers100M",
   "training_dataset_config": "papers100M",
   "training_implementation_config": "baseline_neo4j",
+  "ogb_name": "ogbn-papers100M",
+  "ogb_root": "data/ogbn-papers100M",
   "node_label": "Paper",
   "edge_type": "CITES",
   "feature_property": "feature_vector_floats",
@@ -14,7 +16,7 @@
   "nbr_classes": 172,
   "node_counts": [1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192],
   "nbr_runs":    [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5],
-  "inference_batch_size": 4096,
+  "inference_batch_size": 8192,
   "num_neighbors": [10, 5],
   "num_hops": 2
 }
