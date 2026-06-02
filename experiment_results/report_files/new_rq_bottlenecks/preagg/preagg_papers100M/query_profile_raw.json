@@ -1,0 +1,58 @@
+{
+  "feat_x": {
+    "args": {
+      "GlobalMemory": 312,
+      "planner-impl": "IDP",
+      "Memory": 0,
+      "string-representation": "Cypher 5\n\nPlanner COST\n\nRuntime PIPELINED\n\nRuntime version 2026.02\n\nBatch size 128\n\n+-----------------+----+------------------------------------------------------------------------------------------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| Operator        | Id | Details                                                                                              | Estimated Rows | Rows | DB Hits | Memory (Bytes) | Page Cache Hits/Misses | Time (ms) | Pipeline            |\n+-----------------+----+------------------------------------------------------------------------------------------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n| +ProduceResults |  0 | rawNodeIds, rawNodeFeatures, labelNodeIds, labels, targetNodeIds, aggregatedFeatures                 |             10 |    1 |       0 |              0 |                        |           |                     |\n| |               +----+------------------------------------------------------------------------------------------------------+----------------+------+---------+----------------+                        |           |                     |\n| +ProcedureCall  |  1 | gnnProcedures.aggregation.neighbor.sampledGcnNormFetchBatch($nodes_by_hop, $edge_pairs, $autostring_ |             10 |    1 |         |              0 |                    0/0 |     0.000 | Fused in Pipeline 0 |\n|                 |    | 0, $autostring_1, $autostring_2, $autostring_3, $autostring_4, true, false) :: (rawNodeIds :: LIST<I |                |      |         |                |                        |           |                     |\n|                 |    | NTEGER>, rawNodeFeatures :: LIST<ANY>, labelNodeIds :: LIST<INTEGER>, labels :: LIST<ANY>, targetNod |                |      |         |                |                        |           |                     |\n|                 |    | eIds :: LIST<INTEGER>, aggregatedFeatures :: LIST<ANY>)                                              |                |      |         |                |                        |           |                     |\n+-----------------+----+------------------------------------------------------------------------------------------------------+----------------+------+---------+----------------+------------------------+-----------+---------------------+\n\nTotal database accesses: ?, total allocated memory: 312\n",
+      "runtime": "PIPELINED",
+      "runtime-impl": "PIPELINED",
+      "version": "5",
+      "DbHits": 0,
+      "batch-size": 128,
+      "Details": "rawNodeIds, rawNodeFeatures, labelNodeIds, labels, targetNodeIds, aggregatedFeatures",
+      "planner-version": "2026.02",
+      "PipelineInfo": "Fused in Pipeline 0",
+      "runtime-version": "2026.02",
+      "Id": 0,
+      "EstimatedRows": 10.0,
+      "planner": "COST",
+      "Rows": 1
+    },
+    "children": [
+      {
+        "args": {
+          "Details": "gnnProcedures.aggregation.neighbor.sampledGcnNormFetchBatch($nodes_by_hop, $edge_pairs, $autostring_0, $autostring_1, $autostring_2, $autostring_3, $autostring_4, true, false) :: (rawNodeIds :: LIST<INTEGER>, rawNodeFeatures :: LIST<ANY>, labelNodeIds :: LIST<INTEGER>, labels :: LIST<ANY>, targetNodeIds :: LIST<INTEGER>, aggregatedFeatures :: LIST<ANY>)",
+          "PipelineInfo": "Fused in Pipeline 0",
+          "Memory": 0,
+          "Time": 0,
+          "Id": 1,
+          "EstimatedRows": 10.0,
+          "PageCacheMisses": 0,
+          "Rows": 1,
+          "PageCacheHits": 0
+        },
+        "identifiers": [
+          "rawNodeFeatures",
+          "aggregatedFeatures",
+          "rawNodeIds",
+          "labels",
+          "labelNodeIds",
+          "targetNodeIds"
+        ],
+        "operatorType": "ProcedureCall@papers100m"
+      }
+    ],
+    "dbHits": 0,
+    "identifiers": [
+      "rawNodeFeatures",
+      "aggregatedFeatures",
+      "rawNodeIds",
+      "labels",
+      "labelNodeIds",
+      "targetNodeIds"
+    ],
+    "operatorType": "ProduceResults@papers100m",
+    "rows": 1
+  }
+}
