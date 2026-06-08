@@ -536,12 +536,154 @@
 					<section>
 						<h3>In-Database Inference</h3>
 						<p>Exploring where to run the model:</p>
-						<ol>
+						<ol style="font-size: 0.8em;">
 							<li><strong>Cypher:</strong> Pure query-based inference.</li>
 							<li><strong>UDP:</strong> Java-based model execution.</li>
 							<li><strong>Hybrid:</strong> UDP for sampling &rarr; PyG for prediction.</li>
 							<li><strong>Baseline:</strong> Only PyG (full memory).</li>
 						</ol>
+					</section>
+
+					<!-- 1. Cypher Inference -->
+					<section>
+						<h4>1. Cypher Inference</h4>
+						<div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 30px;">
+							<div style="width: 60%; background: #1a1a1a; padding: 20px; border-radius: 8px; border-top: 4px solid #b58900; text-align: left;">
+								<ul style="font-size: 0.55em; line-height: 1.6;">
+									<li><strong>Weights:</strong> All model parameters passed in every call.</li>
+									<li><strong>Hard-coded Architecture:</strong> Model layers baked directly into the query structure.</li>
+									<li><strong>Two Flavors:</strong>
+										<ul>
+											<li><em>Normal:</em> Standard arithmetic in Cypher.</li>
+											<li><em>Optimized:</em> Uses Neo4j's native VECTOR operations.</li>
+										</ul>
+									</li>
+								</ul>
+							</div>
+							<div style="width: 40%; text-align: center; align-self: center;">
+								<svg width="240" height="180" viewBox="0 0 240 180">
+									<!-- Bolt Client -->
+									<rect x="10" y="65" width="65" height="50" rx="5" fill="#333" stroke="#888" stroke-width="2" />
+									<text x="42.5" y="90" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">Client Process</text>
+									<text x="42.5" y="103" fill="#aaa" font-size="7" text-anchor="middle">Bolt driver</text>
+
+									<!-- Neo4j DB -->
+									<rect x="165" y="65" width="65" height="50" rx="5" fill="#002b36" stroke="#268bd2" stroke-width="2" />
+									<text x="197.5" y="90" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">Neo4j</text>
+									<text x="197.5" y="103" fill="#268bd2" font-size="7" text-anchor="middle">Database</text>
+
+									<!-- Fat Arrow -->
+									<path d="M 80,85 L 140,85 L 140,75 L 162,90 L 140,105 L 140,95 L 80,95 Z" fill="#b58900" />
+									
+									<!-- Connections from bubbles to arrow (drawn behind bubbles) -->
+									<line x1="120" y1="48" x2="120" y2="85" stroke="#b58900" stroke-width="1" stroke-dasharray="2,2" />
+									<line x1="120" y1="110" x2="120" y2="128" stroke="#b58900" stroke-width="1" stroke-dasharray="2,2" />
+
+									<!-- "Baked-in" content bubbles (drawn on top) -->
+									<g transform="translate(85, 30)">
+										<rect x="0" y="0" width="70" height="18" rx="9" fill="#444" stroke="#b58900" stroke-width="1" />
+										<text x="35" y="12" fill="#eee" font-size="6" text-anchor="middle">Model Arch</text>
+									</g>
+									<g transform="translate(85, 55)">
+										<rect x="0" y="0" width="70" height="18" rx="9" fill="#444" stroke="#b58900" stroke-width="1" />
+										<text x="35" y="12" fill="#eee" font-size="6" text-anchor="middle">All Weights</text>
+									</g>
+									<g transform="translate(85, 130)">
+										<rect x="0" y="0" width="70" height="18" rx="9" fill="#444" stroke="#b58900" stroke-width="1" />
+										<text x="35" y="12" fill="#eee" font-size="6" text-anchor="middle">Data Query</text>
+									</g>
+								</svg>
+								<p style="font-size: 0.45em; color: #888; margin-top: 5px;">Large, self-contained queries.</p>
+							</div>
+						</div>
+					</section>
+
+					<!-- 2. Java UDP Inference -->
+					<section>
+						<h4>2. Java UDP Inference</h4>
+						<div style="display: flex; gap: 20px; align-items: center; margin-top: 30px;">
+							<div style="width: 50%; background: #1a1a1a; padding: 25px; border-radius: 8px; border-top: 4px solid #d33682; text-align: left;">
+								<p style="font-size: 0.6em; font-weight: bold; margin-bottom: 15px; color: #d33682;">Persistent Model State</p>
+								<ul style="font-size: 0.55em; line-height: 1.8;">
+									<li><code>spec.json</code>: Defines the model layout.</li>
+									<li><code>weights.bin</code>: Stores pre-trained parameters.</li>
+									<li><strong>Lifecycle:</strong> Uploaded via dedicated UDP once; cached in-memory for all subsequent calls.</li>
+								</ul>
+							</div>
+							<div style="width: 55%; text-align: center; position: relative; height: 320px;">
+								<svg width="480" height="300" viewBox="0 0 320 200">
+									<!-- Database Boundary -->
+									<rect x="90" y="30" width="210" height="150" rx="5" fill="#111" stroke="#444" stroke-width="1.5" />
+									<text x="195" y="172" fill="#fff" font-size="11" text-anchor="middle" font-weight="bold" style="opacity: 0.8;">Neo4j Database</text>
+									
+									<!-- JVM Cache Box -->
+									<rect x="150" y="45" width="140" height="95" rx="5" fill="#222" stroke="#d33682" stroke-width="2.5" />
+									<text x="220" y="62" fill="#d33682" font-size="9" text-anchor="middle" font-weight="bold">JVM Cache</text>
+
+									<!-- STEP 1: Upload (Fragments) -->
+									<g class="fragment" data-fragment-index="1">
+										<rect x="5" y="80" width="60" height="50" rx="4" fill="#333" stroke="#888" stroke-width="1.5" />
+										<text x="35" y="108" fill="#fff" font-size="8" text-anchor="middle" font-weight="bold">Admin</text>
+										<path d="M 65,105 L 105,105 L 105,98 L 122,105 L 105,112 L 105,105" fill="#aaa" />
+										<text x="88" y="95" fill="#aaa" font-size="7" text-anchor="middle">Upload</text>
+										<rect x="115" y="55" width="50" height="30" rx="2" fill="#333" stroke="#d33682" stroke-width="1" stroke-dasharray="3" />
+										<text x="140" y="74" fill="#bbb" font-size="6" text-anchor="middle">Artifacts</text>
+									</g>
+
+									<!-- STEP 2: Cache Initialization -->
+									<g class="fragment" data-fragment-index="2">
+										<path d="M 140,85 L 140,120 L 175,120 L 175,113 L 192,120 L 175,127 L 175,120" fill="none" stroke="#d33682" stroke-width="1.5" />
+										<circle cx="220" cy="98" r="18" fill="#d33682" fill-opacity="0.3" stroke="#d33682" stroke-width="1.5" />
+										<text x="220" y="102" fill="#fff" font-size="7" text-anchor="middle" font-weight="bold">INIT</text>
+									</g>
+
+									<!-- STEP 3: Cached Inference -->
+									<g class="fragment" data-fragment-index="3">
+										<path d="M 250,98 L 285,98 L 285,91 L 300,98 L 285,105 L 285,98" fill="#859900" />
+										<text x="275" y="88" fill="#859900" font-size="7" text-anchor="middle" font-weight="bold">Inference</text>
+										<path d="M 220,118 Q 235,155 210,155 Q 185,155 200,118" fill="none" stroke="#859900" stroke-width="1.5" stroke-dasharray="3" />
+										<text x="210" y="162" fill="#859900" font-size="7" text-anchor="middle" font-weight="bold">Hot Cache</text>
+									</g>
+								</svg>
+								<div style="margin-top: 15px; font-size: 0.55em; text-align: left; padding-left: 40px;">
+									<p class="fragment" data-fragment-index="1" style="color: #aaa; margin: 4px 0;">1. Artifacts uploaded once</p>
+									<p class="fragment" data-fragment-index="2" style="color: #d33682; margin: 4px 0;">2. Model initialized & cached on first call</p>
+									<p class="fragment" data-fragment-index="3" style="color: #859900; margin: 4px 0;">3. Zero-initialization for subsequent calls</p>
+								</div>
+							</div>
+						</div>
+					</section>
+
+					<!-- 3. Hybrid Inference -->
+					<section>
+						<h4>3. Hybrid Inference</h4>
+						<div style="display: flex; justify-content: center; align-items: center; margin-top: 40px;">
+							<div style="background: #002b36; padding: 20px; border: 2px solid #268bd2; border-radius: 10px; text-align: center;">
+								<div style="font-size: 0.7em; color: #268bd2; margin-bottom: 10px;">Neo4j</div>
+								<div style="font-size: 0.5em; color: #eee;">Sampling + Feature Retrieval</div>
+							</div>
+							<div style="margin: 0 20px; font-size: 1.5em; color: #859900;">&rarr;</div>
+							<div style="background: #1a1a1a; padding: 20px; border: 2px solid #859900; border-radius: 10px; text-align: center;">
+								<div style="font-size: 0.7em; color: #859900; margin-bottom: 10px;">PyTorch Geometric</div>
+								<div style="font-size: 0.5em; color: #eee;">Forward Pass (No Grads)</div>
+							</div>
+						</div>
+						<p style="font-size: 0.55em; margin-top: 40px; color: #ccc; max-width: 80%; margin-left: auto; margin-right: auto;">
+							Identical to training pipeline logic. <strong>Efficiency:</strong> Neo4j handles high-fanout lookups while PyG leverages optimized tensor kernels.
+						</p>
+					</section>
+
+					<!-- 4. Baseline Reference -->
+					<section>
+						<h4>4. Baseline Reference</h4>
+						<div style="background: #1a1a1a; padding: 30px; border-radius: 10px; border: 2px solid #e63946; display: inline-block; margin-top: 50px;">
+							<p style="font-size: 0.8em; color: #e63946; font-weight: bold; margin-bottom: 20px;">Full In-Memory PyG</p>
+							<ul style="font-size: 0.6em; text-align: left; line-height: 1.8;">
+								<li>Dataset loaded entirely into system RAM.</li>
+								<li>No database overhead or network transfer.</li>
+								<li><strong>Constraint:</strong> Limited by available RAM.</li>
+							</ul>
+						</div>
 					</section>
 				</section>
 
