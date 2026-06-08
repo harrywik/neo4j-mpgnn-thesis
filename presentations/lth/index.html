@@ -968,6 +968,7 @@
 					<!-- 3. Hybrid Inference -->
 					<section>
 						<h4>3. Hybrid Inference</h4>
+						<p style="font-size: 0.6em; color: #ccc; margin-top: 1em;">Identical to training pipeline logic.</p>
 						<div style="display: flex; justify-content: center; align-items: center; margin-top: 40px;">
 							<div style="background: #002b36; padding: 20px; border: 2px solid #268bd2; border-radius: 10px; text-align: center;">
 								<div style="font-size: 0.7em; color: #268bd2; margin-bottom: 10px;">Neo4j</div>
@@ -979,9 +980,6 @@
 								<div style="font-size: 0.5em; color: #eee;">Forward Pass (No Grads)</div>
 							</div>
 						</div>
-						<p style="font-size: 0.55em; margin-top: 40px; color: #ccc; max-width: 80%; margin-left: auto; margin-right: auto;">
-							Identical to training pipeline logic. <strong>Efficiency:</strong> Neo4j handles high-fanout lookups while PyG leverages optimized tensor kernels.
-						</p>
 					</section>
 
 					<!-- 4. Baseline Reference -->
@@ -994,6 +992,22 @@
 								<li>No database overhead or network transfer.</li>
 								<li><strong>Constraint:</strong> Limited by available RAM.</li>
 							</ul>
+						</div>
+					</section>
+
+					<section>
+						<h4>Inference Results</h4>
+						<ul style="font-size: 0.6em; line-height: 1.5; margin: 0.5em 0;">
+							<li>In-graph DB Java is fastest (except graph in RAM).</li>
+							<li>Same accuracy as in-memory PyG.</li>
+						</ul>
+						<div style="display: flex; justify-content: center; gap: 30px; margin-top: 16px;">
+							<div style="width: 48%;">
+								<img src="images/arxiv-inference-accuracy.png" style="width:100%; background:#fff; border-radius:6px;" />
+							</div>
+							<div style="width: 48%;">
+								<img src="images/arxiv-inference-latency-vs-batch-size.png" style="width:100%; background:#fff; border-radius:6px;" />
+							</div>
 						</div>
 					</section>
 				</section>
