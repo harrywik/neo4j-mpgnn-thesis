@@ -19,6 +19,7 @@
 		<style>
 			.step { display: block; transition: background 0.3s, color 0.3s; padding: 0 4px; border-radius: 3px; }
 			.step.active { background: #48cae4; color: #111; }
+			.pa-line { display: block; padding: 0 4px; border-radius: 3px; transition: background 0.3s, color 0.3s; }
 			.sample circle, .sample line { transition: fill 0.7s ease, stroke 0.7s ease, filter 0.7s ease, transform 0.7s ease; transform-box: fill-box; transform-origin: center; }
 			.sample.lit circle { fill: #ffffff; filter: drop-shadow(0 0 14px #fff35c) drop-shadow(0 0 6px #ffffff); transform: scale(1.8); transition: fill 0.15s ease, filter 0.15s ease, transform 0.15s ease; }
 			.sample.lit line { stroke: #fff35c; stroke-width: 3; filter: drop-shadow(0 0 6px #fff35c); transition: stroke 0.15s ease, filter 0.15s ease; }
@@ -545,10 +546,18 @@
 				<section>
 					<section>
 						<h2>Our Work</h2>
+						<ul id="ow-bullets" style="line-height: 1.6; margin-top: 1.2em;">
+							<li class="fragment">Graph DB-backed GNN training pipelines.</li>
+							<li class="fragment">Benchmark &amp; optimize the graph DB-backed training.</li>
+							<li class="fragment">Explore new methods for graph DB-backed inference.</li>
+						</ul>
+						<h3 id="ow-final" style="display:none; margin-top: 1.5em;">Always equivalent to in-memory.</h3>
+						<span class="fragment ow-final-trigger" style="display:none;"></span>
 					</section>
 
 					<section id="rt-slide">
-						<h3 id="rt-title">In-Memory Training Loop</h3>
+						<h3 id="rt-title">Standard in-memory GNN</h3>
+						<p id="rt-note" style="font-size: 0.65em; color: #aaa; margin: 0 0 14px;">Graph held in RAM on the training machine.</p>
 						<div style="display: flex; align-items: flex-start; gap: 20px;">
 							<!-- code -->
 							<pre style="width: 46%; margin: 0; font-size: 0.5em; line-height: 1.5; background: #2b2b2b; padding: 14px; border-radius: 6px; text-align: left;">for batch B of seeds:
@@ -595,7 +604,6 @@
 								</svg>
 							</div>
 						</div>
-						<p id="rt-note" style="font-size: 0.65em; color: #aaa; margin-top: 16px;">Graph held in RAM on the training machine.</p>
 						<span class="fragment rt-frag" data-rt-step="0" style="display:none;"></span>
 						<span class="fragment rt-frag" data-rt-step="1" style="display:none;"></span>
 						<span class="fragment rt-frag" data-rt-step="2" style="display:none;"></span>
@@ -776,6 +784,65 @@
 							<li><strong>UDP Samplers:</strong> Bypassing Cypher overhead for raw traversal speed.</li>
 							<li><strong>Pre-aggregation:</strong> Moving computations into the database to reduce data transfer.</li>
 						</ul>
+					</section>
+
+					<section>
+						<h3>Pre-aggregation</h3>
+						<ul style="line-height: 1.6; margin-top: 1.2em;">
+							<li class="fragment">Reduce data sent from the graph DB to the training process.</li>
+							<li class="fragment">Move model computations from the training process to the graph DB.</li>
+							<li class="fragment">Only weight-free ops can move to the DB; backprop stays in training.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Pre-aggregation</h3>
+						<div style="display: flex; align-items: center; gap: 20px;">
+							<pre style="width: 46%; margin: 0; font-size: 0.5em; line-height: 1.5; background: #2b2b2b; padding: 14px; border-radius: 6px; text-align: left;">for batch B of seeds:
+<span class="pa-line">  G_B  ← Sample(B)</span>
+<span class="pa-line">  X_B  ← Fetch(G_B)</span>
+<span class="pa-line">  H_B  ← start forward pass (in DB)</span>
+<span class="pa-line">  ŷ    ← finish forward pass</span>
+<span class="pa-line">  L    ← compute loss</span>
+<span class="pa-line">  θ    ← update weights</span></pre>
+							<div style="width: 54%; height: 240px;">
+								<svg id="pa-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+									<line x1="140" y1="95" x2="256" y2="95" stroke="#555" stroke-dasharray="4" marker-end="url(#paArrowReq)" />
+									<text id="pa-top-label" x="198" y="85" font-size="9" text-anchor="middle"></text>
+									<line x1="256" y1="135" x2="140" y2="135" stroke="#555" stroke-dasharray="4" marker-end="url(#paArrowRes)" />
+									<text id="pa-bot-label" x="198" y="152" font-size="9" text-anchor="middle"></text>
+									<defs>
+										<marker id="paArrowReq" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+										<marker id="paArrowRes" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+									</defs>
+									<text id="pa-machine-label" x="75" y="68" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<text id="pa-db-label" x="305" y="58" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="15" y="80" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="75" y="116" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+										<text x="75" y="133" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+									</g>
+									<g class="db-box">
+										<path d="M265 78 V152 A40 12 0 0 0 345 152 V78" fill="#222" stroke="#48cae4" stroke-width="2"/>
+										<ellipse cx="305" cy="78" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+										<text x="305" y="120" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+										<text x="305" y="138" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+									</g>
+									<circle class="rt-dot pa-req" cx="140" cy="95" r="6" opacity="0"/>
+									<circle class="rt-dot pa-res" cx="256" cy="135" r="6" opacity="0"/>
+								</svg>
+							</div>
+						</div>
+						<span class="fragment pa-frag" data-pa-step="0" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="1" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="2" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="3" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="4" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="5" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="6" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="7" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="8" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="9" style="display:none;"></span>
 					</section>
 
 					<section>
@@ -1024,7 +1091,7 @@
 				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = ''; memLabel.textContent = '';
 
 				if (n <= 4) {                                  // ===== in-memory phase =====
-					title.textContent = 'In-Memory Training Loop';
+					title.textContent = 'Standard in-memory GNN';
 					note.textContent = 'Graph held in RAM on the training machine.';
 					memG.style.display = ''; dbG.style.display = 'none';
 					newTags.forEach(function(t) { t.style.display = 'none'; });
@@ -1078,14 +1145,65 @@
 					case 8: mLabel.textContent = 'Update weights'; mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
 				}
 			}
+			// Pre-aggregation: forward pass runs partly in the DB, then completes on the machine
+			function paRender(section, n) {
+				var reqDot   = section.querySelector('.pa-req');
+				var resDot   = section.querySelector('.pa-res');
+				var machine  = section.querySelector('.machine-box');
+				var db       = section.querySelector('.db-box');
+				var mLabel   = section.querySelector('#pa-machine-label');
+				var dbLabel  = section.querySelector('#pa-db-label');
+				var topLabel = section.querySelector('#pa-top-label');
+				var botLabel = section.querySelector('#pa-bot-label');
+				var codeLines = section.querySelectorAll('.pa-line');
+				rtGlowTimers.forEach(clearTimeout); rtGlowTimers = [];
+				[reqDot, resDot].forEach(function(d) { d.getAnimations().forEach(function(a) { a.cancel(); }); d.style.opacity = 0; });
+				machine.classList.remove('glow'); db.classList.remove('glow');
+				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = '';
+				codeLines.forEach(function(l) { l.style.background = ''; l.style.color = ''; });
+				if (n < 0) return;
+				// highlight matching code line in the stage colour
+				var PA_LINE  = [0, 0, 0, 1, 1, 2, 2, 3, 4, 5];
+				var PA_COLOR = [C_SAMPLE, C_SAMPLE, C_SAMPLE, C_FETCH, C_FETCH, C_COMPUTE, C_COMPUTE, C_COMPUTE, C_COMPUTE, C_COMPUTE];
+				codeLines[PA_LINE[n]].style.background = PA_COLOR[n];
+				codeLines[PA_LINE[n]].style.color = '#fff';
+				switch (n) {
+					case 0: topLabel.setAttribute('fill', C_SAMPLE); topLabel.textContent = 'sample query'; reqDot.style.fill = C_SAMPLE; rtTravel(reqDot, 118, 1800); break;
+					case 1: dbLabel.setAttribute('fill', C_SAMPLE); dbLabel.textContent = 'Sampling'; rtGlow(db, C_SAMPLE); break;
+					case 2: botLabel.setAttribute('fill', C_SAMPLE); botLabel.textContent = 'subgraph'; resDot.style.fill = C_SAMPLE; rtTravel(resDot, -118, 1800); break;
+					case 3: topLabel.setAttribute('fill', C_FETCH); topLabel.textContent = 'fetch query'; reqDot.style.fill = C_FETCH; rtTravel(reqDot, 118, 1800); break;
+					case 4: dbLabel.setAttribute('fill', C_FETCH); dbLabel.textContent = 'Finding feature vectors'; rtGlow(db, C_FETCH); break;
+					case 5: dbLabel.setAttribute('fill', C_COMPUTE); dbLabel.textContent = 'Forward pass (in DB)'; rtGlow(db, C_COMPUTE); break;
+					case 6: botLabel.setAttribute('fill', C_COMPUTE); botLabel.textContent = 'sending less features'; resDot.style.fill = C_COMPUTE; rtTravel(resDot, -118, 1800); break;
+					case 7: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Complete forward pass'; rtGlow(machine, C_COMPUTE); break;
+					case 8: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Compute loss'; rtGlow(machine, C_COMPUTE); break;
+					case 9: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Update weights'; rtGlow(machine, C_COMPUTE); break;
+				}
+			}
 			Reveal.on('fragmentshown', function(event) {
 				if (event.fragment.classList.contains('rt-frag')) {
 					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10));
+				}
+				if (event.fragment.classList.contains('pa-frag')) {
+					paRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.paStep, 10));
+				}
+				if (event.fragment.classList.contains('ow-final-trigger')) {
+					var sec = event.fragment.closest('section');
+					sec.querySelector('#ow-bullets').style.display = 'none';
+					sec.querySelector('#ow-final').style.display = '';
 				}
 			});
 			Reveal.on('fragmenthidden', function(event) {
 				if (event.fragment.classList.contains('rt-frag')) {
 					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10) - 1);
+				}
+				if (event.fragment.classList.contains('pa-frag')) {
+					paRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.paStep, 10) - 1);
+				}
+				if (event.fragment.classList.contains('ow-final-trigger')) {
+					var sec = event.fragment.closest('section');
+					sec.querySelector('#ow-bullets').style.display = '';
+					sec.querySelector('#ow-final').style.display = 'none';
 				}
 			});
 		</script>
