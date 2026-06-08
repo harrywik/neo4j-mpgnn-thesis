@@ -12,6 +12,11 @@
 
 		<!-- Theme used for syntax highlighted code -->
 		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/monokai.min.css">
+
+		<style>
+			.step { display: block; transition: background 0.3s, color 0.3s; padding: 0 4px; border-radius: 3px; }
+			.step.active { background: #48cae4; color: #111; }
+		</style>
 	</head>
 	<body>
 		<div class="reveal">
@@ -108,33 +113,170 @@
 					</section>
 
 					<section>
-						<h3>The Neighborhood Explosion</h3>
+						<h3>Neighborhood Explosion</h3>
 						<div style="display: flex; justify-content: space-around; align-items: center;">
-							<div style="text-align: left; width: 50%;">
+							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
+								<svg viewBox="0 0 300 300" width="100%">
+									<defs>
+										<radialGradient id="khop" cx="50%" cy="50%" r="50%">
+											<stop offset="0%" stop-color="#48cae4" stop-opacity="0.28" />
+											<stop offset="100%" stop-color="#48cae4" stop-opacity="0" />
+										</radialGradient>
+									</defs>
+									<!-- background (out-of-neighborhood) edges -->
+									<line x1="45" y1="80" x2="20" y2="35" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="255" y1="80" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="260" y1="155" x2="290" y2="200" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="20" y1="35" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- 2-hop neighborhood boundary -->
+									<circle cx="150" cy="150" r="138" fill="url(#khop)" stroke="#48cae4" stroke-width="0.8" stroke-opacity="0.4" />
+
+									<!-- edges: target -> hop 1 -->
+									<line x1="150" y1="150" x2="95" y2="110" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="210" y2="120" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="130" y2="210" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="200" y2="200" stroke="#888" stroke-width="1.5" />
+
+									<!-- edges: hop 1 -> hop 2 -->
+									<line x1="95" y1="110" x2="45" y2="80" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="55" y2="150" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="100" y2="60" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="255" y2="80" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="260" y2="155" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="225" y2="60" stroke="#666" stroke-width="1" />
+									<line x1="130" y1="210" x2="90" y2="255" stroke="#666" stroke-width="1" />
+									<line x1="130" y1="210" x2="180" y2="255" stroke="#666" stroke-width="1" />
+									<line x1="200" y1="200" x2="240" y2="240" stroke="#666" stroke-width="1" />
+
+									<!-- out-of-neighborhood (grey) nodes -->
+									<circle cx="20" cy="35" r="7" fill="#555" />
+									<circle cx="285" cy="40" r="7" fill="#555" />
+									<circle cx="290" cy="200" r="7" fill="#555" />
+									<circle cx="210" cy="290" r="7" fill="#555" />
+									<circle cx="10" cy="195" r="7" fill="#555" />
+									<circle cx="60" cy="290" r="7" fill="#555" />
+
+									<!-- hop 2 nodes -->
+									<circle cx="45" cy="80" r="8" fill="#2a6f97" />
+									<circle cx="55" cy="150" r="8" fill="#2a6f97" />
+									<circle cx="100" cy="60" r="8" fill="#2a6f97" />
+									<circle cx="255" cy="80" r="8" fill="#2a6f97" />
+									<circle cx="260" cy="155" r="8" fill="#2a6f97" />
+									<circle cx="225" cy="60" r="8" fill="#2a6f97" />
+									<circle cx="90" cy="255" r="8" fill="#2a6f97" />
+									<circle cx="180" cy="255" r="8" fill="#2a6f97" />
+									<circle cx="240" cy="240" r="8" fill="#2a6f97" />
+
+									<!-- hop 1 nodes -->
+									<circle cx="95" cy="110" r="10" fill="#48cae4" />
+									<circle cx="210" cy="120" r="10" fill="#48cae4" />
+									<circle cx="130" cy="210" r="10" fill="#48cae4" />
+									<circle cx="200" cy="200" r="10" fill="#48cae4" />
+
+									<!-- target node -->
+									<circle cx="150" cy="150" r="13" fill="#e63946" stroke="#fff" stroke-width="2" />
+
+									<text x="150" y="32" fill="#aaa" font-size="11" text-anchor="middle">K = 2 neighborhood</text>
+								</svg>
+							</div>
+							<div style="text-align: left; width: 44%; font-size: 0.85em;">
 								<ul>
-									<li>L-layer GNN aggregates L-hop neighbors.</li>
-									<li>Average degree $d$ leads to $d^L$ nodes.</li>
-									<li>Exponential growth makes full-batch training impossible on large graphs.</li>
+									<li style="margin-bottom: 1.2em;">A node's output depends on its <strong>K-hop neighborhood</strong>.</li>
+									<li>For many real-world graphs this neighborhood grows too large to fit on the training machine.</li>
 								</ul>
 							</div>
-							<div style="width: 40%; background: #333; padding: 20px; border-radius: 10px;">
-								<svg viewBox="0 0 200 200" width="100%">
-									<circle cx="100" cy="100" r="10" fill="red" />
-									<line x1="100" y1="100" x2="60" y2="60" stroke="white" />
-									<line x1="100" y1="100" x2="140" y2="60" stroke="white" />
-									<line x1="100" y1="100" x2="100" y2="150" stroke="white" />
-									<circle cx="60" cy="60" r="7" fill="blue" />
-									<circle cx="140" cy="60" r="7" fill="blue" />
-									<circle cx="100" cy="150" r="7" fill="blue" />
-									<!-- Hop 2 -->
-									<line x1="60" y1="60" x2="30" y2="40" stroke="gray" stroke-dasharray="2" />
-									<line x1="60" y1="60" x2="40" y2="80" stroke="gray" stroke-dasharray="2" />
-									<line x1="140" y1="60" x2="170" y2="40" stroke="gray" stroke-dasharray="2" />
-									<line x1="140" y1="60" x2="160" y2="80" stroke="gray" stroke-dasharray="2" />
+						</div>
+					</section>
+
+					<section>
+						<h3>Solution: Sampling</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center;">
+							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
+								<svg viewBox="0 0 300 300" width="100%">
+									<!-- ===== BASE GRAPH (all grey) ===== -->
+									<!-- out-of-neighborhood edges -->
+									<line x1="45" y1="80" x2="20" y2="35" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="255" y1="80" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="260" y1="155" x2="290" y2="200" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="20" y1="35" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- in-neighborhood edges (grey base) -->
+									<line x1="150" y1="150" x2="95" y2="110" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="210" y2="120" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="130" y2="210" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="200" y2="200" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="95" y1="110" x2="45" y2="80" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="55" y2="150" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="100" y2="60" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="255" y2="80" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="260" y2="155" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="225" y2="60" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="90" y2="255" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="180" y2="255" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="200" y1="200" x2="240" y2="240" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- all nodes grey -->
+									<circle cx="20" cy="35" r="7" fill="#555" />
+									<circle cx="285" cy="40" r="7" fill="#555" />
+									<circle cx="290" cy="200" r="7" fill="#555" />
+									<circle cx="210" cy="290" r="7" fill="#555" />
+									<circle cx="10" cy="195" r="7" fill="#555" />
+									<circle cx="60" cy="290" r="7" fill="#555" />
+									<circle cx="45" cy="80" r="8" fill="#555" />
+									<circle cx="55" cy="150" r="8" fill="#555" />
+									<circle cx="100" cy="60" r="8" fill="#555" />
+									<circle cx="255" cy="80" r="8" fill="#555" />
+									<circle cx="260" cy="155" r="8" fill="#555" />
+									<circle cx="225" cy="60" r="8" fill="#555" />
+									<circle cx="90" cy="255" r="8" fill="#555" />
+									<circle cx="180" cy="255" r="8" fill="#555" />
+									<circle cx="240" cy="240" r="8" fill="#555" />
+									<circle cx="95" cy="110" r="10" fill="#555" />
+									<circle cx="210" cy="120" r="10" fill="#555" />
+									<circle cx="130" cy="210" r="10" fill="#555" />
+									<circle cx="200" cy="200" r="10" fill="#555" />
+
+									<!-- ===== SAMPLED OVERLAY (auto-animated, 3 per level) ===== -->
+									<!-- hop 1 -->
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="95" y2="110" stroke="#48cae4" stroke-width="1.5" /><circle cx="95" cy="110" r="10" fill="#48cae4" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="210" y2="120" stroke="#48cae4" stroke-width="1.5" /><circle cx="210" cy="120" r="10" fill="#48cae4" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="130" y2="210" stroke="#48cae4" stroke-width="1.5" /><circle cx="130" cy="210" r="10" fill="#48cae4" /></g>
+									<!-- hop 2 (fanout 2 per sampled hop-1 node) -->
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="95" y1="110" x2="45" y2="80" stroke="#2a6f97" stroke-width="1" /><circle cx="45" cy="80" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="95" y1="110" x2="100" y2="60" stroke="#2a6f97" stroke-width="1" /><circle cx="100" cy="60" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="210" y1="120" x2="255" y2="80" stroke="#2a6f97" stroke-width="1" /><circle cx="255" cy="80" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="210" y1="120" x2="225" y2="60" stroke="#2a6f97" stroke-width="1" /><circle cx="225" cy="60" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="130" y1="210" x2="90" y2="255" stroke="#2a6f97" stroke-width="1" /><circle cx="90" cy="255" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="130" y1="210" x2="180" y2="255" stroke="#2a6f97" stroke-width="1" /><circle cx="180" cy="255" r="8" fill="#2a6f97" /></g>
+
+									<!-- target node (always coloured) -->
+									<circle cx="150" cy="150" r="13" fill="#e63946" stroke="#fff" stroke-width="2" />
 								</svg>
-								<p style="font-size: 0.5em;">Exponential expansion per hop</p>
+							</div>
+							<div style="text-align: left; width: 44%; font-size: 0.9em;">
+								<p>Sample a subgraph around each seed node.</p>
+								<span class="fragment" data-sample-trigger="1" style="display:none;"></span>
 							</div>
 						</div>
+					</section>
+
+					<section>
+						<h3>Sampling Changes the Training Loop</h3>
+						<pre style="width: 80%; margin: 30px auto;"><code style="font-size: 0.6em; line-height: 1.5;" data-trim data-noescape>for batch B of seeds:
+<span class="step">    G_B      ← Sample(B)          # sampling</span>
+<span class="step">    X_B, E_B ← Fetch(G_B)         # feature retrieval</span>
+<span class="step">    ŷ        ← f_θ(X_B, E_B)      # forward</span>
+<span class="step">    L        ← CE(ŷ, y_B)         # loss</span>
+<span class="step">    θ        ← θ − η ∇L           # update</span></code></pre>
+						<p id="loop-caption" style="font-size: 0.7em; color: #48cae4; height: 1.2em;">&nbsp;</p>
+						<span class="fragment" data-loop-trigger="1" style="display:none;"></span>
 					</section>
 
 					<section>
@@ -242,6 +384,48 @@
 			Reveal.initialize({
 				hash: true,
 				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes, RevealMath.KaTeX ]
+			});
+
+			// Auto-animate the sampling demo: one click reveals all sampled nodes one-by-one
+			Reveal.on('fragmentshown', function(event) {
+				if (event.fragment.hasAttribute('data-sample-trigger')) {
+					var samples = event.fragment.closest('section').querySelectorAll('.sample');
+					samples.forEach(function(el, i) {
+						setTimeout(function() { el.style.opacity = 1; }, i * 900);
+					});
+				}
+			});
+			Reveal.on('fragmenthidden', function(event) {
+				if (event.fragment.hasAttribute('data-sample-trigger')) {
+					event.fragment.closest('section').querySelectorAll('.sample').forEach(function(el) {
+						el.style.opacity = 0;
+					});
+				}
+			});
+
+			// Training-loop walkthrough: highlight each step in sequence
+			var LOOP_LABELS = ['Sampling…', 'Retrieving features…', 'Forward pass…', 'Computing loss…', 'Updating weights…'];
+			Reveal.on('fragmentshown', function(event) {
+				if (event.fragment.hasAttribute('data-loop-trigger')) {
+					var section = event.fragment.closest('section');
+					var steps = section.querySelectorAll('.step');
+					var caption = section.querySelector('#loop-caption');
+					steps.forEach(function(step, i) {
+						setTimeout(function() {
+							steps.forEach(function(s) { s.classList.remove('active'); });
+							step.classList.add('active');
+							if (caption) caption.textContent = LOOP_LABELS[i] || '';
+						}, i * 1100);
+					});
+				}
+			});
+			Reveal.on('fragmenthidden', function(event) {
+				if (event.fragment.hasAttribute('data-loop-trigger')) {
+					var section = event.fragment.closest('section');
+					section.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
+					var caption = section.querySelector('#loop-caption');
+					if (caption) caption.innerHTML = '&nbsp;';
+				}
 			});
 		</script>
 	</body>
