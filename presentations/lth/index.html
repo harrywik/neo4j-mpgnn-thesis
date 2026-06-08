@@ -779,6 +779,20 @@
 					</section>
 
 					<section>
+						<h3>Convergence & Equivalence</h3>
+						<div style="display: flex; justify-content: space-around; align-items: flex-end; gap: 20px;">
+							<div style="width: 48%;">
+								<img data-src="images/accuracy_epochs.png" style="width: 100%; border-radius: 8px; border: 1px solid #444;">
+								<p style="font-size: 0.5em; color: #aaa;">Validation Accuracy vs. Epochs (Convergence)</p>
+							</div>
+							<div style="width: 48%;">
+								<img data-src="images/preagg_equivalence.png" style="width: 100%; border-radius: 8px; border: 1px solid #444;">
+								<p style="font-size: 0.5em; color: #aaa;">Pre-aggregation Equivalence</p>
+							</div>
+						</div>
+					</section>
+
+					<section>
 						<h3>Pipeline Optimizations</h3>
 						<ul>
 							<li><strong>UDP Samplers:</strong> Bypassing Cypher overhead for raw traversal speed.</li>
@@ -932,36 +946,12 @@
 									<rect x="150" y="45" width="140" height="95" rx="5" fill="#222" stroke="#d33682" stroke-width="2.5" />
 									<text x="220" y="62" fill="#d33682" font-size="9" text-anchor="middle" font-weight="bold">JVM Cache</text>
 
-									<!-- STEP 1: Upload (Fragments) -->
-									<g class="fragment" data-fragment-index="1">
-										<rect x="5" y="80" width="60" height="50" rx="4" fill="#333" stroke="#888" stroke-width="1.5" />
-										<text x="35" y="108" fill="#fff" font-size="8" text-anchor="middle" font-weight="bold">Admin</text>
-										<path d="M 65,105 L 105,105 L 105,98 L 122,105 L 105,112 L 105,105" fill="#aaa" />
-										<text x="88" y="95" fill="#aaa" font-size="7" text-anchor="middle">Upload</text>
+									<g>
 										<rect x="115" y="55" width="50" height="30" rx="2" fill="#333" stroke="#d33682" stroke-width="1" stroke-dasharray="3" />
-										<text x="140" y="74" fill="#bbb" font-size="6" text-anchor="middle">Artifacts</text>
-									</g>
-
-									<!-- STEP 2: Cache Initialization -->
-									<g class="fragment" data-fragment-index="2">
-										<path d="M 140,85 L 140,120 L 175,120 L 175,113 L 192,120 L 175,127 L 175,120" fill="none" stroke="#d33682" stroke-width="1.5" />
-										<circle cx="220" cy="98" r="18" fill="#d33682" fill-opacity="0.3" stroke="#d33682" stroke-width="1.5" />
-										<text x="220" y="102" fill="#fff" font-size="7" text-anchor="middle" font-weight="bold">INIT</text>
-									</g>
-
-									<!-- STEP 3: Cached Inference -->
-									<g class="fragment" data-fragment-index="3">
-										<path d="M 250,98 L 285,98 L 285,91 L 300,98 L 285,105 L 285,98" fill="#859900" />
-										<text x="275" y="88" fill="#859900" font-size="7" text-anchor="middle" font-weight="bold">Inference</text>
-										<path d="M 220,118 Q 235,155 210,155 Q 185,155 200,118" fill="none" stroke="#859900" stroke-width="1.5" stroke-dasharray="3" />
-										<text x="210" y="162" fill="#859900" font-size="7" text-anchor="middle" font-weight="bold">Hot Cache</text>
+										<text x="140" y="70" fill="#bbb" font-size="6" text-anchor="middle">spec.json</text>
+										<text x="140" y="76" fill="#bbb" font-size="6" text-anchor="middle">weights.bin</text>
 									</g>
 								</svg>
-								<div style="margin-top: 15px; font-size: 0.55em; text-align: left; padding-left: 40px;">
-									<p class="fragment" data-fragment-index="1" style="color: #aaa; margin: 4px 0;">1. Artifacts uploaded once</p>
-									<p class="fragment" data-fragment-index="2" style="color: #d33682; margin: 4px 0;">2. Model initialized & cached on first call</p>
-									<p class="fragment" data-fragment-index="3" style="color: #859900; margin: 4px 0;">3. Zero-initialization for subsequent calls</p>
-								</div>
 							</div>
 						</div>
 					</section>
