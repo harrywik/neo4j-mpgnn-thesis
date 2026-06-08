@@ -298,7 +298,6 @@
 									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
-									<line x1="20" y1="35" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
 
 									<!-- 2-hop neighborhood boundary -->
 									<circle cx="150" cy="150" r="138" fill="url(#khop)" stroke="#48cae4" stroke-width="0.8" stroke-opacity="0.4" />
@@ -369,21 +368,6 @@
 
 					<section>
 						<h3>Solution: Sampling</h3>
-						<h6>Explored strategies</h6>
-						<ul>
-							<li><strong>GraphSAINT:</strong> Subgraph sampling to decouple GNN depth from neighborhood size.</li>
-							<li><strong>GraphSAGE:</strong> Neighborhood sampling (fixed-size).
-								<ul>
-									<li>Uniformly samples $k$ neighbors per hop.</li>
-									<li>Allows mini-batch training on massive graphs.</li>
-								</ul>
-							</li>
-						</ul>
-					</section>
-
-
-					<section>
-						<h3>GraphSAGE-sampling</h3>
 						<div style="display: flex; justify-content: space-around; align-items: center;">
 							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
 								<svg viewBox="0 0 300 300" width="100%">
@@ -395,7 +379,6 @@
 									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
-									<line x1="20" y1="35" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
 
 									<!-- in-neighborhood edges (grey base) -->
 									<line x1="150" y1="150" x2="95" y2="110" stroke="#3a3a3a" stroke-width="1.5" />
@@ -460,8 +443,16 @@
 								<p>Sample a subgraph around each seed node.</p>
 								<p>Fanout: \([3, 2]\)</p>
 								<span class="fragment" data-sample-trigger="1" style="display:none;"></span>
+								<p style="font-size: 0.6em; color: #888; margin-top: 1.5em;">* GraphSAGE neighborhood sampling</p>
 							</div>
 						</div>
+					</section>
+
+					<section id="big-graph-slide">
+						<h3>Sampling a 2-hop neighborhood</h3>
+						<svg id="big-graph" viewBox="0 0 900 470" width="82%" style="background:#111; border-radius:8px; margin-top:10px;"></svg>
+						<p style="font-size:0.6em; color:#888; margin-top:8px;"><span style="color:#e63946;">&#9679;</span> seeds (10) &nbsp; <span style="color:#90e0ef;">&#9679;</span> 2-hop neighborhood &nbsp; <span style="color:#ffd60a;">&#9679;</span> sampled</p>
+						<span class="fragment bg-trigger" style="display:none;"></span>
 					</section>
 
 					<section>
@@ -478,6 +469,20 @@
 							</div>
 						</div>
 					</section>
+
+					<section>
+						<h3>Sampling algorithms</h3>
+						<ul>
+							<li><strong>GraphSAINT:</strong> Subgraph sampling to decouple GNN depth from neighborhood size.</li>
+							<li><strong>GraphSAGE:</strong> Neighborhood sampling (fixed-size).
+								<ul>
+									<li>Uniformly samples $k$ neighbors per hop.</li>
+									<li>Allows mini-batch training on massive graphs.</li>
+								</ul>
+							</li>
+						</ul>
+					</section>
+
 
 					<section>
 						<h3>PyTorch Geometric (PyG)</h3>
@@ -889,6 +894,56 @@
 						<span class="fragment pa-frag" data-pa-step="9" style="display:none;"></span>
 					</section>
 
+				<section>
+					<h3>Bottlenecks</h3>
+					<div style="display: flex; align-items: center; gap: 24px;">
+						<div style="width: 62%;">
+							<img src="images/papers100M-latency-optim.png" style="width:100%; background:#fff; border-radius:6px;" />
+						</div>
+						<pre style="width: 38%; margin: 0; font-size: 0.5em; line-height: 1.9; background: #2b2b2b; padding: 16px; border-radius: 6px; text-align: left;">for batch B of seeds:
+  G_B      ← <span style="text-decoration: underline; text-decoration-color: #2a6f97; text-decoration-thickness: 3px; text-underline-offset: 4px;">Sample(B)</span>
+  X_B, E_B ← <span style="text-decoration: underline; text-decoration-color: #b5651d; text-decoration-thickness: 3px; text-underline-offset: 4px;">Fetch(G_B)</span>
+  ŷ        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">forward pass</span>
+  L        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">compute loss</span>
+  θ        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">update weights</span></pre>
+					</div>
+				</section>
+
+				<section>
+					<h3>Pre-aggregation at High Dimensions</h3>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">When feature dimensions are high, pre-aggregation cuts data transfer and speeds up the batch.</p>
+					<img src="images/coauthor-latency-optim.png" style="width: 68%; background:#fff; border-radius:6px; margin-top: 12px;" />
+				</section>
+
+
+				<section>
+					<h3>Sampling Query (2-hop fan-out)</h3>
+					<pre style="width: 80%; margin: 18px auto; font-size: 0.42em; line-height: 1.4; background: #272822; color: #f8f8f2; padding: 18px 22px; border-radius: 8px; text-align: left;"><span style="color:#75715e;">// seeds → first frontier</span>
+<span style="color:#f92672;">UNWIND</span> <span style="color:#e6db74;">$seed_ids</span> <span style="color:#f92672;">AS</span> id
+<span style="color:#f92672;">MATCH</span> (s) <span style="color:#f92672;">WHERE</span> s.id = id
+<span style="color:#f92672;">WITH</span> <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> frontier, <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> visited
+
+<span style="color:#fd971f;">// ── for each layer k in [k1, k2] ──</span>
+<span style="color:#f92672;">CALL</span> (frontier, visited) {
+    <span style="color:#f92672;">UNWIND</span> frontier <span style="color:#f92672;">AS</span> src
+    <span style="color:#f92672;">MATCH</span> (src)&lt;-[r]-(nbr)            <span style="color:#75715e;">// 1-hop pattern match</span>
+    <span style="color:#f92672;">WITH</span> src, <span style="color:#a6e22e;">collect</span>(r) <span style="color:#f92672;">AS</span> cand
+    <span style="color:#f92672;">WITH</span> <span style="color:#a6e22e;">apoc.coll.randomItems</span>(cand, k) <span style="color:#f92672;">AS</span> picked  <span style="color:#75715e;">// sample k</span>
+    ...
+    <span style="color:#f92672;">RETURN</span> [n <span style="color:#f92672;">IN</span> nbrs <span style="color:#f92672;">WHERE</span> <span style="color:#f92672;">NOT</span> n <span style="color:#f92672;">IN</span> visited] <span style="color:#f92672;">AS</span> frontier,
+           visited + nbrs <span style="color:#f92672;">AS</span> visited
+}
+<span style="color:#f92672;">WITH</span> frontier, visited   <span style="color:#75715e;">// ← new frontier feeds the next layer</span>
+
+<span style="color:#75715e;">// CALL block runs once per layer (k1, then k2 …)</span>
+<span style="color:#f92672;">RETURN</span> edge_pairs, nodes_by_hop</pre>
+				</section>
+				<section>
+					<h3>Sampling Query Profiling</h3>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Sampling materialises the K-hop in RAM via iterative pattern matching &rarr; slow.</p>
+					<img src="images/operator_latency.png" style="width: 64%; background:#fff; border-radius:6px; margin-top: 12px;" />
+				</section>
+
 					<section>
 						<h3>In-Database Inference</h3>
 						<p>Exploring where to run the model:</p>
@@ -1240,6 +1295,94 @@
 					sec.querySelector('#ow-final').style.display = 'none';
 				}
 			});
+
+			// ===== Big graph: 150 nodes, sample a 2-hop neighborhood =====
+			var bgTimers = [];
+			function bgShuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = a[i]; a[i] = a[j]; a[j] = tmp; } return a; }
+			function buildBigGraph(section) {
+				var svg = section.querySelector('#big-graph');
+				if (svg.dataset.built) return;
+				svg.dataset.built = '1';
+				var ns = 'http://www.w3.org/2000/svg';
+				var W = 900, H = 470, N = 450, K = 9;
+				var nodes = [], i, j;
+				for (i = 0; i < N; i++) nodes.push({ x: 25 + Math.random() * (W - 50), y: 25 + Math.random() * (H - 50), adj: [] });
+				var edges = [];
+				for (i = 0; i < N; i++) {
+					var d = [];
+					for (j = 0; j < N; j++) { if (j !== i) { var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y; d.push([dx * dx + dy * dy, j]); } }
+					d.sort(function (a, b) { return a[0] - b[0]; });
+					for (var m = 0; m < K; m++) { var jj = d[m][1]; if (nodes[i].adj.indexOf(jj) < 0) { nodes[i].adj.push(jj); nodes[jj].adj.push(i); edges.push([i, jj]); } }
+				}
+				var seeds = []; for (i = 0; i < 10; i++) seeds.push(i);
+				var hop = new Array(N).fill(-1);
+				seeds.forEach(function (s) { hop[s] = 0; });
+				var frontier = seeds.slice();
+				for (var h = 1; h <= 2; h++) {
+					var next = [];
+					frontier.forEach(function (u) { nodes[u].adj.forEach(function (v) { if (hop[v] < 0) { hop[v] = h; next.push(v); } }); });
+					frontier = next;
+				}
+				// top up the 2-hop neighbourhood to ~65% of all nodes (nearest grey nodes first)
+				var inN = hop.filter(function (x) { return x >= 0; }).length;
+				var target = Math.round(N * 0.80);
+				if (inN < target) {
+					var grey = [];
+					for (i = 0; i < N; i++) {
+						if (hop[i] < 0) {
+							var best = Infinity;
+							for (var q = 0; q < N; q++) { if (hop[q] >= 0) { var gx = nodes[i].x - nodes[q].x, gy = nodes[i].y - nodes[q].y, gd = gx * gx + gy * gy; if (gd < best) best = gd; } }
+							grey.push([best, i]);
+						}
+					}
+					grey.sort(function (a, b) { return a[0] - b[0]; });
+					for (var gi = 0; gi < grey.length && inN < target; gi++) { hop[grey[gi][1]] = 2; inN++; }
+				}
+				var gE = document.createElementNS(ns, 'g');
+				edges.forEach(function (e) { var ln = document.createElementNS(ns, 'line'); ln.setAttribute('x1', nodes[e[0]].x); ln.setAttribute('y1', nodes[e[0]].y); ln.setAttribute('x2', nodes[e[1]].x); ln.setAttribute('y2', nodes[e[1]].y); ln.setAttribute('stroke', '#2c2c2c'); ln.setAttribute('stroke-width', '0.6'); gE.appendChild(ln); });
+				svg.appendChild(gE);
+				var gN = document.createElementNS(ns, 'g');
+				nodes.forEach(function (nd, idx) {
+					var c = document.createElementNS(ns, 'circle');
+					c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y);
+					c.setAttribute('r', hop[idx] === 0 ? 5.5 : 3.8);
+					c.setAttribute('fill', hop[idx] === 0 ? '#e63946' : (hop[idx] > 0 ? '#90e0ef' : '#555'));
+					c.style.transition = 'fill 0.18s, r 0.18s';
+					nd.el = c; gN.appendChild(c);
+				});
+				svg.appendChild(gN);
+				section._graph = { nodes: nodes, seeds: seeds, hop: hop };
+			}
+			function resetBigGraph(section) {
+				bgTimers.forEach(clearTimeout); bgTimers = [];
+				var g = section._graph; if (!g) return;
+				g.nodes.forEach(function (nd, idx) {
+					nd.el.setAttribute('fill', g.hop[idx] === 0 ? '#e63946' : (g.hop[idx] > 0 ? '#90e0ef' : '#555'));
+					nd.el.setAttribute('r', g.hop[idx] === 0 ? 5.5 : 3.8);
+				});
+			}
+			function sampleBigGraph(section) {
+				var g = section._graph; if (!g) return;
+				bgTimers.forEach(clearTimeout); bgTimers = [];
+				var nodes = g.nodes, fan = [4, 3], sampled = {}, order = [];
+				g.seeds.forEach(function (s) { sampled[s] = true; });
+				var frontier = g.seeds.slice();
+				for (var h = 0; h < 2; h++) {
+					var next = [];
+					frontier.forEach(function (u) {
+						var cand = nodes[u].adj.filter(function (v) { return g.hop[v] >= 0; });
+						bgShuffle(cand).slice(0, fan[h]).forEach(function (v) { if (!sampled[v]) { sampled[v] = true; order.push(v); next.push(v); } });
+					});
+					frontier = next;
+				}
+				order.forEach(function (v, i) {
+					bgTimers.push(setTimeout(function () { nodes[v].el.setAttribute('fill', '#ffd60a'); nodes[v].el.setAttribute('r', '6'); }, i * 55));
+				});
+			}
+			Reveal.on('ready', function (e) { if (e.currentSlide && e.currentSlide.id === 'big-graph-slide') buildBigGraph(e.currentSlide); });
+			Reveal.on('slidechanged', function (e) { if (e.currentSlide && e.currentSlide.id === 'big-graph-slide') buildBigGraph(e.currentSlide); });
+			Reveal.on('fragmentshown', function (e) { if (e.fragment.classList.contains('bg-trigger')) sampleBigGraph(e.fragment.closest('section')); });
+			Reveal.on('fragmenthidden', function (e) { if (e.fragment.classList.contains('bg-trigger')) resetBigGraph(e.fragment.closest('section')); });
 		</script>
 	</body>
 </html>
