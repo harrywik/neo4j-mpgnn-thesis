@@ -55,10 +55,10 @@
 					<section>
 						<h3>Outline</h3>
 						<ul style="font-size: 0.9em; line-height: 1.6;">
-							<li>Motivation for <strong>Message-Passing</strong></li>
-							<li>The need for <strong>Sampling</strong> to counteract exponential computational demands</li>
+							<li>Motivation for <strong>Graph Neural Networks</strong></li>
+							<li>Challenges in large-graph Graph neural network training</li>
 							<li>Reference <strong>ML Workflow</strong> (PyTorch Geometric)</li>
-							<li>Why <strong>Neo4j</strong> should be tighter coupled</li>
+							<li>Why <strong>graph DBs</strong> should be tighter coupled</li>
 						</ul>
 					</section>
 
@@ -987,8 +987,8 @@
 						<div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 30px;">
 							<div style="width: 60%; background: #1a1a1a; padding: 20px; border-radius: 8px; border-top: 4px solid #b58900; text-align: left;">
 								<ul style="font-size: 0.55em; line-height: 1.6;">
-									<li><strong>Weights:</strong> All model parameters passed in every call.</li>
-									<li><strong>Hard-coded Architecture:</strong> Model layers baked directly into the query structure.</li>
+									<li>Cypher query defines GNN layers.</li>
+									<li>Weights are arguments.</li>
 									<li><strong>Two Flavors:</strong>
 										<ul>
 											<li><em>Normal:</em> Standard arithmetic in Cypher.</li>
@@ -1030,7 +1030,6 @@
 										<text x="35" y="12" fill="#eee" font-size="6" text-anchor="middle">Data Query</text>
 									</g>
 								</svg>
-								<p style="font-size: 0.45em; color: #888; margin-top: 5px;">Large, self-contained queries.</p>
 							</div>
 						</div>
 					</section>
