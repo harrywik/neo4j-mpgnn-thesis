@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>LTH Presentation - Neo4j & MP-GNN</title>
+
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/monokai.min.css">
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h1>Neo4j & MP-GNN</h1>
+					<h3>Scaling Message-Passing Graph Neural Networks</h3>
+					<p>
+						<small>LTH Presentation</small>
+					</p>
+				</section>
+
+				<!-- BACKGROUND -->
+				<section>
+					<section>
+						<h2>Background</h2>
+					</section>
+
+					<section>
+						<h3>Why Message-Passing?</h3>
+						<ul>
+							<li><strong>Classical ML:</strong> Nodes as independent samples (tabular).</li>
+							<li><strong>Message-Passing:</strong> Leverages topological structure.</li>
+							<li class="fragment">Captures dependencies between neighboring nodes.</li>
+							<li class="fragment">Superior performance in <em>Node Classification</em> by aggregating local neighborhoods.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>The Neighborhood Explosion</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center;">
+							<div style="text-align: left; width: 50%;">
+								<ul>
+									<li>L-layer GNN aggregates L-hop neighbors.</li>
+									<li>Average degree $d$ leads to $d^L$ nodes.</li>
+									<li>Exponential growth makes full-batch training impossible on large graphs.</li>
+								</ul>
+							</div>
+							<div style="width: 40%; background: #333; padding: 20px; border-radius: 10px;">
+								<svg viewBox="0 0 200 200" width="100%">
+									<circle cx="100" cy="100" r="10" fill="red" />
+									<line x1="100" y1="100" x2="60" y2="60" stroke="white" />
+									<line x1="100" y1="100" x2="140" y2="60" stroke="white" />
+									<line x1="100" y1="100" x2="100" y2="150" stroke="white" />
+									<circle cx="60" cy="60" r="7" fill="blue" />
+									<circle cx="140" cy="60" r="7" fill="blue" />
+									<circle cx="100" cy="150" r="7" fill="blue" />
+									<!-- Hop 2 -->
+									<line x1="60" y1="60" x2="30" y2="40" stroke="gray" stroke-dasharray="2" />
+									<line x1="60" y1="60" x2="40" y2="80" stroke="gray" stroke-dasharray="2" />
+									<line x1="140" y1="60" x2="170" y2="40" stroke="gray" stroke-dasharray="2" />
+									<line x1="140" y1="60" x2="160" y2="80" stroke="gray" stroke-dasharray="2" />
+								</svg>
+								<p style="font-size: 0.5em;">Exponential expansion per hop</p>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>Sampling Strategies</h3>
+						<ul>
+							<li><strong>GraphSAINT:</strong> Subgraph sampling to decouple GNN depth from neighborhood size.</li>
+							<li><strong>GraphSAGE:</strong> Neighborhood sampling (fixed-size).
+								<ul>
+									<li>Uniformly samples $k$ neighbors per hop.</li>
+									<li>Allows mini-batch training on massive graphs.</li>
+								</ul>
+							</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>PyTorch Geometric (PyG)</h3>
+						<ul>
+							<li>Industry standard for GNNs.</li>
+							<li><strong>RAM-based:</strong> Loads entire graph into memory.</li>
+							<li>Excellent GPU utilization.</li>
+							<li><strong>The Cost:</strong> High memory requirement; scaling to billions of edges is prohibitively expensive.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Neo4j: The Graph Platform</h3>
+						<ul>
+							<li><strong>Tabular vs Graph:</strong> Relationships are first-class citizens.</li>
+							<li><strong>Cypher:</strong> Declarative graph query language.</li>
+							<li><strong>UDP (User Defined Procedures):</strong> Custom Java-based extensions for high-performance traversal.</li>
+						</ul>
+					</section>
+				</section>
+
+				<!-- OUR WORK -->
+				<section>
+					<section>
+						<h2>Our Work</h2>
+					</section>
+
+					<section>
+						<h3>System Architecture</h3>
+						<p>Integrating Neo4j as the storage and sampling engine with PyG for model training.</p>
+						<div style="background: #eee; color: #333; padding: 10px; border-radius: 5px;">
+							[Neo4j (Sampling)] &rarr; [Features/Subgraphs] &rarr; [PyG (GNN)]
+						</div>
+					</section>
+
+					<section>
+						<h3>Graph Model</h3>
+						<ul>
+							<li><strong>Citation Graph Example:</strong> Nodes (Papers), Relations (CITES).</li>
+							<li><strong>Index:</strong> Primary index on node IDs for fast lookups.</li>
+							<li><strong>Features:</strong> Supporting two types of feature vectors.</li>
+							<li><strong>Setup:</strong> Time-based split (Train/Val/Test) and labels stored as node properties.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Functional Equivalence</h3>
+						<p>Validating that Neo4j samplers (UDP & Cypher) match PyG's native sampling.</p>
+						<ul>
+							<li><strong>KL Divergence:</strong> Measuring distribution similarity between samplers.</li>
+							<li><strong>Convergence:</strong> Comparing Validation Accuracy vs. Epochs.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Pipeline Optimizations</h3>
+						<ul>
+							<li><strong>UDP Samplers:</strong> Bypassing Cypher overhead for raw traversal speed.</li>
+							<li><strong>Pre-aggregation:</strong> Moving computations into the database to reduce data transfer.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>In-Database Inference</h3>
+						<p>Exploring where to run the model:</p>
+						<ol>
+							<li><strong>Cypher:</strong> Pure query-based inference.</li>
+							<li><strong>UDP:</strong> Java-based model execution.</li>
+							<li><strong>Hybrid:</strong> UDP for sampling &rarr; PyG for prediction.</li>
+							<li><strong>Baseline:</strong> Only PyG (full memory).</li>
+						</ol>
+					</section>
+				</section>
+
+				<section>
+					<h2>Thank You!</h2>
+					<p>Questions?</p>
+				</section>
+			</div>
+		</div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/notes/notes.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/markdown/markdown.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/math/math.min.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes, RevealMath.KaTeX ]
+			});
+		</script>
+	</body>
+</html>
