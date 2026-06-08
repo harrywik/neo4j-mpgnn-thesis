@@ -17,17 +17,84 @@
 		<div class="reveal">
 			<div class="slides">
 				<section>
-					<h1>Neo4j & MP-GNN</h1>
-					<h3>Scaling Message-Passing Graph Neural Networks</h3>
+					<h3>Neo4j & Message-Passing Neural Nets</h3>
+					<hr />
+					<h4>Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</h4>
 					<p>
 						<small>LTH Presentation</small>
 					</p>
 				</section>
-
 				<!-- BACKGROUND -->
 				<section>
 					<section>
 						<h2>Background</h2>
+					</section>
+
+					<section>
+						<h3>Classical Machine Learning</h3>
+						<p style="font-size: 0.8em;">Nodes as independent samples (Tabular Data)</p>
+						
+						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 30px;">
+							<!-- Paper Example -->
+							<div style="width: 22%; background: white; color: #333; padding: 15px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.35em; text-align: left; box-shadow: 5px 5px 0px rgba(255,255,255,0.1);">
+								<h4 style="margin: 0; font-size: 1.1em; border-bottom: 1px solid #eee; padding-bottom: 5px;">Paper #101</h4>
+								<p style="margin-top: 8px; line-height: 1.4;">"The <strong>architecture</strong> of <strong>neural</strong> networks for <strong>graph</strong> data..."</p>
+								<div style="margin-top: 10px; font-style: italic; color: #666;">Keywords: Graph, Neural</div>
+							</div>
+
+							<div style="align-self: center; font-size: 1.2em;">&rarr;</div>
+
+							<!-- SQL/Excel Table -->
+							<div style="width: 70%; background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
+								<table style="font-size: 0.35em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
+									<thead>
+										<tr style="background: #333; border-bottom: 2px solid #555;">
+											<th style="padding: 6px; border-right: 1px solid #555;">paper_id</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_graph</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_neural</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_protein</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">...</th>
+											<th style="padding: 6px; color: #0af;">label</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr style="border-bottom: 1px solid #444; background: rgba(0, 170, 255, 0.1);">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">101</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center; font-weight: bold; color: #0af;">CS</td>
+										</tr>
+										<tr style="border-bottom: 1px solid #444;">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">102</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center; font-weight: bold; color: #0af;">Bio</td>
+										</tr>
+										<tr style="opacity: 0.5;">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center;">...</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div style="display: flex; justify-content: center; align-items: center; margin-top: 20px;">
+							<div style="font-size: 1.2em; margin-right: 15px;">&darr;</div>
+							<div style="background: #1a1a1a; border: 1px dashed #666; padding: 10px 20px; border-radius: 20px;">
+								<span style="font-size: 0.6em; color: #ccc;">Standard Classifier e.g. MLP</span>
+							</div>
+						</div>
+
+						<p style="font-size: 0.5em; margin-top: 20px; color: #aaa;">The model sees rows, i.i.d assumption. Citations/edges are ignored.</p>
 					</section>
 
 					<section>
