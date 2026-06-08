@@ -17,9 +17,9 @@
 		<div class="reveal">
 			<div class="slides">
 				<section>
-					<h3>Neo4j & Message-Passing Neural Nets</h3>
+					<h4>Neo4j & Message-Passing Neural Nets</h4>
 					<hr />
-					<h4>Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</h4>
+					<h6>"Cost-Efficient Graph Database-backed Graph Neural Network Pipelines"</h6>
 					<p>
 						<small>LTH Presentation</small>
 					</p>
@@ -28,6 +28,16 @@
 				<section>
 					<section>
 						<h2>Background</h2>
+					</section>
+
+					<section>
+						<h3>Outline</h3>
+						<ul style="font-size: 0.9em; line-height: 1.6;">
+							<li>Motivation for <strong>Message-Passing</strong></li>
+							<li>The need for <strong>Sampling</strong> to counteract exponential computational demands</li>
+							<li>Reference <strong>ML Workflow</strong> (PyTorch Geometric)</li>
+							<li>Why <strong>Neo4j</strong> should be tighter coupled</li>
+						</ul>
 					</section>
 
 					<section>
@@ -45,8 +55,10 @@
 							<div style="align-self: center; font-size: 1.2em;">&rarr;</div>
 
 							<!-- SQL/Excel Table -->
-							<div style="width: 70%; background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
-								<table style="font-size: 0.35em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
+							<div style="width: 70%;">
+								<p style="font-size: 0.4em; margin-bottom: 5px; color: #aaa; text-align: left;">Table: <code>keyword_features</code></p>
+								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
+									<table style="font-size: 0.35em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
 									<thead>
 										<tr style="background: #333; border-bottom: 2px solid #555;">
 											<th style="padding: 6px; border-right: 1px solid #555;">paper_id</th>
@@ -88,7 +100,7 @@
 						</div>
 
 						<div style="display: flex; justify-content: center; align-items: center; margin-top: 20px;">
-							<div style="font-size: 1.2em; margin-right: 15px;">&darr;</div>
+							<div style="align-self: center; font-size: 1.2em;">&rarr;</div>
 							<div style="background: #1a1a1a; border: 1px dashed #666; padding: 10px 20px; border-radius: 20px;">
 								<span style="font-size: 0.6em; color: #ccc;">Standard Classifier e.g. MLP</span>
 							</div>
@@ -98,13 +110,66 @@
 					</section>
 
 					<section>
-						<h3>Why Message-Passing?</h3>
-						<ul>
-							<li><strong>Classical ML:</strong> Nodes as independent samples (tabular).</li>
-							<li><strong>Message-Passing:</strong> Leverages topological structure.</li>
-							<li class="fragment">Captures dependencies between neighboring nodes.</li>
-							<li class="fragment">Superior performance in <em>Node Classification</em> by aggregating local neighborhoods.</li>
-						</ul>
+						<h3>How can we leverage the citations BETWEEN papers?</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center; margin-top: 50px;">
+							<!-- Cites Table -->
+							<div style="width: 40%;">
+								<p style="font-size: 0.6em; margin-bottom: 10px;">Table: <code>cites</code></p>
+								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
+									<table style="font-size: 0.4em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
+										<thead>
+											<tr style="background: #333; border-bottom: 2px solid #555;">
+												<th style="padding: 8px; border-right: 1px solid #555;">citer</th>
+												<th style="padding: 8px;">cited</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">101</td>
+												<td style="padding: 6px; text-align: center;">102</td>
+											</tr>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">103</td>
+												<td style="padding: 6px; text-align: center;">101</td>
+											</tr>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">104</td>
+												<td style="padding: 6px; text-align: center;">101</td>
+											</tr>
+											<tr style="opacity: 0.5;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+												<td style="padding: 6px; text-align: center;">...</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							<div style="font-size: 1.5em;">&harr;</div>
+
+							<!-- Graph Representation -->
+							<div style="width: 40%; background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333;">
+								<svg viewBox="0 0 200 150" width="100%">
+									<defs>
+										<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+											<polygon points="0 0, 10 3.5, 0 7" fill="white" />
+										</marker>
+									</defs>
+									<!-- Nodes -->
+									<circle cx="100" cy="75" r="12" fill="#0af" /> <text x="100" y="79" font-size="8" text-anchor="middle" fill="white" font-weight="bold">101</text>
+									<circle cx="160" cy="40" r="12" fill="#444" /> <text x="160" y="44" font-size="8" text-anchor="middle" fill="white">102</text>
+									<circle cx="40" cy="40" r="12" fill="#444" /> <text x="40" y="44" font-size="8" text-anchor="middle" fill="white">103</text>
+									<circle cx="40" cy="110" r="12" fill="#444" /> <text x="40" y="114" font-size="8" text-anchor="middle" fill="white">104</text>
+									
+									<!-- Edges -->
+									<line x1="112" y1="70" x2="148" y2="45" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+									<line x1="52" y1="45" x2="88" y2="70" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+									<line x1="52" y1="105" x2="88" y2="80" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+								</svg>
+								<p style="font-size: 0.5em; margin-top: 10px; color: #aaa;">Topological structure (Graph)</p>
+							</div>
+						</div>
+						<p style="font-size: 0.6em; margin-top: 40px; color: #0af; font-weight: bold;">Message-passing uses these edges to flow information between related nodes.</p>
 					</section>
 
 					<section>
