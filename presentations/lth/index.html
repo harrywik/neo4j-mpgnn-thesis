@@ -16,6 +16,18 @@
 		<style>
 			.step { display: block; transition: background 0.3s, color 0.3s; padding: 0 4px; border-radius: 3px; }
 			.step.active { background: #48cae4; color: #111; }
+			.sample circle, .sample line { transition: fill 0.7s ease, stroke 0.7s ease, filter 0.7s ease, transform 0.7s ease; transform-box: fill-box; transform-origin: center; }
+			.sample.lit circle { fill: #ffffff; filter: drop-shadow(0 0 14px #fff35c) drop-shadow(0 0 6px #ffffff); transform: scale(1.8); transition: fill 0.15s ease, filter 0.15s ease, transform 0.15s ease; }
+			.sample.lit line { stroke: #fff35c; stroke-width: 3; filter: drop-shadow(0 0 6px #fff35c); transition: stroke 0.15s ease, filter 0.15s ease; }
+
+			/* ===== Sampling round-trip loop animation (JS-driven) ===== */
+			.rt-dot { transition: transform 1.8s ease, opacity 0.5s ease; }
+			.machine-box rect, .db-box path, .db-box ellipse { transition: fill 0.5s ease; }
+			.machine-box, .db-box { transition: filter 0.5s ease; }
+			.machine-box.glow rect { fill: var(--glow-color, #e63946); }
+			.machine-box.glow { filter: drop-shadow(0 0 14px var(--glow-color, #e63946)); }
+			.db-box.glow path, .db-box.glow ellipse { fill: var(--glow-color, #48cae4); }
+			.db-box.glow { filter: drop-shadow(0 0 14px var(--glow-color, #48cae4)); }
 		</style>
 	</head>
 	<body>
@@ -276,6 +288,10 @@
 									<line x1="130" y1="210" x2="90" y2="255" stroke="#666" stroke-width="1" />
 									<line x1="130" y1="210" x2="180" y2="255" stroke="#666" stroke-width="1" />
 									<line x1="200" y1="200" x2="240" y2="240" stroke="#666" stroke-width="1" />
+									<!-- extra neighborhood nodes (never sampled) -->
+									<line x1="130" y1="210" x2="155" y2="260" stroke="#666" stroke-width="1" />
+									<line x1="200" y1="200" x2="250" y2="205" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="40" y2="125" stroke="#666" stroke-width="1" />
 
 									<!-- out-of-neighborhood (grey) nodes -->
 									<circle cx="20" cy="35" r="7" fill="#555" />
@@ -295,6 +311,9 @@
 									<circle cx="90" cy="255" r="8" fill="#2a6f97" />
 									<circle cx="180" cy="255" r="8" fill="#2a6f97" />
 									<circle cx="240" cy="240" r="8" fill="#2a6f97" />
+									<circle cx="155" cy="260" r="8" fill="#2a6f97" />
+									<circle cx="250" cy="205" r="8" fill="#2a6f97" />
+									<circle cx="40" cy="125" r="8" fill="#2a6f97" />
 
 									<!-- hop 1 nodes -->
 									<circle cx="95" cy="110" r="10" fill="#48cae4" />
@@ -346,6 +365,9 @@
 									<line x1="130" y1="210" x2="90" y2="255" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="130" y1="210" x2="180" y2="255" stroke="#3a3a3a" stroke-width="1" />
 									<line x1="200" y1="200" x2="240" y2="240" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="155" y2="260" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="200" y1="200" x2="250" y2="205" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="40" y2="125" stroke="#3a3a3a" stroke-width="1" />
 
 									<!-- all nodes grey -->
 									<circle cx="20" cy="35" r="7" fill="#555" />
@@ -363,6 +385,9 @@
 									<circle cx="90" cy="255" r="8" fill="#555" />
 									<circle cx="180" cy="255" r="8" fill="#555" />
 									<circle cx="240" cy="240" r="8" fill="#555" />
+									<circle cx="155" cy="260" r="8" fill="#555" />
+									<circle cx="250" cy="205" r="8" fill="#555" />
+									<circle cx="40" cy="125" r="8" fill="#555" />
 									<circle cx="95" cy="110" r="10" fill="#555" />
 									<circle cx="210" cy="120" r="10" fill="#555" />
 									<circle cx="130" cy="210" r="10" fill="#555" />
@@ -394,14 +419,17 @@
 
 					<section>
 						<h3>Sampling Changes the Training Loop</h3>
-						<pre style="width: 80%; margin: 30px auto;"><code style="font-size: 0.6em; line-height: 1.5;" data-trim data-noescape>for batch B of seeds:
-<span class="step">    G_B      ← Sample(B)          # sampling</span>
-<span class="step">    X_B, E_B ← Fetch(G_B)         # feature retrieval</span>
-<span class="step">    ŷ        ← f_θ(X_B, E_B)      # forward</span>
-<span class="step">    L        ← CE(ŷ, y_B)         # loss</span>
-<span class="step">    θ        ← θ − η ∇L           # update</span></code></pre>
-						<p id="loop-caption" style="font-size: 0.7em; color: #48cae4; height: 1.2em;">&nbsp;</p>
-						<span class="fragment" data-loop-trigger="1" style="display:none;"></span>
+						<div style="display: flex; align-items: center; gap: 24px; margin-top: 20px;">
+							<pre style="width: 58%; margin: 0; font-size: 0.55em; line-height: 2.2; background: #2b2b2b; padding: 22px 26px; border-radius: 8px; text-align: left;">for batch B of seeds:
+  G_B      ← Sample(B)      <span style="color:#fff35c;">← NEW</span>
+  X_B, E_B ← Fetch(G_B)     <span style="color:#fff35c;">← NEW</span>
+  ŷ        ← forward pass
+  L        ← compute loss
+  θ        ← update weights</pre>
+							<div style="width: 42%; text-align: left; font-size: 0.8em; color: #ddd;">
+								<p>Sampling + fetching usually takes longer than the model computations.</p>
+							</div>
+						</div>
 					</section>
 
 					<section>
@@ -419,11 +447,10 @@
 
 					<section>
 						<h3>PyTorch Geometric (PyG)</h3>
-						<ul>
-							<li>Industry standard for GNNs.</li>
-							<li><strong>RAM-based:</strong> Loads entire graph into memory.</li>
-							<li>Excellent GPU utilization.</li>
-							<li><strong>The Cost:</strong> High memory requirement; scaling to billions of edges is prohibitively expensive.</li>
+						<ul style="line-height: 1.6; margin-top: 1.5em;">
+							<li class="fragment" style="margin-bottom: 0.8em;">Industry standard ML library for GNNs.</li>
+							<li class="fragment" style="margin-bottom: 0.8em;">PyG is our correctness baseline.</li>
+							<li class="fragment"><strong>RAM-based:</strong> loads the entire graph into RAM (expensive, but fast).</li>
 						</ul>
 					</section>
 
@@ -441,6 +468,72 @@
 				<section>
 					<section>
 						<h2>Our Work</h2>
+					</section>
+
+					<section id="rt-slide">
+						<h3 id="rt-title">In-Memory Training Loop</h3>
+						<div style="display: flex; align-items: flex-start; gap: 20px;">
+							<!-- code -->
+							<pre style="width: 46%; margin: 0; font-size: 0.5em; line-height: 1.5; background: #2b2b2b; padding: 14px; border-radius: 6px; text-align: left;">for batch B of seeds:
+<span class="step">  G_B      ← Sample(B)</span>
+<span class="step">  X_B, E_B ← Fetch(G_B)</span>
+<span class="step">  ŷ        ← forward pass</span>
+<span class="step">  L        ← compute loss</span>
+<span class="step">  θ        ← update weights</span></pre>
+							<!-- graphics: in-memory (default) and Graph-DB -->
+							<div style="width: 54%; height: 240px;">
+								<svg id="mem-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+									<text id="mem-label" x="190" y="44" fill="#e63946" font-size="12" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="80" y="60" width="220" height="135" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="190" y="118" fill="#fff" font-size="15" text-anchor="middle">Training process</text>
+										<text x="190" y="140" fill="#aaa" font-size="10" text-anchor="middle">PyTorch Geometric</text>
+										<text x="190" y="160" fill="#aaa" font-size="10" text-anchor="middle">full graph held in RAM</text>
+									</g>
+								</svg>
+								<svg id="db-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:none;">
+									<line x1="140" y1="95" x2="256" y2="95" stroke="#555" stroke-dasharray="4" marker-end="url(#arrowReq)" />
+									<text id="top-label" x="198" y="85" fill="#48cae4" font-size="9" text-anchor="middle"></text>
+									<line x1="256" y1="135" x2="140" y2="135" stroke="#555" stroke-dasharray="4" marker-end="url(#arrowRes)" />
+									<text id="bot-label" x="198" y="152" fill="#90e0ef" font-size="9" text-anchor="middle"></text>
+									<defs>
+										<marker id="arrowReq" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+										<marker id="arrowRes" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+									</defs>
+									<text id="machine-label" x="75" y="68" fill="#e63946" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<text id="db-label" x="305" y="58" fill="#48cae4" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="15" y="80" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="75" y="116" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+										<text x="75" y="133" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+									</g>
+									<g class="db-box">
+										<path d="M265 78 V152 A40 12 0 0 0 345 152 V78" fill="#222" stroke="#48cae4" stroke-width="2"/>
+										<ellipse cx="305" cy="78" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+										<text x="305" y="120" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+										<text x="305" y="138" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+									</g>
+									<circle class="rt-dot req-dot" cx="140" cy="95" r="6" fill="#48cae4" opacity="0"/>
+									<circle class="rt-dot res-dot" cx="256" cy="135" r="6" fill="#90e0ef" opacity="0"/>
+								</svg>
+							</div>
+						</div>
+						<p id="rt-note" style="font-size: 0.65em; color: #aaa; margin-top: 16px;">Graph held in RAM on the training machine.</p>
+						<span class="fragment rt-frag" data-rt-step="0" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="1" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="2" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="3" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="4" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="5" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="6" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="7" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="8" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="9" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="10" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="11" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="12" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="13" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="14" style="display:none;"></span>
 					</section>
 
 					<section>
@@ -516,7 +609,11 @@
 				if (event.fragment.hasAttribute('data-sample-trigger')) {
 					var samples = event.fragment.closest('section').querySelectorAll('.sample');
 					samples.forEach(function(el, i) {
-						setTimeout(function() { el.style.opacity = 1; }, i * 900);
+						setTimeout(function() {
+							el.style.opacity = 1;
+							el.classList.add('lit');            // light up on sample
+							setTimeout(function() { el.classList.remove('lit'); }, 2000); // settle to blue
+						}, i * 900);
 					});
 				}
 			});
@@ -524,32 +621,122 @@
 				if (event.fragment.hasAttribute('data-sample-trigger')) {
 					event.fragment.closest('section').querySelectorAll('.sample').forEach(function(el) {
 						el.style.opacity = 0;
+						el.classList.remove('lit');
 					});
 				}
 			});
 
-			// Training-loop walkthrough: highlight each step in sequence
-			var LOOP_LABELS = ['Sampling…', 'Retrieving features…', 'Forward pass…', 'Computing loss…', 'Updating weights…'];
+			// Training-loop ↔ machine/DB round-trip: one key press advances one sub-step.
+			// Each query = 3 presses: send query (→), DB lights up, return data (←).
+			function rtTravel(el, toX, ms) {                     // deterministic move via Web Animations API
+				el.getAnimations().forEach(function(a) { a.cancel(); });
+				el.style.opacity = 1;
+				el.animate(
+					[{ transform: 'translateX(0)' }, { transform: 'translateX(' + toX + 'px)' }],
+					{ duration: ms, easing: 'ease', fill: 'forwards' }
+				);
+			}
+			// Two phases on one slide: steps -1..4 = in-memory, steps 5..14 = Graph-DB round-trip.
+			var MEM_LABELS = ['Sampling', 'Fetching features', 'Forward pass', 'Compute loss', 'Update weights'];
+			var C_SAMPLE = '#2a6f97', C_FETCH = '#b5651d', C_COMPUTE = '#2f855a';
+			var rtGlowTimers = [];
+			function rtGlow(el, color) {                       // off first, then light up → blink between actions
+				el.classList.remove('glow');
+				rtGlowTimers.push(setTimeout(function() {
+					el.style.setProperty('--glow-color', color);
+					el.classList.add('glow');
+				}, 320));
+			}
+			function rtRender(section, n) {
+				var title    = section.querySelector('#rt-title');
+				var note     = section.querySelector('#rt-note');
+				var memG     = section.querySelector('#mem-graphic');
+				var dbG      = section.querySelector('#db-graphic');
+				var lines    = section.querySelectorAll('.step');
+				var newTags  = section.querySelectorAll('.new-tag');
+				// db-graphic elements
+				var reqDot   = dbG.querySelector('.req-dot');
+				var resDot   = dbG.querySelector('.res-dot');
+				var dbMach   = dbG.querySelector('.machine-box');
+				var dbBox    = dbG.querySelector('.db-box');
+				var mLabel   = section.querySelector('#machine-label');
+				var dbLabel  = section.querySelector('#db-label');
+				var topLabel = section.querySelector('#top-label');
+				var botLabel = section.querySelector('#bot-label');
+				// mem-graphic elements
+				var memMach  = memG.querySelector('.machine-box');
+				var memLabel = section.querySelector('#mem-label');
+
+				// full reset
+				rtGlowTimers.forEach(clearTimeout); rtGlowTimers = [];
+				lines.forEach(function(l) { l.classList.remove('active'); l.style.background = ''; l.style.color = ''; });
+				[reqDot, resDot].forEach(function(d) { d.getAnimations().forEach(function(a) { a.cancel(); }); d.style.opacity = 0; });
+				dbMach.classList.remove('glow'); dbBox.classList.remove('glow'); memMach.classList.remove('glow');
+				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = ''; memLabel.textContent = '';
+
+				if (n <= 4) {                                  // ===== in-memory phase =====
+					title.textContent = 'In-Memory Training Loop';
+					note.textContent = 'Graph held in RAM on the training machine.';
+					memG.style.display = ''; dbG.style.display = 'none';
+					newTags.forEach(function(t) { t.style.display = 'none'; });
+					if (n < 0) return;
+					var memColor = n === 0 ? C_SAMPLE : n === 1 ? C_FETCH : C_COMPUTE;
+					lines[n].classList.add('active');
+					lines[n].style.background = memColor; lines[n].style.color = '#fff';
+					memLabel.textContent = MEM_LABELS[n];
+					memLabel.setAttribute('fill', memColor);
+					rtGlow(memMach, memColor);
+					return;
+				}
+
+				// ===== Graph-DB phase =====
+				title.textContent = 'Graph DB-Backed Training Loop';
+				note.textContent = 'Graph stored in a separate graph DB.';
+				memG.style.display = 'none'; dbG.style.display = '';
+				newTags.forEach(function(t) { t.style.display = ''; });
+				if (n === 5) return;                           // intro: just reveal the layout, no action yet
+				var s = n - 6;                                 // 0..8
+				var line = s <= 2 ? 0 : s <= 5 ? 1 : s - 4;
+				var lineColor = s <= 2 ? C_SAMPLE : s <= 5 ? C_FETCH : C_COMPUTE;
+				lines[line].classList.add('active');
+				lines[line].style.background = lineColor; lines[line].style.color = '#fff';
+				var isSample = s <= 2;
+				var qColor = isSample ? C_SAMPLE : C_FETCH;
+				var qLabel = isSample ? 'sample query' : 'fetch query';
+				reqDot.style.fill = qColor; resDot.style.fill = qColor;
+				topLabel.setAttribute('fill', qColor);
+				dbLabel.setAttribute('fill', qColor);
+				botLabel.setAttribute('fill', qColor);
+				switch (s) {
+					case 0: case 3:                            // query sent: ball machine → DB
+						topLabel.textContent = qLabel;
+						rtTravel(reqDot, 118, 1800);
+						break;
+					case 1: case 4:                            // DB lights up
+						topLabel.textContent = qLabel;
+						dbLabel.textContent = isSample ? 'Sampling subgraph' : 'Fetching features';
+						rtGlow(dbBox, qColor);
+						break;
+					case 2: case 5:                            // data returned: ball DB → machine
+						topLabel.textContent = qLabel;
+						dbLabel.textContent = isSample ? 'Sampling subgraph' : 'Fetching features';
+						rtGlow(dbBox, qColor);
+						botLabel.textContent = isSample ? 'subgraph' : 'features';
+						rtTravel(resDot, -118, 1800);
+						break;
+					case 6: mLabel.textContent = 'Forward pass';   mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+					case 7: mLabel.textContent = 'Compute loss';   mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+					case 8: mLabel.textContent = 'Update weights'; mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+				}
+			}
 			Reveal.on('fragmentshown', function(event) {
-				if (event.fragment.hasAttribute('data-loop-trigger')) {
-					var section = event.fragment.closest('section');
-					var steps = section.querySelectorAll('.step');
-					var caption = section.querySelector('#loop-caption');
-					steps.forEach(function(step, i) {
-						setTimeout(function() {
-							steps.forEach(function(s) { s.classList.remove('active'); });
-							step.classList.add('active');
-							if (caption) caption.textContent = LOOP_LABELS[i] || '';
-						}, i * 1100);
-					});
+				if (event.fragment.classList.contains('rt-frag')) {
+					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10));
 				}
 			});
 			Reveal.on('fragmenthidden', function(event) {
-				if (event.fragment.hasAttribute('data-loop-trigger')) {
-					var section = event.fragment.closest('section');
-					section.querySelectorAll('.step').forEach(function(s) { s.classList.remove('active'); });
-					var caption = section.querySelector('#loop-caption');
-					if (caption) caption.innerHTML = '&nbsp;';
+				if (event.fragment.classList.contains('rt-frag')) {
+					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10) - 1);
 				}
 			});
 		</script>
