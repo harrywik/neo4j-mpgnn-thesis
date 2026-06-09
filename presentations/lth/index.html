@@ -67,7 +67,7 @@
   <!-- Slide Header -->
   <div style="border-bottom: 2.5px solid #48cae4; padding-bottom: 12px; margin-bottom: 40px;">
     <h2 style="color: #48cae4; font-size: 38px; font-weight: bold; margin: 0; text-align: left; letter-spacing: -0.5px;">
-      GNNs create node embeddings used for downstream tasks
+      Graph Neural Networks (GNNs)
     </h2>
   </div>
 
@@ -624,20 +624,20 @@
 					</section>
 
 
-					<section>
+					<!-- <section>
 						<h3>PyTorch Geometric (PyG)</h3>
 						<ul style="line-height: 1.6; margin-top: 1.5em;">
 							<li class="fragment" style="margin-bottom: 0.8em;">Industry standard ML library for GNNs.</li>
 							<li class="fragment" style="margin-bottom: 0.8em;">PyG is our correctness baseline.</li>
 							<li class="fragment"><strong>RAM-based:</strong> loads the entire graph into RAM (expensive, but fast).</li>
 						</ul>
-					</section>
+					</section> -->
 
 					<section>
 						<h3>Graph Databases (Neo4j)</h3>
-						<ul>
-							<li><strong>Increased traversal speed</strong> of graph topology</li>
-							<li><strong>Declarative</strong> graph query languages (Cypher)</li>
+						<ul style="line-height: 1.6;">
+							<li style="margin-bottom: 0.9em;"><strong>Increased traversal speed</strong> of graph topology</li>
+							<li style="margin-bottom: 0.9em;"><strong>Declarative</strong> graph query languages (Cypher)</li>
 							<li><strong>UDP</strong>: custom imperative Java-based extensions may be deployed as DB-plugins.</li>
 						</ul>
 					</section>
@@ -725,12 +725,18 @@
 
 					<section>
 						<h3>Functional Equivalence</h3>
-						<p>Validating correctness of sampler.</p>
-						<ul style="margin-top: 40px;">
-							<li style="margin-bottom: 30px;"><strong>KL Divergence</strong></li>
-							<li style="margin-bottom: 30px;"><strong>Convergence</strong></li>
-						</ul>
-						<div style="display: flex; justify-content: center; margin-top: 20px;"><img src="images/accuracy_epochs.png" style="width: 80%; max-height: 62vh; border-radius: 8px; border: 1px solid #444;"></div>
+						<div style="display: flex; align-items: center; gap: 30px; margin-top: 10px;">
+							<div style="width: 38%; text-align: left;">
+								<p style="font-size: 0.8em;">Validating correctness of sampler.</p>
+								<ul style="margin-top: 1.2em;">
+									<li style="margin-bottom: 0.8em;"><strong>KL Divergence</strong></li>
+									<li><strong>Convergence</strong></li>
+								</ul>
+							</div>
+							<div style="width: 62%;">
+								<img src="images/accuracy_epochs.png" style="width: 100%; max-height: 72vh; border-radius: 8px; border: 1px solid #444;">
+							</div>
+						</div>
 					</section>
 
 					<section>
