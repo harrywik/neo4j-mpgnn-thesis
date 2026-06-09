@@ -1036,12 +1036,6 @@
 					<section>
 						<h3>In-Database Inference</h3>
 						<p>Exploring where to run the model:</p>
-						<ol style="font-size: 0.8em;">
-							<li><strong>Cypher:</strong> Pure query-based inference.</li>
-							<li><strong>UDP:</strong> Java-based model execution.</li>
-							<li><strong>Hybrid:</strong> UDP for sampling &rarr; PyG for prediction.</li>
-							<li><strong>Baseline:</strong> Only PyG, in-memory.</li>
-						</ol>
 					</section>
 
 					<!-- 1. Cypher Inference -->
@@ -1088,7 +1082,6 @@
 								<ul style="font-size: 0.55em; line-height: 1.8;">
 									<li><code>spec.json</code>: Defines the model layout.</li>
 									<li><code>weights.bin</code>: Stores pre-trained parameters.</li>
-									<li><strong>Lifecycle:</strong> Uploaded via dedicated UDP once; cached in-memory for all subsequent calls.</li>
 								</ul>
 							</div>
 							<div style="width: 55%; text-align: center; position: relative; height: 320px;">
@@ -1113,7 +1106,7 @@
 
 					<!-- 3. Hybrid Inference -->
 					<section>
-						<h4>3. Hybrid Inference</h4>
+						<h4>Neighbor sampling</h4>
 						<p style="font-size: 0.6em; color: #ccc; margin-top: 1em;">Identical to training pipeline logic.</p>
 						<div style="display: flex; justify-content: center; align-items: center; margin-top: 40px;">
 							<div style="background: #002b36; padding: 20px; border: 2px solid #268bd2; border-radius: 10px; text-align: center;">
