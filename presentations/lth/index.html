@@ -120,7 +120,7 @@
 <!-- Slide 2: Node classification -->
 <section style="padding: 40px; font-family: 'Helvetica Neue', Arial, sans-serif; color: #eee; text-align: left; box-sizing: border-box; height: 100%;">
   <!-- Context label above header -->
-  <div style="font-size: 15px; color: #888; margin-bottom: 6px; font-weight: 500;">Graph-DB backed GNN training & inference</div>
+  <div style="font-size: 15px; color: #888; margin-bottom: 6px; font-weight: 500;">Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</div>
   
   <!-- Slide Header -->
   <div style="border-bottom: 2.5px solid #48cae4; padding-bottom: 12px; margin-bottom: 40px;">
@@ -226,13 +226,12 @@
   </div>
 </section>
 
-
+<!---
 					<section>
 						<h3>Classical Machine Learning</h3>
 						<p style="font-size: 0.6em; color: #aaa;">The model sees rows, i.i.d assumption. Citations/edges are ignored.</p>
 						
 						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 30px;">
-							<!-- Paper Example -->
 							<div style="width: 28%; background: white; color: #333; padding: 20px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.45em; text-align: left; box-shadow: 5px 5px 0px rgba(255,255,255,0.1);">
 								<h4 style="margin: 0; font-size: 1.2em; border-bottom: 1px solid #eee; padding-bottom: 5px;">Paper #101</h4>
 								<p style="margin-top: 10px; line-height: 1.5;">"The <strong>architecture</strong> of <strong>neural</strong> networks for <strong>graph</strong> data..."</p>
@@ -241,7 +240,6 @@
 
 							<div style="align-self: center; font-size: 1.2em;">&rarr;</div>
 
-							<!-- SQL/Excel Table -->
 							<div style="width: 65%;">
 								<p style="font-size: 0.4em; margin-bottom: 5px; color: #aaa; text-align: left;">Table: <code>keyword_features</code></p>
 								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
@@ -290,7 +288,6 @@
 							<div style="font-size: 1.2em; margin-right: 15px;">&rarr;</div>
 							<div style="background: #1a1a1a; border: 1px dashed #666; padding: 10px 10px; border-radius: 20px; display: flex; align-items: center;">
 								<svg width="100" height="80" viewBox="0 0 40 30" style="margin-right: 15px;">
-									<!-- Connections: Input -> Hidden (3x4) -->
 									<line x1="5" y1="5" x2="20" y2="5" stroke="#444" stroke-width="0.3" />
 									<line x1="5" y1="5" x2="20" y2="12" stroke="#444" stroke-width="0.3" />
 									<line x1="5" y1="5" x2="20" y2="19" stroke="#444" stroke-width="0.3" />
@@ -304,7 +301,6 @@
 									<line x1="5" y1="25" x2="20" y2="19" stroke="#444" stroke-width="0.3" />
 									<line x1="5" y1="25" x2="20" y2="26" stroke="#444" stroke-width="0.3" />
 
-									<!-- Connections: Hidden -> Output (4x2) -->
 									<line x1="20" y1="5" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
 									<line x1="20" y1="5" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
 									<line x1="20" y1="12" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
@@ -314,7 +310,6 @@
 									<line x1="20" y1="26" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
 									<line x1="20" y1="26" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
 
-									<!-- Nodes (drawn last to stay on top) -->
 									<circle cx="5" cy="5" r="2" fill="#888" />
 									<circle cx="5" cy="15" r="2" fill="#888" />
 									<circle cx="5" cy="25" r="2" fill="#888" />
@@ -333,7 +328,6 @@
 					<section>
 						<h3>How can we leverage the citations BETWEEN papers?</h3>
 						<div style="display: flex; justify-content: space-around; align-items: center; margin-top: 50px;">
-							<!-- Cites Table -->
 							<div style="width: 40%;">
 								<p style="font-size: 0.6em; margin-bottom: 10px;">Table: <code>cites</code></p>
 								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
@@ -368,7 +362,6 @@
 
 							<div style="font-size: 1.5em;">&harr;</div>
 
-							<!-- Graph Representation -->
 							<div style="width: 40%; background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333;">
 								<svg viewBox="0 0 200 150" width="100%">
 									<defs>
@@ -376,13 +369,11 @@
 											<polygon points="0 0, 10 3.5, 0 7" fill="white" />
 										</marker>
 									</defs>
-									<!-- Nodes -->
 									<circle cx="100" cy="75" r="12" fill="#0af" /> <text x="100" y="79" font-size="8" text-anchor="middle" fill="white" font-weight="bold">101</text>
 									<circle cx="160" cy="40" r="12" fill="#444" /> <text x="160" y="44" font-size="8" text-anchor="middle" fill="white">102</text>
 									<circle cx="40" cy="40" r="12" fill="#444" /> <text x="40" y="44" font-size="8" text-anchor="middle" fill="white">103</text>
 									<circle cx="40" cy="110" r="12" fill="#444" /> <text x="40" y="114" font-size="8" text-anchor="middle" fill="white">104</text>
 									
-									<!-- Edges -->
 									<line x1="112" y1="70" x2="148" y2="45" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
 									<line x1="52" y1="45" x2="88" y2="70" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
 									<line x1="52" y1="105" x2="88" y2="80" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
@@ -408,12 +399,9 @@
 											<stop offset="100%" stop-color="#2a6f97" stop-opacity="0" />
 										</radialGradient>
 									</defs>
-									<!-- 2-hop boundary -->
 									<circle cx="150" cy="150" r="130" fill="url(#hop2)" stroke="#2a6f97" stroke-width="1" stroke-dasharray="4" />
-									<!-- 1-hop boundary -->
 									<circle cx="150" cy="150" r="75" fill="url(#hop1)" stroke="#48cae4" stroke-width="1" stroke-dasharray="4" />
 
-									<!-- edges -->
 									<line x1="150" y1="150" x2="110" y2="100" stroke="#888" stroke-width="1" />
 									<line x1="150" y1="150" x2="200" y2="130" stroke="#888" stroke-width="1" />
 									<line x1="110" y1="100" x2="60" y2="80" stroke="#666" stroke-width="0.8" />
@@ -421,17 +409,14 @@
 									<line x1="200" y1="130" x2="250" y2="100" stroke="#666" stroke-width="0.8" />
 									<line x1="200" y1="130" x2="240" y2="170" stroke="#666" stroke-width="0.8" />
 
-									<!-- hop 2 nodes -->
 									<circle cx="60" cy="80" r="6" fill="#2a6f97" />
 									<circle cx="80" cy="50" r="6" fill="#2a6f97" />
 									<circle cx="250" cy="100" r="6" fill="#2a6f97" />
 									<circle cx="240" cy="170" r="6" fill="#2a6f97" />
 
-									<!-- hop 1 nodes -->
 									<circle cx="110" cy="100" r="8" fill="#48cae4" />
 									<circle cx="200" cy="130" r="8" fill="#48cae4" />
 
-									<!-- target node -->
 									<circle cx="150" cy="150" r="10" fill="#e63946" stroke="#fff" stroke-width="2" />
 
 									<text x="150" y="220" fill="#48cae4" font-size="10" text-anchor="middle">K=1</text>
@@ -444,7 +429,7 @@
 							</div>
 						</div>
 					</section>
-
+-->
 					<section>
 						<h3>Neighborhood Explosion</h3>
 						<div style="display: flex; justify-content: space-around; align-items: center;">
