@@ -57,7 +57,7 @@
 						<ul style="font-size: 0.9em; line-height: 1.6;">
 							<li>Motivation for <strong>Graph Neural Networks</strong></li>
 							<li>Challenges in large-graph Graph neural network training</li>
-							<li>Why <strong>graph DBs</strong> should be tighter coupled</li>
+							<li><strong>Graph Databases</strong> (GDBs)</li>
 						</ul>
 					</section>
 
@@ -72,6 +72,7 @@
 
   <!-- Content Section -->
   <div style="max-width: 750px; margin-left: 20px;">
+    <p style="font-size: 20px; color: #ccc; margin: 0 0 24px; text-align: left;">Adapting neural nets for graph-structured data.</p>
     <h3 style="font-size: 22px; font-weight: bold; margin-bottom: 20px; color: #fff;">GNN tasks:</h3>
     
     <table style="width: 100%; border-collapse: collapse; font-size: 20px; border: 1px solid #444; background: #1a1a1a;">
@@ -581,8 +582,10 @@
 								</svg>
 							</div>
 							<div style="text-align: left; width: 44%; font-size: 0.8em;">
-								<p>Sample a subgraph around each seed node.</p>
-								<p>Fanout: \([3, 2]\)</p>
+								<ul style="line-height: 1.5;">
+									<li style="margin-bottom: 0.6em;">Sampling must be fast.</li>
+									<li>Produces bounded neighborhoods.</li>
+								</ul>
 								<span class="fragment" data-sample-trigger="1" style="display:none;"></span>
 								<p style="font-size: 0.6em; color: #888; margin-top: 1.5em;">* GraphSAGE neighborhood sampling</p>
 							</div>
@@ -737,6 +740,55 @@
 						</div>
 					</section>
 
+						<section>
+							<h3>Graph Database-backed baseline</h3>
+							<p style="font-size: 0.7em; color: #aaa; margin-top: 0;">Graph stored in a separate graph DB.</p>
+							<svg viewBox="0 0 380 200" width="62%" style="display:block; margin: 20px auto;">
+								<defs><marker id="baseArrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#888"/></marker></defs>
+								<line x1="140" y1="100" x2="258" y2="100" stroke="#888" stroke-width="1.5" marker-end="url(#baseArrow)" />
+								<text x="199" y="90" fill="#48cae4" font-size="11" text-anchor="middle">Cypher</text>
+								<g>
+									<rect x="15" y="65" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+									<text x="75" y="100" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+									<text x="75" y="118" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+								</g>
+								<g>
+									<path d="M265 63 V137 A40 12 0 0 0 345 137 V63" fill="#222" stroke="#48cae4" stroke-width="2"/>
+									<ellipse cx="305" cy="63" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+									<text x="305" y="105" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+									<text x="305" y="123" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+								</g>
+							</svg>
+						</section>
+
+				<section>
+					<h3>Sampling Query (2-hop fan-out)</h3>
+					<pre style="width: 80%; margin: 18px auto; font-size: 0.42em; line-height: 1.4; background: #272822; color: #f8f8f2; padding: 18px 22px; border-radius: 8px; text-align: left;"><span style="color:#75715e;">// seeds → first frontier</span>
+<span style="color:#f92672;">UNWIND</span> <span style="color:#e6db74;">$seed_ids</span> <span style="color:#f92672;">AS</span> id
+<span style="color:#f92672;">MATCH</span> (s) <span style="color:#f92672;">WHERE</span> s.id = id
+<span style="color:#f92672;">WITH</span> <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> frontier, <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> visited
+
+<span style="color:#fd971f;">// ── for each layer k in [k1, k2] ──</span>
+<span style="color:#f92672;">CALL</span> (frontier, visited) {
+    <span style="color:#f92672;">UNWIND</span> frontier <span style="color:#f92672;">AS</span> src
+    <span style="color:#f92672;">MATCH</span> (src)&lt;-[r]-(nbr)            <span style="color:#75715e;">// 1-hop pattern match</span>
+    <span style="color:#f92672;">WITH</span> src, <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">collect</span>(r)</span> <span style="color:#f92672;">AS</span> cand
+    <span style="color:#f92672;">WITH</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">apoc.coll.randomItems</span>(cand, k)</span> <span style="color:#f92672;">AS</span> picked  <span style="color:#75715e;">// sample k</span>
+    ...
+    <span style="color:#f92672;">RETURN</span> [n <span style="color:#f92672;">IN</span> nbrs <span style="color:#f92672;">WHERE</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#f92672;">NOT</span> n <span style="color:#f92672;">IN</span> visited</span>] <span style="color:#f92672;">AS</span> frontier,
+           visited + nbrs <span style="color:#f92672;">AS</span> visited
+}
+<span style="color:#f92672;">WITH</span> frontier, visited   <span style="color:#75715e;">// ← new frontier feeds the next layer</span>
+
+<span style="color:#75715e;">// CALL block runs once per layer (k1, then k2 …)</span>
+<span style="color:#f92672;">RETURN</span> edge_pairs, nodes_by_hop</pre>
+				</section>
+				<section>
+					<h3>Sampling Query Profiling</h3>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Sampling materialises the K-hop in RAM via iterative pattern matching &rarr; slow.</p>
+					<img src="images/operator_latency.png" style="width: 64%; background:#fff; border-radius:6px; margin-top: 12px;" />
+				</section>
+
 					<section>
 						<h3>Pipeline Optimizations</h3>
 						<ul>
@@ -834,34 +886,6 @@
 					<img src="images/coauthor-latency-optim.png" style="width: 68%; background:#fff; border-radius:6px; margin-top: 12px;" />
 				</section>
 
-
-				<section>
-					<h3>Sampling Query (2-hop fan-out)</h3>
-					<pre style="width: 80%; margin: 18px auto; font-size: 0.42em; line-height: 1.4; background: #272822; color: #f8f8f2; padding: 18px 22px; border-radius: 8px; text-align: left;"><span style="color:#75715e;">// seeds → first frontier</span>
-<span style="color:#f92672;">UNWIND</span> <span style="color:#e6db74;">$seed_ids</span> <span style="color:#f92672;">AS</span> id
-<span style="color:#f92672;">MATCH</span> (s) <span style="color:#f92672;">WHERE</span> s.id = id
-<span style="color:#f92672;">WITH</span> <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> frontier, <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> visited
-
-<span style="color:#fd971f;">// ── for each layer k in [k1, k2] ──</span>
-<span style="color:#f92672;">CALL</span> (frontier, visited) {
-    <span style="color:#f92672;">UNWIND</span> frontier <span style="color:#f92672;">AS</span> src
-    <span style="color:#f92672;">MATCH</span> (src)&lt;-[r]-(nbr)            <span style="color:#75715e;">// 1-hop pattern match</span>
-    <span style="color:#f92672;">WITH</span> src, <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">collect</span>(r)</span> <span style="color:#f92672;">AS</span> cand
-    <span style="color:#f92672;">WITH</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">apoc.coll.randomItems</span>(cand, k)</span> <span style="color:#f92672;">AS</span> picked  <span style="color:#75715e;">// sample k</span>
-    ...
-    <span style="color:#f92672;">RETURN</span> [n <span style="color:#f92672;">IN</span> nbrs <span style="color:#f92672;">WHERE</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#f92672;">NOT</span> n <span style="color:#f92672;">IN</span> visited</span>] <span style="color:#f92672;">AS</span> frontier,
-           visited + nbrs <span style="color:#f92672;">AS</span> visited
-}
-<span style="color:#f92672;">WITH</span> frontier, visited   <span style="color:#75715e;">// ← new frontier feeds the next layer</span>
-
-<span style="color:#75715e;">// CALL block runs once per layer (k1, then k2 …)</span>
-<span style="color:#f92672;">RETURN</span> edge_pairs, nodes_by_hop</pre>
-				</section>
-				<section>
-					<h3>Sampling Query Profiling</h3>
-					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Sampling materialises the K-hop in RAM via iterative pattern matching &rarr; slow.</p>
-					<img src="images/operator_latency.png" style="width: 64%; background:#fff; border-radius:6px; margin-top: 12px;" />
-				</section>
 
 					<section>
 						<h3>In-Database Inference</h3>
