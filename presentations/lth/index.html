@@ -38,7 +38,7 @@
 		<div class="reveal">
 			<div class="slides">
 				<section>
-					<h6>"Cost-Efficient Graph Database-backed Graph Neural Network Pipelines"</h6>
+					<h6>Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</h6>
 					<p>
 						<small>Victor Pekkari & Harry Wik</small><br>
 						<small>LTH Presentation</small>
@@ -50,13 +50,14 @@
 				</section>
 				<!-- BACKGROUND -->
 				<section>
-					<section>
+					<!-- <section>
 						<h2>Background</h2>
-					</section>
+					</section> -->
 
 					<section>
 						<h3>Outline</h3>
 						<ul style="font-size: 0.9em; line-height: 1.6;">
+							<li>Graph modeling</li>
 							<li>Motivation for <strong>Graph Neural Networks</strong></li>
 							<li>Challenges in large-graph Graph neural network training</li>
 							<li><strong>Graph Databases</strong> (GDBs)</li>
@@ -99,7 +100,7 @@
 								<p style="font-size: 0.6em; color: #aaa;">Social network — people + relations</p>
 							</div>
 						</div>
-						<p style="font-size: 0.65em; color: #888; margin-top: 25px;">Any data where relationships matter fits a graph.</p>
+						<p style="font-size: 0.65em; color: #888; margin-top: 25px;">Any data where the relationships between objects matter fits a graph.</p>
 					</section>
 
 <!-- Slide 1: GNNs create node embeddings used for downstream tasks -->
@@ -542,8 +543,9 @@
 							</div>
 							<div style="text-align: left; width: 44%; font-size: 0.85em;">
 								<ul>
-									<li style="margin-bottom: 1.2em;">A node's output depends on its <strong>K-hop neighborhood</strong>.</li>
-									<li>For many real-world graphs this neighborhood grows too large to fit on the training machine.</li>
+									<li style="margin-bottom: 1.2em;">Output depends on the <strong>K-hop neighborhood</strong>.</li>
+									<li style="margin-bottom: 1.2em;">Often too large to fit in memory.</li>
+									<li>Computationally expensive.</li>
 								</ul>
 							</div>
 						</div>
@@ -709,7 +711,7 @@
 					</section>
 
 					<section id="rt-slide">
-						<h3 id="rt-title">Standard in-memory GNN</h3>
+						<h3 id="rt-title">In-memory GNN training</h3>
 						<p id="rt-note" style="font-size: 0.65em; color: #aaa; margin: 0 0 14px;">Graph held in RAM on the training machine.</p>
 						<div style="display: flex; align-items: flex-start; gap: 20px;">
 							<!-- code -->
@@ -791,8 +793,8 @@
 					</section>
 
 						<section>
-							<h3>Graph Database-backed baseline</h3>
-							<p style="font-size: 0.7em; color: #aaa; margin-top: 0;">Graph stored in a separate graph DB.</p>
+							<h3>baseline: Graph DB-backed pipeline</h3>
+							<p style="font-size: 0.7em; color: #aaa; margin-top: 0;">Uses Cypher for sampling and feature-fetching</p>
 							<svg viewBox="0 0 380 200" width="62%" style="display:block; margin: 20px auto;">
 								<defs><marker id="baseArrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#888"/></marker></defs>
 								<line x1="140" y1="100" x2="258" y2="100" stroke="#888" stroke-width="1.5" marker-end="url(#baseArrow)" />
@@ -849,7 +851,23 @@
 
 					<section>
 						<h3>UDP Sampling and feature fetching</h3>
-						<ul style="line-height: 1.6; margin-top: 1.2em;">
+						<svg viewBox="0 0 380 200" width="50%" style="display:block; margin: 6px auto 4px;">
+							<defs><marker id="udpArrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#888"/></marker></defs>
+							<line x1="140" y1="100" x2="258" y2="100" stroke="#888" stroke-width="1.5" marker-end="url(#udpArrow)" />
+							<text x="199" y="90" fill="#b58900" font-size="11" text-anchor="middle">Java</text>
+							<g>
+								<rect x="15" y="65" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+								<text x="75" y="100" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+								<text x="75" y="118" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+							</g>
+							<g>
+								<path d="M265 63 V137 A40 12 0 0 0 345 137 V63" fill="#222" stroke="#48cae4" stroke-width="2"/>
+								<ellipse cx="305" cy="63" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+								<text x="305" y="105" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+								<text x="305" y="123" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+							</g>
+						</svg>
+						<ul style="line-height: 1.6; font-size: 0.8em;">
 							<li class="fragment">One returned flattened <code>ByteArray</code> per feature call</li>
 							<li class="fragment">Reservoir Sampling</li>
 							<li class="fragment"><code>LinkedHashMap</code> instead of linear search and sort</li>
@@ -861,7 +879,7 @@
 						<ul style="line-height: 1.6; margin-top: 1.2em;">
 							<li class="fragment">Reduce data sent from the graph DB to the training process.</li>
 							<li class="fragment">Move model computations from the training process to the graph DB.</li>
-							<li class="fragment">Only weight-free ops can move to the DB; backprop stays in training.</li>
+							<li class="fragment">Weight multiplications stay in training process — backprop needs autodiff.</li>
 						</ul>
 					</section>
 
@@ -932,14 +950,14 @@
 
 				<section>
 					<h3>Pre-aggregation at High Dimensions</h3>
-					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">When feature dimensions are high, pre-aggregation cuts data transfer and speeds up the batch.</p>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Pre-aggregation only reduces feature-fetch latency for high-dimensional vectors.</p>
 					<img src="images/coauthor-latency-optim.png" style="width: 68%; background:#fff; border-radius:6px; margin-top: 12px;" />
 				</section>
 
 
 					<section>
 						<h3>In-Database Inference</h3>
-						<p>Exploring where to run the model:</p>
+						<p>Exploring where to run the model</p>
 					</section>
 
 					<!-- 1. Cypher Inference -->
@@ -1010,7 +1028,7 @@
 
 					<!-- 3. Hybrid Inference -->
 					<section>
-						<h4>Neighbor sampling</h4>
+						<h4>3. Neighbor sampling</h4>
 						<p style="font-size: 0.6em; color: #ccc; margin-top: 1em;">Identical to training pipeline logic.</p>
 						<div style="display: flex; justify-content: center; align-items: center; margin-top: 40px;">
 							<div style="background: #002b36; padding: 20px; border: 2px solid #268bd2; border-radius: 10px; text-align: center;">
@@ -1147,7 +1165,7 @@
 				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = ''; memLabel.textContent = '';
 
 				if (n <= 4) {                                  // ===== in-memory phase =====
-					title.textContent = 'Standard in-memory GNN';
+					title.textContent = 'In-memory GNN training';
 					note.textContent = 'Graph held in RAM on the training machine.';
 					memG.style.display = ''; dbG.style.display = 'none';
 					newTags.forEach(function(t) { t.style.display = 'none'; });
