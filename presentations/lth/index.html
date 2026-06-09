@@ -38,13 +38,15 @@
 		<div class="reveal">
 			<div class="slides">
 				<section>
-					<h4>Neo4j & Message-Passing Neural Nets</h4>
-					<hr />
 					<h6>"Cost-Efficient Graph Database-backed Graph Neural Network Pipelines"</h6>
 					<p>
 						<small>Victor Pekkari & Harry Wik</small><br>
 						<small>LTH Presentation</small>
-					</p>
+						</p>
+						<p style="font-size: 0.5em; color: #aaa; margin-top: 1.5em; line-height: 1.6;">
+							Supervisors: Brian Shi &amp; Alfred Clemedtson (Neo4j), Xuan-Son Vu (LTH)<br>
+							Examiner: Jacek Malec
+						</p>
 				</section>
 				<!-- BACKGROUND -->
 				<section>
@@ -59,6 +61,45 @@
 							<li>Challenges in large-graph Graph neural network training</li>
 							<li><strong>Graph Databases</strong> (GDBs)</li>
 						</ul>
+					</section>
+
+					<section>
+						<h3>What is a Graph?</h3>
+						<p style="font-size: 0.8em; color: #ccc;"><strong>Nodes</strong> connected by <strong>edges</strong>.</p>
+						<div style="display: flex; justify-content: center; gap: 70px; margin-top: 30px;">
+							<div>
+								<svg viewBox="0 0 160 130" width="240">
+									<!-- molecule: H2O-ish -->
+									<line x1="80" y1="60" x2="35" y2="95" stroke="#888" stroke-width="3"/>
+									<line x1="80" y1="60" x2="125" y2="95" stroke="#888" stroke-width="3"/>
+									<circle cx="80" cy="60" r="20" fill="#e63946"/><text x="80" y="66" font-size="16" fill="#fff" text-anchor="middle">O</text>
+									<circle cx="35" cy="95" r="14" fill="#48cae4"/><text x="35" y="100" font-size="13" fill="#fff" text-anchor="middle">H</text>
+									<circle cx="125" cy="95" r="14" fill="#48cae4"/><text x="125" y="100" font-size="13" fill="#fff" text-anchor="middle">H</text>
+								</svg>
+								<p style="font-size: 0.6em; color: #aaa;">Molecule — atoms + bonds</p>
+							</div>
+							<div>
+								<svg viewBox="0 0 170 140" width="250">
+									<!-- social network -->
+									<line x1="85" y1="22" x2="32" y2="52" stroke="#888" stroke-width="2"/>
+									<line x1="85" y1="22" x2="138" y2="52" stroke="#888" stroke-width="2"/>
+									<line x1="32" y1="52" x2="138" y2="52" stroke="#888" stroke-width="2"/>
+									<line x1="32" y1="52" x2="38" y2="108" stroke="#888" stroke-width="2"/>
+									<line x1="138" y1="52" x2="132" y2="108" stroke="#888" stroke-width="2"/>
+									<line x1="38" y1="108" x2="85" y2="124" stroke="#888" stroke-width="2"/>
+									<line x1="132" y1="108" x2="85" y2="124" stroke="#888" stroke-width="2"/>
+									<line x1="38" y1="108" x2="132" y2="108" stroke="#888" stroke-width="2"/>
+									<text x="85" y="22" font-size="22" text-anchor="middle" dominant-baseline="central">😀</text>
+									<text x="32" y="52" font-size="22" text-anchor="middle" dominant-baseline="central">😎</text>
+									<text x="138" y="52" font-size="22" text-anchor="middle" dominant-baseline="central">🙂</text>
+									<text x="38" y="108" font-size="22" text-anchor="middle" dominant-baseline="central">😄</text>
+									<text x="132" y="108" font-size="22" text-anchor="middle" dominant-baseline="central">🤓</text>
+									<text x="85" y="124" font-size="22" text-anchor="middle" dominant-baseline="central">😉</text>
+								</svg>
+								<p style="font-size: 0.6em; color: #aaa;">Social network — people + relations</p>
+							</div>
+						</div>
+						<p style="font-size: 0.65em; color: #888; margin-top: 25px;">Any data where relationships matter fits a graph.</p>
 					</section>
 
 <!-- Slide 1: GNNs create node embeddings used for downstream tasks -->
@@ -640,6 +681,15 @@
 							<li style="margin-bottom: 0.9em;"><strong>Increased traversal speed</strong> of graph topology</li>
 							<li style="margin-bottom: 0.9em;"><strong>Declarative</strong> graph query languages (Cypher)</li>
 							<li><strong>UDP</strong>: custom imperative Java-based extensions may be deployed as DB-plugins.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Why graph DBs for GNNs?</h3>
+						<ul style="line-height: 1.6; margin-top: 1em;">
+							<li class="fragment">Graph is already stored in graph DB — no costly loading into RAM.</li>
+							<li class="fragment">Cheap and scalable disk storage.</li>
+							<li class="fragment">Native traversal = fast neighborhood sampling.</li>
 						</ul>
 					</section>
 
