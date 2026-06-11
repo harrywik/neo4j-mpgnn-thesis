@@ -1,0 +1,1337 @@
+<!doctype html>
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+		<title>LTH Presentation - Neo4j & MP-GNN</title>
+
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reset.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.min.css">
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/theme/black.min.css">
+
+		<!-- Theme used for syntax highlighted code -->
+		<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/monokai.min.css">
+
+		<!-- KaTeX for math rendering -->
+		<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+
+		<style>
+			.step { display: block; transition: background 0.3s, color 0.3s; padding: 0 4px; border-radius: 3px; }
+			.step.active { background: #48cae4; color: #111; }
+			.pa-line { display: block; padding: 0 4px; border-radius: 3px; transition: background 0.3s, color 0.3s; }
+			.sample circle, .sample line { transition: fill 0.7s ease, stroke 0.7s ease, filter 0.7s ease, transform 0.7s ease; transform-box: fill-box; transform-origin: center; }
+			.sample.lit circle { fill: #ffffff; filter: drop-shadow(0 0 14px #fff35c) drop-shadow(0 0 6px #ffffff); transform: scale(1.8); transition: fill 0.15s ease, filter 0.15s ease, transform 0.15s ease; }
+			.sample.lit line { stroke: #fff35c; stroke-width: 3; filter: drop-shadow(0 0 6px #fff35c); transition: stroke 0.15s ease, filter 0.15s ease; }
+
+			/* ===== Sampling round-trip loop animation (JS-driven) ===== */
+			.rt-dot { transition: transform 1.8s ease, opacity 0.5s ease; }
+			.machine-box rect, .db-box path, .db-box ellipse { transition: fill 0.5s ease; }
+			.machine-box, .db-box { transition: filter 0.5s ease; }
+			.machine-box.glow rect { fill: var(--glow-color, #e63946); }
+			.machine-box.glow { filter: drop-shadow(0 0 14px var(--glow-color, #e63946)); }
+			.db-box.glow path, .db-box.glow ellipse { fill: var(--glow-color, #48cae4); }
+			.db-box.glow { filter: drop-shadow(0 0 14px var(--glow-color, #48cae4)); }
+		</style>
+	</head>
+	<body>
+		<div class="reveal">
+			<div class="slides">
+				<section>
+					<h6>Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</h6>
+					<p>
+						<small>Victor Pekkari & Harry Wik</small><br>
+						<small>LTH Presentation</small>
+						</p>
+						<p style="font-size: 0.5em; color: #aaa; margin-top: 1.5em; line-height: 1.6;">
+							Supervisors: Brian Shi &amp; Alfred Clemedtson (Neo4j), Xuan-Son Vu (LTH)<br>
+							Examiner: Jacek Malec
+						</p>
+				</section>
+				<!-- BACKGROUND -->
+				<section>
+					<!-- <section>
+						<h2>Background</h2>
+					</section> -->
+
+					<section>
+						<h3>Outline</h3>
+						<ul style="font-size: 0.9em; line-height: 1.6;">
+							<li>Motivation for <strong>Graph Neural Networks</strong></li>
+							<li>Challenges in large-graph Graph neural network training</li>
+							<li><strong>Graph Databases</strong> (GDBs)</li>
+						</ul>
+					</section>
+
+<!-- Slide 1: GNNs create node embeddings used for downstream tasks -->
+<section style="padding: 40px; font-family: 'Helvetica Neue', Arial, sans-serif; color: #eee; text-align: left; box-sizing: border-box; height: 100%;">
+  <!-- Slide Header -->
+  <div style="border-bottom: 2.5px solid #48cae4; padding-bottom: 12px; margin-bottom: 40px;">
+    <h2 style="color: #48cae4; font-size: 38px; font-weight: bold; margin: 0; text-align: left; letter-spacing: -0.5px;">
+      Graph Neural Networks (GNNs)
+    </h2>
+  </div>
+
+  <!-- Content Section -->
+  <div style="max-width: 750px; margin-left: 20px;">
+    <p style="font-size: 20px; color: #ccc; margin: 0 0 24px; text-align: left;">Adapting neural nets for graph-structured data.</p>
+    <h3 style="font-size: 22px; font-weight: bold; margin-bottom: 20px; color: #fff;">GNN tasks:</h3>
+    
+    <table style="width: 100%; border-collapse: collapse; font-size: 20px; border: 1px solid #444; background: #1a1a1a;">
+      <thead>
+        <tr style="border-bottom: 2px solid #555; background-color: #222;">
+          <th style="width: 35%; padding: 16px; font-weight: bold; text-align: center; border-right: 1px solid #555; color: #fff;">Task</th>
+          <th style="width: 65%; padding: 16px; font-weight: bold; text-align: left; color: #fff;">Example</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr style="border-bottom: 1px solid #444;">
+          <td style="padding: 16px; text-align: center; border-right: 1px solid #444; vertical-align: middle;">
+            <span style="display: inline-block; background-color: rgba(72, 202, 228, 0.15); color: #48cae4; padding: 6px 18px; border-radius: 20px; font-size: 18px; border: 1px solid #48cae4; font-weight: 500;">graph-level</span>
+          </td>
+          <td style="padding: 16px; vertical-align: middle; color: #eee;">Is this molecule toxic?</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #444;">
+          <td style="padding: 16px; text-align: center; border-right: 1px solid #444; vertical-align: middle;">
+            <span style="display: inline-block; background-color: rgba(72, 202, 228, 0.15); color: #48cae4; padding: 6px 18px; border-radius: 20px; font-size: 18px; border: 1px solid #48cae4; font-weight: 500;">node-level</span>
+          </td>
+          <td style="padding: 16px; vertical-align: middle; color: #eee;">What category does this paper belong to?</td>
+        </tr>
+        <tr>
+          <td style="padding: 16px; text-align: center; border-right: 1px solid #444; vertical-align: middle;">
+            <span style="display: inline-block; background-color: rgba(72, 202, 228, 0.15); color: #48cae4; padding: 6px 18px; border-radius: 20px; font-size: 18px; border: 1px solid #48cae4; font-weight: 500;">edge / link prediction</span>
+          </td>
+          <td style="padding: 16px; vertical-align: middle; color: #eee;">Will this user buy this product?</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Footer -->
+  <div style="position: absolute; bottom: 30px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 15px; color: #666; border-top: 1px solid #333; padding-top: 15px;">
+    <span>Victor Pekkari & Harry Wik — MSc Thesis · Lund University & Neo4j · 2026</span>
+    <span>4</span>
+  </div>
+</section>
+
+<!-- Slide 2: Node classification -->
+<section style="padding: 40px; font-family: 'Helvetica Neue', Arial, sans-serif; color: #eee; text-align: left; box-sizing: border-box; height: 100%;">
+  <!-- Context label above header -->
+  <div style="font-size: 15px; color: #888; margin-bottom: 6px; font-weight: 500;">Cost-Efficient Graph Database-backed Graph Neural Network Pipelines</div>
+  
+  <!-- Slide Header -->
+  <div style="border-bottom: 2.5px solid #48cae4; padding-bottom: 12px; margin-bottom: 40px;">
+    <h2 style="color: #48cae4; font-size: 38px; font-weight: bold; margin: 0; text-align: left; letter-spacing: -0.5px;">
+      Node classification
+    </h2>
+  </div>
+
+  <!-- Comparison Columns Layout -->
+  <div style="display: flex; justify-content: space-between; gap: 60px; margin-bottom: 40px;">
+    
+    <!-- Left Column: Standard ML -->
+    <div style="flex: 1; display: flex; flex-direction: column; justify-content: space-between;">
+      <h3 style="font-size: 24px; font-weight: bold; margin-bottom: 15px; color: #fff;">Standard ML</h3>
+      
+      <!-- Vector Diagram -->
+      <div style="height: 180px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+        <svg viewBox="0 0 400 150" width="100%" height="150" style="overflow: visible;">
+          <!-- Core Node Point -->
+          <circle cx="50" cy="65" r="10" fill="#e63946" />
+          
+          <!-- Direct connection arrow -->
+          <line x1="65" y1="65" x2="160" y2="65" stroke="#aa5555" stroke-width="1.5" />
+          <polygon points="160,61 168,65 160,69" fill="#aa5555" />
+          
+          <!-- Standard ML Box -->
+          <rect x="170" y="25" width="120" height="80" fill="#222" stroke="#555" stroke-width="1.5" rx="3" />
+          <text x="230" y="71" font-family="Arial, sans-serif" font-size="18" text-anchor="middle" fill="#fff">ML model</text>
+          
+          <!-- Output arrow -->
+          <line x1="295" y1="65" x2="365" y2="65" stroke="#aaa" stroke-width="1.5" />
+          <polygon points="365,61 373,65 365,69" fill="#aaa" />
+          
+          <!-- Output Text -->
+          <text x="385" y="71" font-family="Arial, sans-serif" font-size="18" fill="#eee">Prediction</text>
+        </svg>
+      </div>
+      
+      <p style="font-size: 20px; margin: 0; color: #aaa;">One vector in, one label out.</p>
+    </div>
+
+    <!-- Right Column: GNN -->
+    <div style="flex: 1.1; display: flex; flex-direction: column; justify-content: space-between;">
+      <h3 style="font-size: 24px; font-weight: bold; margin-bottom: 15px; color: #fff;">GNN</h3>
+      
+      <!-- Graph Inside Organic Bag Diagram -->
+      <div style="height: 180px; display: flex; align-items: center; justify-content: center; margin-bottom: 20px;">
+        <svg viewBox="0 0 550 200" width="100%" height="200" style="overflow: visible;">
+          <!-- Organic Hand-drawn/Smooth loop enclosing the neighborhood graph ("The Bag") -->
+          <path d="M 45,70 C 35,22 145,15 160,65 C 172,105 152,175 110,170 C 60,165 40,125 45,70 Z" 
+                fill="rgba(72, 202, 228, 0.05)" stroke="#48cae4" stroke-width="1.5" />
+          
+          <!-- Edge Connections to neighbors inside the bag -->
+          <line x1="105" y1="95" x2="65" y2="65" stroke="#444" stroke-width="1.5" />
+          <line x1="105" y1="95" x2="145" y2="55" stroke="#444" stroke-width="1.5" />
+          <line x1="105" y1="95" x2="60" y2="125" stroke="#444" stroke-width="1.5" />
+          <line x1="105" y1="95" x2="120" y2="145" stroke="#444" stroke-width="1.5" />
+          <line x1="105" y1="95" x2="85" y2="155" stroke="#444" stroke-width="1.5" />
+
+          <!-- Neighbor Nodes inside the bag (using themed colors) -->
+          <circle cx="65" cy="65" r="9" fill="#2a6f97" stroke="#48cae4" stroke-width="1" />
+          <circle cx="145" cy="55" r="9" fill="#2a6f97" stroke="#48cae4" stroke-width="1" />
+          <circle cx="60" cy="125" r="9" fill="#2a6f97" stroke="#48cae4" stroke-width="1" />
+          <circle cx="120" cy="145" r="9" fill="#2a6f97" stroke="#48cae4" stroke-width="1" />
+          <circle cx="85" cy="155" r="9" fill="#2a6f97" stroke="#48cae4" stroke-width="1" />
+
+          <!-- Target Central Node x inside the bag -->
+          <circle cx="105" cy="95" r="10" fill="#e63946" />
+          
+          <!-- Directional arrow out of the bag -->
+          <line x1="175" y1="95" x2="265" y2="95" stroke="#aa5555" stroke-width="1.5" />
+          <polygon points="265,91 273,95 265,99" fill="#aa5555" />
+          
+          <!-- GNN Model Box -->
+          <rect x="275" y="55" width="120" height="80" fill="#222" stroke="#555" stroke-width="1.5" rx="3" />
+          <text x="335" y="101" font-family="Arial, sans-serif" font-size="18" text-anchor="middle" fill="#fff"><tspan font-weight="bold">GNN</tspan> model</text>
+          
+          <!-- Directional output arrow -->
+          <line x1="400" y1="95" x2="470" y2="95" stroke="#aaa" stroke-width="1.5" />
+          <polygon points="470,91 478,95 470,99" fill="#aaa" />
+          
+          <!-- Output Prediction Text -->
+          <text x="490" y="101" font-family="Arial, sans-serif" font-size="18" fill="#eee">Prediction</text>
+        </svg>
+      </div>
+      
+      <p style="font-size: 20px; margin: 0; color: #aaa;">Features of the node <strong style="color: #fff;">and its neighbors</strong>.</p>
+    </div>
+  </div>
+
+  <!-- Bottom Key Takeaway Box -->
+  <div style="background-color: rgba(255, 214, 10, 0.1); border-left: 5px solid #ffd60a; padding: 16px 24px; font-size: 20px; margin-top: 30px; color: #ffd60a; border-radius: 0 4px 4px 0; line-height: 1.4;">
+    A GNN's prediction for one node depends on its neighboring nodes.
+  </div>
+
+  <!-- Footer -->
+  <div style="position: absolute; bottom: 30px; left: 40px; right: 40px; display: flex; justify-content: space-between; font-size: 15px; color: #666; border-top: 1px solid #333; padding-top: 15px;">
+    <span>Victor Pekkari & Harry Wik — MSc Thesis · Lund University & Neo4j · 2026</span>
+    <span>5</span>
+  </div>
+</section>
+
+<!---
+					<section>
+						<h3>Classical Machine Learning</h3>
+						<p style="font-size: 0.6em; color: #aaa;">The model sees rows, i.i.d assumption. Citations/edges are ignored.</p>
+						
+						<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-top: 30px;">
+							<div style="width: 28%; background: white; color: #333; padding: 20px; border: 1px solid #ccc; border-radius: 4px; font-size: 0.45em; text-align: left; box-shadow: 5px 5px 0px rgba(255,255,255,0.1);">
+								<h4 style="margin: 0; font-size: 1.2em; border-bottom: 1px solid #eee; padding-bottom: 5px;">Paper #101</h4>
+								<p style="margin-top: 10px; line-height: 1.5;">"The <strong>architecture</strong> of <strong>neural</strong> networks for <strong>graph</strong> data..."</p>
+								<div style="margin-top: 15px; font-style: italic; color: #666;">Keywords: Graph, Neural</div>
+							</div>
+
+							<div style="align-self: center; font-size: 1.2em;">&rarr;</div>
+
+							<div style="width: 65%;">
+								<p style="font-size: 0.4em; margin-bottom: 5px; color: #aaa; text-align: left;">Table: <code>keyword_features</code></p>
+								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
+									<table style="font-size: 0.35em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
+									<thead>
+										<tr style="background: #333; border-bottom: 2px solid #555;">
+											<th style="padding: 6px; border-right: 1px solid #555;">paper_id</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_graph</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_neural</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">kw_protein</th>
+											<th style="padding: 6px; border-right: 1px solid #555;">...</th>
+											<th style="padding: 6px; color: #0af;">label</th>
+										</tr>
+									</thead>
+									<tbody>
+										<tr style="border-bottom: 1px solid #444; background: rgba(0, 170, 255, 0.1);">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">101</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center; font-weight: bold; color: #0af;">CS</td>
+										</tr>
+										<tr style="border-bottom: 1px solid #444;">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">102</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #f00;">0</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center; color: #0f0;">1</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center; font-weight: bold; color: #0af;">Bio</td>
+										</tr>
+										<tr style="opacity: 0.5;">
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+											<td style="padding: 6px; text-align: center;">...</td>
+										</tr>
+									</tbody>
+								</table>
+							</div>
+						</div>
+
+						<div style="display: flex; justify-content: center; align-items: center; margin-top: 10px;">
+							<div style="font-size: 1.2em; margin-right: 15px;">&rarr;</div>
+							<div style="background: #1a1a1a; border: 1px dashed #666; padding: 10px 10px; border-radius: 20px; display: flex; align-items: center;">
+								<svg width="100" height="80" viewBox="0 0 40 30" style="margin-right: 15px;">
+									<line x1="5" y1="5" x2="20" y2="5" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="5" x2="20" y2="12" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="5" x2="20" y2="19" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="5" x2="20" y2="26" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="15" x2="20" y2="5" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="15" x2="20" y2="12" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="15" x2="20" y2="19" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="15" x2="20" y2="26" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="25" x2="20" y2="5" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="25" x2="20" y2="12" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="25" x2="20" y2="19" stroke="#444" stroke-width="0.3" />
+									<line x1="5" y1="25" x2="20" y2="26" stroke="#444" stroke-width="0.3" />
+
+									<line x1="20" y1="5" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="5" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="12" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="12" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="19" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="19" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="26" x2="35" y2="10" stroke="#444" stroke-width="0.3" />
+									<line x1="20" y1="26" x2="35" y2="20" stroke="#444" stroke-width="0.3" />
+
+									<circle cx="5" cy="5" r="2" fill="#888" />
+									<circle cx="5" cy="15" r="2" fill="#888" />
+									<circle cx="5" cy="25" r="2" fill="#888" />
+									<circle cx="20" cy="5" r="2" fill="#0af" />
+									<circle cx="20" cy="12" r="2" fill="#0af" />
+									<circle cx="20" cy="19" r="2" fill="#0af" />
+									<circle cx="20" cy="26" r="2" fill="#0af" />
+									<circle cx="35" cy="10" r="2" fill="#888" />
+									<circle cx="35" cy="20" r="2" fill="#888" />
+								</svg>
+								<span style="font-size: 0.7em; color: #ccc;">Standard Classifier e.g. MLP</span>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>How can we leverage the citations BETWEEN papers?</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center; margin-top: 50px;">
+							<div style="width: 40%;">
+								<p style="font-size: 0.6em; margin-bottom: 10px;">Table: <code>cites</code></p>
+								<div style="background: #222; padding: 10px; border-radius: 6px; border: 1px solid #444;">
+									<table style="font-size: 0.4em; width: 100%; border-collapse: collapse; color: #eee; font-family: 'Courier New', Courier, monospace;">
+										<thead>
+											<tr style="background: #333; border-bottom: 2px solid #555;">
+												<th style="padding: 8px; border-right: 1px solid #555;">citer</th>
+												<th style="padding: 8px;">cited</th>
+											</tr>
+										</thead>
+										<tbody>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">101</td>
+												<td style="padding: 6px; text-align: center;">102</td>
+											</tr>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">103</td>
+												<td style="padding: 6px; text-align: center;">101</td>
+											</tr>
+											<tr style="border-bottom: 1px solid #444;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">104</td>
+												<td style="padding: 6px; text-align: center;">101</td>
+											</tr>
+											<tr style="opacity: 0.5;">
+												<td style="padding: 6px; border-right: 1px solid #444; text-align: center;">...</td>
+												<td style="padding: 6px; text-align: center;">...</td>
+											</tr>
+										</tbody>
+									</table>
+								</div>
+							</div>
+
+							<div style="font-size: 1.5em;">&harr;</div>
+
+							<div style="width: 40%; background: #111; padding: 20px; border-radius: 10px; border: 1px solid #333;">
+								<svg viewBox="0 0 200 150" width="100%">
+									<defs>
+										<marker id="arrowhead" markerWidth="10" markerHeight="7" refX="10" refY="3.5" orient="auto">
+											<polygon points="0 0, 10 3.5, 0 7" fill="white" />
+										</marker>
+									</defs>
+									<circle cx="100" cy="75" r="12" fill="#0af" /> <text x="100" y="79" font-size="8" text-anchor="middle" fill="white" font-weight="bold">101</text>
+									<circle cx="160" cy="40" r="12" fill="#444" /> <text x="160" y="44" font-size="8" text-anchor="middle" fill="white">102</text>
+									<circle cx="40" cy="40" r="12" fill="#444" /> <text x="40" y="44" font-size="8" text-anchor="middle" fill="white">103</text>
+									<circle cx="40" cy="110" r="12" fill="#444" /> <text x="40" y="114" font-size="8" text-anchor="middle" fill="white">104</text>
+									
+									<line x1="112" y1="70" x2="148" y2="45" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+									<line x1="52" y1="45" x2="88" y2="70" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+									<line x1="52" y1="105" x2="88" y2="80" stroke="white" stroke-width="1.5" marker-end="url(#arrowhead)" />
+								</svg>
+								<p style="font-size: 0.5em; margin-top: 10px; color: #aaa;">Topological structure (Graph)</p>
+							</div>
+						</div>
+						<p style="font-size: 0.6em; margin-top: 40px; color: #0af; font-weight: bold;">Message-passing uses these edges to flow information between related nodes.</p>
+					</section>
+
+					<section>
+						<h3>Receptive Field: K-layer Reach</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center;">
+							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
+								<svg viewBox="0 0 300 300" width="100%">
+									<defs>
+										<radialGradient id="hop1" cx="50%" cy="50%" r="50%">
+											<stop offset="0%" stop-color="#48cae4" stop-opacity="0.2" />
+											<stop offset="100%" stop-color="#48cae4" stop-opacity="0" />
+										</radialGradient>
+										<radialGradient id="hop2" cx="50%" cy="50%" r="50%">
+											<stop offset="0%" stop-color="#2a6f97" stop-opacity="0.15" />
+											<stop offset="100%" stop-color="#2a6f97" stop-opacity="0" />
+										</radialGradient>
+									</defs>
+									<circle cx="150" cy="150" r="130" fill="url(#hop2)" stroke="#2a6f97" stroke-width="1" stroke-dasharray="4" />
+									<circle cx="150" cy="150" r="75" fill="url(#hop1)" stroke="#48cae4" stroke-width="1" stroke-dasharray="4" />
+
+									<line x1="150" y1="150" x2="110" y2="100" stroke="#888" stroke-width="1" />
+									<line x1="150" y1="150" x2="200" y2="130" stroke="#888" stroke-width="1" />
+									<line x1="110" y1="100" x2="60" y2="80" stroke="#666" stroke-width="0.8" />
+									<line x1="110" y1="100" x2="80" y2="50" stroke="#666" stroke-width="0.8" />
+									<line x1="200" y1="130" x2="250" y2="100" stroke="#666" stroke-width="0.8" />
+									<line x1="200" y1="130" x2="240" y2="170" stroke="#666" stroke-width="0.8" />
+
+									<circle cx="60" cy="80" r="6" fill="#2a6f97" />
+									<circle cx="80" cy="50" r="6" fill="#2a6f97" />
+									<circle cx="250" cy="100" r="6" fill="#2a6f97" />
+									<circle cx="240" cy="170" r="6" fill="#2a6f97" />
+
+									<circle cx="110" cy="100" r="8" fill="#48cae4" />
+									<circle cx="200" cy="130" r="8" fill="#48cae4" />
+
+									<circle cx="150" cy="150" r="10" fill="#e63946" stroke="#fff" stroke-width="2" />
+
+									<text x="150" y="220" fill="#48cae4" font-size="10" text-anchor="middle">K=1</text>
+									<text x="150" y="285" fill="#2a6f97" font-size="10" text-anchor="middle">K=2</text>
+								</svg>
+							</div>
+							<div style="text-align: left; width: 44%; font-size: 0.65em;">
+								<p>A <strong>K-layer GNN</strong> aggregates information from the <strong>K-hop neighborhood</strong></p>
+								<p>Conditioning the prediction not only on the node's features but also the features of its receptive field</p>
+							</div>
+						</div>
+					</section>
+-->
+					<section>
+						<h3>Neighborhood Explosion</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center;">
+							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
+								<svg viewBox="0 0 300 300" width="100%">
+									<defs>
+										<radialGradient id="khop" cx="50%" cy="50%" r="50%">
+											<stop offset="0%" stop-color="#48cae4" stop-opacity="0.28" />
+											<stop offset="100%" stop-color="#48cae4" stop-opacity="0" />
+										</radialGradient>
+									</defs>
+									<!-- background (out-of-neighborhood) edges -->
+									<line x1="45" y1="80" x2="20" y2="35" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="255" y1="80" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="260" y1="155" x2="290" y2="200" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- 2-hop neighborhood boundary -->
+									<circle cx="150" cy="150" r="138" fill="url(#khop)" stroke="#48cae4" stroke-width="0.8" stroke-opacity="0.4" />
+
+									<!-- edges: target -> hop 1 -->
+									<line x1="150" y1="150" x2="95" y2="110" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="210" y2="120" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="130" y2="210" stroke="#888" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="200" y2="200" stroke="#888" stroke-width="1.5" />
+
+									<!-- edges: hop 1 -> hop 2 -->
+									<line x1="95" y1="110" x2="45" y2="80" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="55" y2="150" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="100" y2="60" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="255" y2="80" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="260" y2="155" stroke="#666" stroke-width="1" />
+									<line x1="210" y1="120" x2="225" y2="60" stroke="#666" stroke-width="1" />
+									<line x1="130" y1="210" x2="90" y2="255" stroke="#666" stroke-width="1" />
+									<line x1="130" y1="210" x2="180" y2="255" stroke="#666" stroke-width="1" />
+									<line x1="200" y1="200" x2="240" y2="240" stroke="#666" stroke-width="1" />
+									<!-- extra neighborhood nodes (never sampled) -->
+									<line x1="130" y1="210" x2="155" y2="260" stroke="#666" stroke-width="1" />
+									<line x1="200" y1="200" x2="250" y2="205" stroke="#666" stroke-width="1" />
+									<line x1="95" y1="110" x2="40" y2="125" stroke="#666" stroke-width="1" />
+
+									<!-- out-of-neighborhood (grey) nodes -->
+									<circle cx="20" cy="35" r="7" fill="#555" />
+									<circle cx="285" cy="40" r="7" fill="#555" />
+									<circle cx="290" cy="200" r="7" fill="#555" />
+									<circle cx="210" cy="290" r="7" fill="#555" />
+									<circle cx="10" cy="195" r="7" fill="#555" />
+									<circle cx="60" cy="290" r="7" fill="#555" />
+
+									<!-- hop 2 nodes -->
+									<circle cx="45" cy="80" r="8" fill="#2a6f97" />
+									<circle cx="55" cy="150" r="8" fill="#2a6f97" />
+									<circle cx="100" cy="60" r="8" fill="#2a6f97" />
+									<circle cx="255" cy="80" r="8" fill="#2a6f97" />
+									<circle cx="260" cy="155" r="8" fill="#2a6f97" />
+									<circle cx="225" cy="60" r="8" fill="#2a6f97" />
+									<circle cx="90" cy="255" r="8" fill="#2a6f97" />
+									<circle cx="180" cy="255" r="8" fill="#2a6f97" />
+									<circle cx="240" cy="240" r="8" fill="#2a6f97" />
+									<circle cx="155" cy="260" r="8" fill="#2a6f97" />
+									<circle cx="250" cy="205" r="8" fill="#2a6f97" />
+									<circle cx="40" cy="125" r="8" fill="#2a6f97" />
+
+									<!-- hop 1 nodes -->
+									<circle cx="95" cy="110" r="10" fill="#48cae4" />
+									<circle cx="210" cy="120" r="10" fill="#48cae4" />
+									<circle cx="130" cy="210" r="10" fill="#48cae4" />
+									<circle cx="200" cy="200" r="10" fill="#48cae4" />
+
+									<!-- target node -->
+									<circle cx="150" cy="150" r="13" fill="#e63946" stroke="#fff" stroke-width="2" />
+
+									<text x="150" y="32" fill="#aaa" font-size="11" text-anchor="middle">K = 2 neighborhood</text>
+								</svg>
+							</div>
+							<div style="text-align: left; width: 44%; font-size: 0.85em;">
+								<ul>
+									<li style="margin-bottom: 1.2em;">Output depends on the <strong>K-hop neighborhood</strong>.</li>
+									<li style="margin-bottom: 1.2em;">Often too large to fit in memory.</li>
+									<li>Computationally expensive.</li>
+								</ul>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>Solution: Sampling</h3>
+						<div style="display: flex; justify-content: space-around; align-items: center;">
+							<div style="width: 52%; background: #1a1a1a; padding: 15px; border-radius: 10px;">
+								<svg viewBox="0 0 300 300" width="100%">
+									<!-- ===== BASE GRAPH (all grey) ===== -->
+									<!-- out-of-neighborhood edges -->
+									<line x1="45" y1="80" x2="20" y2="35" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="255" y1="80" x2="285" y2="40" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="260" y1="155" x2="290" y2="200" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="180" y1="255" x2="210" y2="290" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="55" y1="150" x2="10" y2="195" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="90" y1="255" x2="60" y2="290" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- in-neighborhood edges (grey base) -->
+									<line x1="150" y1="150" x2="95" y2="110" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="210" y2="120" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="130" y2="210" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="150" y1="150" x2="200" y2="200" stroke="#3a3a3a" stroke-width="1.5" />
+									<line x1="95" y1="110" x2="45" y2="80" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="55" y2="150" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="100" y2="60" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="255" y2="80" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="260" y2="155" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="210" y1="120" x2="225" y2="60" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="90" y2="255" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="180" y2="255" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="200" y1="200" x2="240" y2="240" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="130" y1="210" x2="155" y2="260" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="200" y1="200" x2="250" y2="205" stroke="#3a3a3a" stroke-width="1" />
+									<line x1="95" y1="110" x2="40" y2="125" stroke="#3a3a3a" stroke-width="1" />
+
+									<!-- all nodes grey -->
+									<circle cx="20" cy="35" r="7" fill="#555" />
+									<circle cx="285" cy="40" r="7" fill="#555" />
+									<circle cx="290" cy="200" r="7" fill="#555" />
+									<circle cx="210" cy="290" r="7" fill="#555" />
+									<circle cx="10" cy="195" r="7" fill="#555" />
+									<circle cx="60" cy="290" r="7" fill="#555" />
+									<circle cx="45" cy="80" r="8" fill="#555" />
+									<circle cx="55" cy="150" r="8" fill="#555" />
+									<circle cx="100" cy="60" r="8" fill="#555" />
+									<circle cx="255" cy="80" r="8" fill="#555" />
+									<circle cx="260" cy="155" r="8" fill="#555" />
+									<circle cx="225" cy="60" r="8" fill="#555" />
+									<circle cx="90" cy="255" r="8" fill="#555" />
+									<circle cx="180" cy="255" r="8" fill="#555" />
+									<circle cx="240" cy="240" r="8" fill="#555" />
+									<circle cx="155" cy="260" r="8" fill="#555" />
+									<circle cx="250" cy="205" r="8" fill="#555" />
+									<circle cx="40" cy="125" r="8" fill="#555" />
+									<circle cx="95" cy="110" r="10" fill="#555" />
+									<circle cx="210" cy="120" r="10" fill="#555" />
+									<circle cx="130" cy="210" r="10" fill="#555" />
+									<circle cx="200" cy="200" r="10" fill="#555" />
+
+									<!-- ===== SAMPLED OVERLAY (auto-animated, 3 per level) ===== -->
+									<!-- hop 1 -->
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="95" y2="110" stroke="#48cae4" stroke-width="1.5" /><circle cx="95" cy="110" r="10" fill="#48cae4" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="210" y2="120" stroke="#48cae4" stroke-width="1.5" /><circle cx="210" cy="120" r="10" fill="#48cae4" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="150" y1="150" x2="130" y2="210" stroke="#48cae4" stroke-width="1.5" /><circle cx="130" cy="210" r="10" fill="#48cae4" /></g>
+									<!-- hop 2 (fanout 2 per sampled hop-1 node) -->
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="95" y1="110" x2="45" y2="80" stroke="#2a6f97" stroke-width="1" /><circle cx="45" cy="80" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="95" y1="110" x2="100" y2="60" stroke="#2a6f97" stroke-width="1" /><circle cx="100" cy="60" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="210" y1="120" x2="255" y2="80" stroke="#2a6f97" stroke-width="1" /><circle cx="255" cy="80" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="210" y1="120" x2="225" y2="60" stroke="#2a6f97" stroke-width="1" /><circle cx="225" cy="60" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="130" y1="210" x2="90" y2="255" stroke="#2a6f97" stroke-width="1" /><circle cx="90" cy="255" r="8" fill="#2a6f97" /></g>
+									<g class="sample" style="opacity:0; transition: opacity 0.7s;"><line x1="130" y1="210" x2="180" y2="255" stroke="#2a6f97" stroke-width="1" /><circle cx="180" cy="255" r="8" fill="#2a6f97" /></g>
+
+									<!-- target node (always coloured) -->
+									<circle cx="150" cy="150" r="13" fill="#e63946" stroke="#fff" stroke-width="2" />
+								</svg>
+							</div>
+							<div style="text-align: left; width: 44%; font-size: 0.8em;">
+								<ul style="line-height: 1.5;">
+									<li style="margin-bottom: 0.6em;">Sampling must be fast.</li>
+									<li>Produces bounded neighborhoods.</li>
+								</ul>
+								<span class="fragment" data-sample-trigger="1" style="display:none;"></span>
+								<p style="font-size: 0.6em; color: #888; margin-top: 1.5em;">* GraphSAGE neighborhood sampling</p>
+							</div>
+						</div>
+					</section>
+
+					<section id="big-graph-slide">
+						<h3>Sampling a 2-hop neighborhood</h3>
+						<svg id="big-graph" viewBox="0 0 900 470" width="82%" style="background:#111; border-radius:8px; margin-top:10px;"></svg>
+						<p style="font-size:0.6em; color:#888; margin-top:8px;"><span style="color:#e63946;">&#9679;</span> seeds (10) &nbsp; <span style="color:#90e0ef;">&#9679;</span> 2-hop neighborhood &nbsp; <span style="color:#ffd60a;">&#9679;</span> sampled</p>
+						<span class="fragment bg-step" data-bg-step="0" style="display:none;"></span>
+						<span class="fragment bg-step" data-bg-step="1" style="display:none;"></span>
+						<span class="fragment bg-step" data-bg-step="2" style="display:none;"></span>
+					</section>
+
+					<section>
+						<h3>Sampling Changes the Training Loop</h3>
+						<div style="display: flex; align-items: center; gap: 24px; margin-top: 20px;">
+							<pre style="width: 58%; margin: 0; font-size: 0.55em; line-height: 2.2; background: #2b2b2b; padding: 22px 26px; border-radius: 8px; text-align: left;">for batch B of seeds:
+  G_B      ← Sample(B)      <span style="color:#fff35c;">← NEW</span>
+  X_B, E_B ← Fetch(G_B)     <span style="color:#fff35c;">← NEW</span>
+  ŷ        ← forward pass
+  L        ← compute loss
+  θ        ← update weights</pre>
+							<div style="width: 42%; text-align: left; font-size: 0.8em; color: #ddd;">
+								<p>Sampling + fetching usually takes longer than the model computations.</p>
+							</div>
+						</div>
+					</section>
+
+					<section>
+						<h3>Sampling algorithms</h3>
+						<ul>
+							<li><strong>GraphSAINT</strong></li>
+							<li><strong>GraphSAGE</strong></li>
+						</ul>
+					</section>
+
+
+					<!-- <section>
+						<h3>PyTorch Geometric (PyG)</h3>
+						<ul style="line-height: 1.6; margin-top: 1.5em;">
+							<li class="fragment" style="margin-bottom: 0.8em;">Industry standard ML library for GNNs.</li>
+							<li class="fragment" style="margin-bottom: 0.8em;">PyG is our correctness baseline.</li>
+							<li class="fragment"><strong>RAM-based:</strong> loads the entire graph into RAM (expensive, but fast).</li>
+						</ul>
+					</section> -->
+					<!--
+					<section>
+						<h3>Graph Databases (Neo4j)</h3>
+						<ul style="line-height: 1.6;">
+							<li style="margin-bottom: 0.9em;"><strong>Increased traversal speed</strong> of graph topology</li>
+							<li style="margin-bottom: 0.9em;"><strong>Declarative</strong> graph query languages (Cypher)</li>
+							<li><strong>UDP</strong>: custom imperative Java-based extensions may be deployed as DB-plugins.</li>
+						</ul>
+					</section>-->
+
+					<section>
+						<h3>Why graph DBs for GNNs?</h3>
+						<ul style="line-height: 1.6; margin-top: 1em;">
+							<li class="fragment">Graph is already stored in graph DB — no costly loading into RAM.</li>
+							<li class="fragment">Cheap and scalable disk storage.</li>
+							<li class="fragment">Native traversal = fast neighborhood sampling.</li>
+						</ul>
+					</section>
+
+				</section>
+
+				<!-- OUR WORK -->
+				<section>
+					<section>
+						<h2>Our Work</h2>
+						<ul id="ow-bullets" style="line-height: 1.6; margin-top: 1.2em;">
+							<li class="fragment">Graph DB-backed GNN training pipelines.</li>
+							<li class="fragment">Benchmark &amp; optimize the graph DB-backed training.</li>
+							<li class="fragment">Explore new methods for graph DB-backed inference.</li>
+						</ul>
+						<h3 id="ow-final" style="display:none; margin-top: 1.5em;">Always equivalent to in-memory.</h3>
+						<span class="fragment ow-final-trigger" style="display:none;"></span>
+					</section>
+
+					<section id="rt-slide">
+						<h3 id="rt-title">In-memory GNN training</h3>
+						<p id="rt-note" style="font-size: 0.65em; color: #aaa; margin: 0 0 14px;">Graph held in RAM on the training machine.</p>
+						<div style="display: flex; align-items: flex-start; gap: 20px;">
+							<!-- code -->
+							<pre style="width: 46%; margin: 0; font-size: 0.5em; line-height: 1.5; background: #2b2b2b; padding: 14px; border-radius: 6px; text-align: left;">for batch B of seeds:
+<span class="step">  G_B      ← Sample(B)</span>
+<span class="step">  X_B, E_B ← Fetch(G_B)</span>
+<span class="step">  ŷ        ← forward pass</span>
+<span class="step">  L        ← compute loss</span>
+<span class="step">  θ        ← update weights</span></pre>
+							<!-- graphics: in-memory (default) and Graph-DB -->
+							<div style="width: 54%; height: 240px;">
+								<svg id="mem-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+									<text id="mem-label" x="190" y="44" fill="#e63946" font-size="12" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="80" y="60" width="220" height="135" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="190" y="118" fill="#fff" font-size="15" text-anchor="middle">Training process</text>
+										<text x="190" y="140" fill="#aaa" font-size="10" text-anchor="middle">PyTorch Geometric</text>
+										<text x="190" y="160" fill="#aaa" font-size="10" text-anchor="middle">full graph held in RAM</text>
+									</g>
+								</svg>
+								<svg id="db-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet" style="display:none;">
+									<line x1="140" y1="95" x2="256" y2="95" stroke="#555" stroke-dasharray="4" marker-end="url(#arrowReq)" />
+									<text id="top-label" x="198" y="85" fill="#48cae4" font-size="9" text-anchor="middle"></text>
+									<line x1="256" y1="135" x2="140" y2="135" stroke="#555" stroke-dasharray="4" marker-end="url(#arrowRes)" />
+									<text id="bot-label" x="198" y="152" fill="#90e0ef" font-size="9" text-anchor="middle"></text>
+									<defs>
+										<marker id="arrowReq" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+										<marker id="arrowRes" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+									</defs>
+									<text id="machine-label" x="75" y="68" fill="#e63946" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<text id="db-label" x="305" y="58" fill="#48cae4" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="15" y="80" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="75" y="116" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+										<text x="75" y="133" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+									</g>
+									<g class="db-box">
+										<path d="M265 78 V152 A40 12 0 0 0 345 152 V78" fill="#222" stroke="#48cae4" stroke-width="2"/>
+										<ellipse cx="305" cy="78" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+										<text x="305" y="120" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+										<text x="305" y="138" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+									</g>
+									<circle class="rt-dot req-dot" cx="140" cy="95" r="6" fill="#48cae4" opacity="0"/>
+									<circle class="rt-dot res-dot" cx="256" cy="135" r="6" fill="#90e0ef" opacity="0"/>
+								</svg>
+							</div>
+						</div>
+						<span class="fragment rt-frag" data-rt-step="0" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="1" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="2" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="3" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="4" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="5" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="6" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="7" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="8" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="9" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="10" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="11" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="12" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="13" style="display:none;"></span>
+						<span class="fragment rt-frag" data-rt-step="14" style="display:none;"></span>
+					</section>
+
+					<section>
+						<h3>Functional Equivalence</h3>
+						<div style="display: flex; align-items: center; gap: 30px; margin-top: 10px;">
+							<div style="width: 38%; text-align: left;">
+								<p style="font-size: 0.8em;">Validating correctness of the samplers.</p>
+								<ul style="margin-top: 1.2em;">
+									<li style="margin-bottom: 0.8em;"><strong>KL Divergence</strong></li>
+									<li><strong>Convergence</strong></li>
+								</ul>
+							</div>
+							<div style="width: 62%;">
+								<img src="images/accuracy_epochs.png" style="width: 100%; max-height: 72vh; border-radius: 8px; border: 1px solid #444;">
+							</div>
+						</div>
+					</section>
+
+						<section>
+							<h3>baseline: Graph DB-backed pipeline</h3>
+							<p style="font-size: 0.7em; color: #aaa; margin-top: 0;">Uses Cypher for sampling and feature-fetching</p>
+							<svg viewBox="0 0 380 200" width="62%" style="display:block; margin: 20px auto;">
+								<defs><marker id="baseArrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#888"/></marker></defs>
+								<line x1="140" y1="100" x2="258" y2="100" stroke="#888" stroke-width="1.5" marker-end="url(#baseArrow)" />
+								<text x="199" y="90" fill="#48cae4" font-size="11" text-anchor="middle">Cypher</text>
+								<g>
+									<rect x="15" y="65" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+									<text x="75" y="100" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+									<text x="75" y="118" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+								</g>
+								<g>
+									<path d="M265 63 V137 A40 12 0 0 0 345 137 V63" fill="#222" stroke="#48cae4" stroke-width="2"/>
+									<ellipse cx="305" cy="63" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+									<text x="305" y="105" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+									<text x="305" y="123" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+								</g>
+							</svg>
+						</section>
+
+				<section>
+					<h3>Sampling Query (2-hop fan-out)</h3>
+					<pre style="width: 80%; margin: 18px auto; font-size: 0.42em; line-height: 1.4; background: #272822; color: #f8f8f2; padding: 18px 22px; border-radius: 8px; text-align: left;"><span style="color:#75715e;">// seeds → first frontier</span>
+<span style="color:#f92672;">UNWIND</span> <span style="color:#e6db74;">$seed_ids</span> <span style="color:#f92672;">AS</span> id
+<span style="color:#f92672;">MATCH</span> (s) <span style="color:#f92672;">WHERE</span> s.id = id
+<span style="color:#f92672;">WITH</span> <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> frontier, <span style="color:#a6e22e;">collect</span>(s) <span style="color:#f92672;">AS</span> visited
+
+<span style="color:#fd971f;">// ── for each layer k in [k1, k2] ──</span>
+<span style="color:#f92672;">CALL</span> (frontier, visited) {
+    <span style="color:#f92672;">UNWIND</span> frontier <span style="color:#f92672;">AS</span> src
+    <span style="color:#f92672;">MATCH</span> (src)&lt;-[r]-(nbr)            <span style="color:#75715e;">// 1-hop pattern match</span>
+    <span style="color:#f92672;">WITH</span> src, <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">collect</span>(r)</span> <span style="color:#f92672;">AS</span> cand
+    <span style="color:#f92672;">WITH</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#a6e22e;">apoc.coll.randomItems</span>(cand, k)</span> <span style="color:#f92672;">AS</span> picked  <span style="color:#75715e;">// sample k</span>
+    ...
+    <span style="color:#f92672;">RETURN</span> [n <span style="color:#f92672;">IN</span> nbrs <span style="color:#f92672;">WHERE</span> <span style="background:rgba(255,214,10,0.22);border-radius:3px;padding:0 2px;"><span style="color:#f92672;">NOT</span> n <span style="color:#f92672;">IN</span> visited</span>] <span style="color:#f92672;">AS</span> frontier,
+           visited + nbrs <span style="color:#f92672;">AS</span> visited
+}
+<span style="color:#f92672;">WITH</span> frontier, visited   <span style="color:#75715e;">// ← new frontier feeds the next layer</span>
+
+<span style="color:#75715e;">// CALL block runs once per layer (k1, then k2 …)</span>
+<span style="color:#f92672;">RETURN</span> edge_pairs, nodes_by_hop</pre>
+				</section>
+				<section>
+					<h3>Sampling Query Profiling</h3>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Sampling materialises the K-hop in RAM via iterative pattern matching &rarr; slow.</p>
+					<img src="images/op_db_hits_sampler.png" style="width: 64%; background:#fff; border-radius:6px; margin-top: 12px;" />
+				</section>
+
+					<section>
+						<h3>Pipeline Optimizations</h3>
+						<ul>
+							<li><strong>UDP (Java):</strong> sampling and fetching.</li>
+							<li><strong>Pre-aggregation:</strong> move model computations to graph DB.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>UDP Sampling and feature fetching</h3>
+						<svg viewBox="0 0 380 200" width="50%" style="display:block; margin: 6px auto 4px;">
+							<defs><marker id="udpArrow" markerWidth="9" markerHeight="9" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#888"/></marker></defs>
+							<line x1="140" y1="100" x2="258" y2="100" stroke="#888" stroke-width="1.5" marker-end="url(#udpArrow)" />
+							<text x="199" y="90" fill="#b58900" font-size="11" text-anchor="middle">Java</text>
+							<g>
+								<rect x="15" y="65" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+								<text x="75" y="100" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+								<text x="75" y="118" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+							</g>
+							<g>
+								<path d="M265 63 V137 A40 12 0 0 0 345 137 V63" fill="#222" stroke="#48cae4" stroke-width="2"/>
+								<ellipse cx="305" cy="63" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+								<text x="305" y="105" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+								<text x="305" y="123" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+							</g>
+						</svg>
+						<ul style="line-height: 1.6; font-size: 0.8em;">
+							<li class="fragment">One returned flattened <code>ByteArray</code> per feature call</li>
+							<li class="fragment">Reservoir Sampling</li>
+							<li class="fragment"><code>LinkedHashMap</code> instead of linear search and sort</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Pre-aggregation</h3>
+						<ul style="line-height: 1.6; margin-top: 1.2em;">
+							<li class="fragment">Reduce data sent from the graph DB to the training process.</li>
+							<li class="fragment">Move model computations from the training process to the graph DB.</li>
+							<li class="fragment">Weight multiplications stay in training process — backprop needs autodiff.</li>
+						</ul>
+					</section>
+
+					<section>
+						<h3>Pre-aggregation</h3>
+						<div style="display: flex; align-items: center; gap: 20px;">
+							<pre style="width: 46%; margin: 0; font-size: 0.5em; line-height: 1.5; background: #2b2b2b; padding: 14px; border-radius: 6px; text-align: left;">for batch B of seeds:
+<span class="pa-line">  G_B  ← Sample(B)</span>
+<span class="pa-line">  X_B  ← Fetch(G_B)</span>
+<span class="pa-line">  H_B  ← start forward pass (in DB)</span>
+<span class="pa-line">  ŷ    ← finish forward pass</span>
+<span class="pa-line">  L    ← compute loss</span>
+<span class="pa-line">  θ    ← update weights</span></pre>
+							<div style="width: 54%; height: 240px;">
+								<svg id="pa-graphic" viewBox="0 0 380 230" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+									<line x1="140" y1="95" x2="256" y2="95" stroke="#555" stroke-dasharray="4" marker-end="url(#paArrowReq)" />
+									<text id="pa-top-label" x="198" y="85" font-size="9" text-anchor="middle"></text>
+									<line x1="256" y1="135" x2="140" y2="135" stroke="#555" stroke-dasharray="4" marker-end="url(#paArrowRes)" />
+									<text id="pa-bot-label" x="198" y="152" font-size="9" text-anchor="middle"></text>
+									<defs>
+										<marker id="paArrowReq" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+										<marker id="paArrowRes" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#555"/></marker>
+									</defs>
+									<text id="pa-machine-label" x="75" y="68" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<text id="pa-db-label" x="305" y="58" font-size="10" font-weight="bold" text-anchor="middle"></text>
+									<g class="machine-box">
+										<rect x="15" y="80" width="120" height="70" rx="8" fill="#222" stroke="#e63946" stroke-width="2"/>
+										<text x="75" y="116" fill="#fff" font-size="12" text-anchor="middle">Training process</text>
+										<text x="75" y="133" fill="#aaa" font-size="9" text-anchor="middle">PyTorch Geometric</text>
+									</g>
+									<g class="db-box">
+										<path d="M265 78 V152 A40 12 0 0 0 345 152 V78" fill="#222" stroke="#48cae4" stroke-width="2"/>
+										<ellipse cx="305" cy="78" rx="40" ry="12" fill="#1a1a1a" stroke="#48cae4" stroke-width="2"/>
+										<text x="305" y="120" fill="#fff" font-size="12" text-anchor="middle">Graph DB</text>
+										<text x="305" y="138" fill="#aaa" font-size="9" text-anchor="middle">Neo4j</text>
+									</g>
+									<circle class="rt-dot pa-req" cx="140" cy="95" r="6" opacity="0"/>
+									<circle class="rt-dot pa-res" cx="256" cy="135" r="6" opacity="0"/>
+								</svg>
+							</div>
+						</div>
+						<span class="fragment pa-frag" data-pa-step="0" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="1" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="2" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="3" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="4" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="5" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="6" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="7" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="8" style="display:none;"></span>
+						<span class="fragment pa-frag" data-pa-step="9" style="display:none;"></span>
+					</section>
+
+				<section>
+					<h3>Bottlenecks</h3>
+					<div style="display: flex; align-items: center; gap: 24px;">
+						<div style="width: 62%;">
+							<img src="images/papers100M-latency-optim.png" style="width:100%; background:#fff; border-radius:6px;" />
+						</div>
+						<pre style="width: 38%; margin: 0; font-size: 0.5em; line-height: 1.9; background: #2b2b2b; padding: 16px; border-radius: 6px; text-align: left;">for batch B of seeds:
+  G_B      ← <span style="text-decoration: underline; text-decoration-color: #2a6f97; text-decoration-thickness: 3px; text-underline-offset: 4px;">Sample(B)</span>
+  X_B, E_B ← <span style="text-decoration: underline; text-decoration-color: #b5651d; text-decoration-thickness: 3px; text-underline-offset: 4px;">Fetch(G_B)</span>
+  ŷ        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">forward pass</span>
+  L        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">compute loss</span>
+  θ        ← <span style="text-decoration: underline; text-decoration-color: #2f855a; text-decoration-thickness: 3px; text-underline-offset: 4px;">update weights</span></pre>
+					</div>
+				</section>
+
+				<section>
+					<h3>Pre-aggregation at High Dimensions</h3>
+					<p style="font-size: 0.6em; color: #ccc; margin-top: 0.6em;">Pre-aggregation only reduces feature-fetch latency for high-dimensional vectors.</p>
+					<img src="images/coauthor-latency-optim.png" style="width: 68%; background:#fff; border-radius:6px; margin-top: 12px;" />
+				</section>
+
+
+					<section>
+						<h3>In-Database Inference</h3>
+						<p>Exploring where to run the model</p>
+					</section>
+
+					<!-- 1. Cypher Inference -->
+					<section>
+						<h4>1. Cypher Inference</h4>
+						<div style="display: flex; gap: 20px; align-items: flex-start; margin-top: 30px;">
+							<div style="width: 60%; background: #1a1a1a; padding: 20px; border-radius: 8px; border-top: 4px solid #b58900; text-align: left;">
+								<ul style="font-size: 0.55em; line-height: 1.6;">
+									<li>Cypher query defines GNN layers.</li>
+									<li>Weights are arguments.</li>
+									<li><strong>Two Flavors:</strong>
+										<ul>
+											<li><em>Normal:</em> Standard arithmetic in Cypher.</li>
+											<li><em>Optimized:</em> Uses Neo4j's native VECTOR operations.</li>
+										</ul>
+									</li>
+								</ul>
+							</div>
+							<div style="width: 40%; text-align: center; align-self: center;">
+								<svg width="240" height="180" viewBox="0 0 240 180">
+									<!-- Bolt Client -->
+									<rect x="10" y="65" width="65" height="50" rx="5" fill="#333" stroke="#888" stroke-width="2" />
+									<text x="42.5" y="90" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">Client Process</text>
+									<text x="42.5" y="103" fill="#aaa" font-size="7" text-anchor="middle">Bolt driver</text>
+
+									<!-- Neo4j DB -->
+									<rect x="165" y="65" width="65" height="50" rx="5" fill="#002b36" stroke="#268bd2" stroke-width="2" />
+									<text x="197.5" y="90" fill="#fff" font-size="9" text-anchor="middle" font-weight="bold">Neo4j</text>
+									<text x="197.5" y="103" fill="#268bd2" font-size="7" text-anchor="middle">Database</text>
+
+									<!-- Fat Arrow -->
+									<path d="M 80,85 L 140,85 L 140,75 L 162,90 L 140,105 L 140,95 L 80,95 Z" fill="#b58900" />
+								</svg>
+							</div>
+						</div>
+					</section>
+
+					<!-- 2. Java UDP Inference -->
+					<section>
+						<h4>2. Java UDP Inference</h4>
+						<div style="display: flex; gap: 20px; align-items: center; margin-top: 30px;">
+							<div style="width: 50%; background: #1a1a1a; padding: 25px; border-radius: 8px; border-top: 4px solid #d33682; text-align: left;">
+								<p style="font-size: 0.6em; font-weight: bold; margin-bottom: 15px; color: #d33682;">Persistent Model State</p>
+								<ul style="font-size: 0.55em; line-height: 1.8;">
+									<li><code>spec.json</code>: Defines the model layout.</li>
+									<li><code>weights.bin</code>: Stores pre-trained parameters.</li>
+								</ul>
+							</div>
+							<div style="width: 55%; text-align: center; position: relative; height: 320px;">
+								<svg width="480" height="300" viewBox="0 0 320 200">
+									<!-- Database Boundary -->
+									<rect x="90" y="30" width="210" height="150" rx="5" fill="#111" stroke="#444" stroke-width="1.5" />
+									<text x="195" y="172" fill="#fff" font-size="11" text-anchor="middle" font-weight="bold" style="opacity: 0.8;">Neo4j Database</text>
+									
+									<!-- JVM Cache Box -->
+									<rect x="150" y="45" width="140" height="95" rx="5" fill="#222" stroke="#d33682" stroke-width="2.5" />
+									<text x="220" y="62" fill="#d33682" font-size="9" text-anchor="middle" font-weight="bold">JVM Cache</text>
+
+									<g>
+										<rect x="115" y="55" width="50" height="30" rx="2" fill="#333" stroke="#d33682" stroke-width="1" stroke-dasharray="3" />
+										<text x="140" y="70" fill="#bbb" font-size="6" text-anchor="middle">spec.json</text>
+										<text x="140" y="76" fill="#bbb" font-size="6" text-anchor="middle">weights.bin</text>
+									</g>
+								</svg>
+							</div>
+						</div>
+					</section>
+
+					<!-- 3. Hybrid Inference -->
+					<section>
+						<h4>3. Neighbor sampling</h4>
+						<p style="font-size: 0.6em; color: #ccc; margin-top: 1em;">Identical to training pipeline logic.</p>
+						<div style="display: flex; justify-content: center; align-items: center; margin-top: 40px;">
+							<div style="background: #002b36; padding: 20px; border: 2px solid #268bd2; border-radius: 10px; text-align: center;">
+								<div style="font-size: 0.7em; color: #268bd2; margin-bottom: 10px;">Neo4j</div>
+								<div style="font-size: 0.5em; color: #eee;">Sampling + Feature Retrieval</div>
+							</div>
+							<div style="margin: 0 20px; font-size: 1.5em; color: #859900;">&rarr;</div>
+							<div style="background: #1a1a1a; padding: 20px; border: 2px solid #859900; border-radius: 10px; text-align: center;">
+								<div style="font-size: 0.7em; color: #859900; margin-bottom: 10px;">PyTorch Geometric</div>
+								<div style="font-size: 0.5em; color: #eee;">Forward Pass (No Grads)</div>
+							</div>
+						</div>
+					</section>
+
+					<!-- 4. Baseline Reference -->
+					<section>
+						<h4>4. Baseline Reference</h4>
+						<div style="background: #1a1a1a; padding: 30px; border-radius: 10px; border: 2px solid #e63946; display: inline-block; margin-top: 50px;">
+							<p style="font-size: 0.8em; color: #e63946; font-weight: bold; margin-bottom: 20px;">Full In-Memory PyG</p>
+							<ul style="font-size: 0.6em; text-align: left; line-height: 1.8;">
+								<li>Dataset loaded entirely into system RAM.</li>
+								<li>No database overhead or network transfer.</li>
+								<li><strong>Constraint:</strong> Limited by available RAM.</li>
+							</ul>
+						</div>
+					</section>
+
+					<section>
+						<h4>Inference Results</h4>
+						<ul style="font-size: 0.6em; line-height: 1.5; margin: 0.5em 0;">
+							<li>In-graph DB Java is fastest (except graph in RAM).</li>
+							<li>Same accuracy as in-memory PyG.</li>
+						</ul>
+						<div style="display: flex; justify-content: center; gap: 30px; margin-top: 16px;">
+							<div style="width: 48%;">
+								<img src="images/arxiv-inference-accuracy.png" style="width:100%; background:#fff; border-radius:6px;" />
+							</div>
+							<div style="width: 48%;">
+								<img src="images/arxiv-inference-latency-vs-batch-size.png" style="width:100%; background:#fff; border-radius:6px;" />
+							</div>
+						</div>
+					</section>
+				</section>
+
+				<section>
+					<h2>Thank You!</h2>
+					<p>Questions?</p>
+				</section>
+			</div>
+		</div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/reveal.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/notes/notes.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/markdown/markdown.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/highlight/highlight.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/reveal.js/4.5.0/plugin/math/math.min.js"></script>
+		<script>
+			// More info about initialization & config:
+			// - https://revealjs.com/initialization/
+			// - https://revealjs.com/config/
+			Reveal.initialize({
+				hash: true,
+				plugins: [ RevealMarkdown, RevealHighlight, RevealNotes, RevealMath.KaTeX ]
+			});
+
+			// Auto-animate the sampling demo: one click reveals all sampled nodes one-by-one
+			Reveal.on('fragmentshown', function(event) {
+				if (event.fragment.hasAttribute('data-sample-trigger')) {
+					var samples = event.fragment.closest('section').querySelectorAll('.sample');
+					samples.forEach(function(el, i) {
+						setTimeout(function() {
+							el.style.opacity = 1;
+							el.classList.add('lit');            // light up on sample
+							setTimeout(function() { el.classList.remove('lit'); }, 2000); // settle to blue
+						}, i * 900);
+					});
+				}
+			});
+			Reveal.on('fragmenthidden', function(event) {
+				if (event.fragment.hasAttribute('data-sample-trigger')) {
+					event.fragment.closest('section').querySelectorAll('.sample').forEach(function(el) {
+						el.style.opacity = 0;
+						el.classList.remove('lit');
+					});
+				}
+			});
+
+			// Training-loop ↔ machine/DB round-trip: one key press advances one sub-step.
+			// Each query = 3 presses: send query (→), DB lights up, return data (←).
+			function rtTravel(el, toX, ms) {                     // deterministic move via Web Animations API
+				el.getAnimations().forEach(function(a) { a.cancel(); });
+				el.style.opacity = 1;
+				el.animate(
+					[{ transform: 'translateX(0)' }, { transform: 'translateX(' + toX + 'px)' }],
+					{ duration: ms, easing: 'ease', fill: 'forwards' }
+				);
+			}
+			// Two phases on one slide: steps -1..4 = in-memory, steps 5..14 = Graph-DB round-trip.
+			var MEM_LABELS = ['Sampling', 'Fetching features', 'Forward pass', 'Compute loss', 'Update weights'];
+			var C_SAMPLE = '#2a6f97', C_FETCH = '#b5651d', C_COMPUTE = '#2f855a';
+			var rtGlowTimers = [];
+			function rtGlow(el, color) {                       // off first, then light up → blink between actions
+				el.classList.remove('glow');
+				rtGlowTimers.push(setTimeout(function() {
+					el.style.setProperty('--glow-color', color);
+					el.classList.add('glow');
+				}, 320));
+			}
+			function rtRender(section, n) {
+				var title    = section.querySelector('#rt-title');
+				var note     = section.querySelector('#rt-note');
+				var memG     = section.querySelector('#mem-graphic');
+				var dbG      = section.querySelector('#db-graphic');
+				var lines    = section.querySelectorAll('.step');
+				var newTags  = section.querySelectorAll('.new-tag');
+				// db-graphic elements
+				var reqDot   = dbG.querySelector('.req-dot');
+				var resDot   = dbG.querySelector('.res-dot');
+				var dbMach   = dbG.querySelector('.machine-box');
+				var dbBox    = dbG.querySelector('.db-box');
+				var mLabel   = section.querySelector('#machine-label');
+				var dbLabel  = section.querySelector('#db-label');
+				var topLabel = section.querySelector('#top-label');
+				var botLabel = section.querySelector('#bot-label');
+				// mem-graphic elements
+				var memMach  = memG.querySelector('.machine-box');
+				var memLabel = section.querySelector('#mem-label');
+
+				// full reset
+				rtGlowTimers.forEach(clearTimeout); rtGlowTimers = [];
+				lines.forEach(function(l) { l.classList.remove('active'); l.style.background = ''; l.style.color = ''; });
+				[reqDot, resDot].forEach(function(d) { d.getAnimations().forEach(function(a) { a.cancel(); }); d.style.opacity = 0; });
+				dbMach.classList.remove('glow'); dbBox.classList.remove('glow'); memMach.classList.remove('glow');
+				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = ''; memLabel.textContent = '';
+
+				if (n <= 4) {                                  // ===== in-memory phase =====
+					title.textContent = 'In-memory GNN training';
+					note.textContent = 'Graph held in RAM on the training machine.';
+					memG.style.display = ''; dbG.style.display = 'none';
+					newTags.forEach(function(t) { t.style.display = 'none'; });
+					if (n < 0) return;
+					var memColor = n === 0 ? C_SAMPLE : n === 1 ? C_FETCH : C_COMPUTE;
+					lines[n].classList.add('active');
+					lines[n].style.background = memColor; lines[n].style.color = '#fff';
+					memLabel.textContent = MEM_LABELS[n];
+					memLabel.setAttribute('fill', memColor);
+					rtGlow(memMach, memColor);
+					return;
+				}
+
+				// ===== Graph-DB phase =====
+				title.textContent = 'Graph DB-Backed Training Loop';
+				note.textContent = 'Graph stored in a separate graph DB.';
+				memG.style.display = 'none'; dbG.style.display = '';
+				newTags.forEach(function(t) { t.style.display = ''; });
+				if (n === 5) return;                           // intro: just reveal the layout, no action yet
+				var s = n - 6;                                 // 0..8
+				var line = s <= 2 ? 0 : s <= 5 ? 1 : s - 4;
+				var lineColor = s <= 2 ? C_SAMPLE : s <= 5 ? C_FETCH : C_COMPUTE;
+				lines[line].classList.add('active');
+				lines[line].style.background = lineColor; lines[line].style.color = '#fff';
+				var isSample = s <= 2;
+				var qColor = isSample ? C_SAMPLE : C_FETCH;
+				var qLabel = isSample ? 'sample query' : 'fetch query';
+				reqDot.style.fill = qColor; resDot.style.fill = qColor;
+				topLabel.setAttribute('fill', qColor);
+				dbLabel.setAttribute('fill', qColor);
+				botLabel.setAttribute('fill', qColor);
+				switch (s) {
+					case 0: case 3:                            // query sent: ball machine → DB
+						topLabel.textContent = qLabel;
+						rtTravel(reqDot, 118, 1800);
+						break;
+					case 1: case 4:                            // DB lights up
+						topLabel.textContent = qLabel;
+						dbLabel.textContent = isSample ? 'Sampling subgraph' : 'Fetching features';
+						rtGlow(dbBox, qColor);
+						break;
+					case 2: case 5:                            // data returned: ball DB → machine
+						topLabel.textContent = qLabel;
+						dbLabel.textContent = isSample ? 'Sampling subgraph' : 'Fetching features';
+						rtGlow(dbBox, qColor);
+						botLabel.textContent = isSample ? 'subgraph' : 'features';
+						rtTravel(resDot, -118, 1800);
+						break;
+					case 6: mLabel.textContent = 'Forward pass';   mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+					case 7: mLabel.textContent = 'Compute loss';   mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+					case 8: mLabel.textContent = 'Update weights'; mLabel.setAttribute('fill', C_COMPUTE); rtGlow(dbMach, C_COMPUTE); break;
+				}
+			}
+			// Pre-aggregation: forward pass runs partly in the DB, then completes on the machine
+			function paRender(section, n) {
+				var reqDot   = section.querySelector('.pa-req');
+				var resDot   = section.querySelector('.pa-res');
+				var machine  = section.querySelector('.machine-box');
+				var db       = section.querySelector('.db-box');
+				var mLabel   = section.querySelector('#pa-machine-label');
+				var dbLabel  = section.querySelector('#pa-db-label');
+				var topLabel = section.querySelector('#pa-top-label');
+				var botLabel = section.querySelector('#pa-bot-label');
+				var codeLines = section.querySelectorAll('.pa-line');
+				rtGlowTimers.forEach(clearTimeout); rtGlowTimers = [];
+				[reqDot, resDot].forEach(function(d) { d.getAnimations().forEach(function(a) { a.cancel(); }); d.style.opacity = 0; });
+				machine.classList.remove('glow'); db.classList.remove('glow');
+				mLabel.textContent = ''; dbLabel.textContent = ''; topLabel.textContent = ''; botLabel.textContent = '';
+				codeLines.forEach(function(l) { l.style.background = ''; l.style.color = ''; });
+				if (n < 0) return;
+				// highlight matching code line in the stage colour
+				var PA_LINE  = [0, 0, 0, 1, 1, 2, 2, 3, 4, 5];
+				var PA_COLOR = [C_SAMPLE, C_SAMPLE, C_SAMPLE, C_FETCH, C_FETCH, C_COMPUTE, C_COMPUTE, C_COMPUTE, C_COMPUTE, C_COMPUTE];
+				codeLines[PA_LINE[n]].style.background = PA_COLOR[n];
+				codeLines[PA_LINE[n]].style.color = '#fff';
+				switch (n) {
+					case 0: topLabel.setAttribute('fill', C_SAMPLE); topLabel.textContent = 'sample query'; reqDot.style.fill = C_SAMPLE; rtTravel(reqDot, 118, 1800); break;
+					case 1: dbLabel.setAttribute('fill', C_SAMPLE); dbLabel.textContent = 'Sampling'; rtGlow(db, C_SAMPLE); break;
+					case 2: botLabel.setAttribute('fill', C_SAMPLE); botLabel.textContent = 'subgraph'; resDot.style.fill = C_SAMPLE; rtTravel(resDot, -118, 1800); break;
+					case 3: topLabel.setAttribute('fill', C_FETCH); topLabel.textContent = 'fetch query'; reqDot.style.fill = C_FETCH; rtTravel(reqDot, 118, 1800); break;
+					case 4: dbLabel.setAttribute('fill', C_FETCH); dbLabel.textContent = 'Finding feature vectors'; rtGlow(db, C_FETCH); break;
+					case 5: dbLabel.setAttribute('fill', C_COMPUTE); dbLabel.textContent = 'Forward pass (in DB)'; rtGlow(db, C_COMPUTE); break;
+					case 6: botLabel.setAttribute('fill', C_COMPUTE); botLabel.textContent = 'sending less features'; resDot.style.fill = C_COMPUTE; rtTravel(resDot, -118, 1800); break;
+					case 7: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Complete forward pass'; rtGlow(machine, C_COMPUTE); break;
+					case 8: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Compute loss'; rtGlow(machine, C_COMPUTE); break;
+					case 9: mLabel.setAttribute('fill', C_COMPUTE); mLabel.textContent = 'Update weights'; rtGlow(machine, C_COMPUTE); break;
+				}
+			}
+			Reveal.on('fragmentshown', function(event) {
+				if (event.fragment.classList.contains('rt-frag')) {
+					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10));
+				}
+				if (event.fragment.classList.contains('pa-frag')) {
+					paRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.paStep, 10));
+				}
+				if (event.fragment.classList.contains('ow-final-trigger')) {
+					var sec = event.fragment.closest('section');
+					sec.querySelector('#ow-bullets').style.display = 'none';
+					sec.querySelector('#ow-final').style.display = '';
+				}
+			});
+			Reveal.on('fragmenthidden', function(event) {
+				if (event.fragment.classList.contains('rt-frag')) {
+					rtRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.rtStep, 10) - 1);
+				}
+				if (event.fragment.classList.contains('pa-frag')) {
+					paRender(event.fragment.closest('section'), parseInt(event.fragment.dataset.paStep, 10) - 1);
+				}
+				if (event.fragment.classList.contains('ow-final-trigger')) {
+					var sec = event.fragment.closest('section');
+					sec.querySelector('#ow-bullets').style.display = '';
+					sec.querySelector('#ow-final').style.display = 'none';
+				}
+			});
+
+			// ===== Big graph: 150 nodes, sample a 2-hop neighborhood =====
+			var bgTimers = [];
+			function bgShuffle(a) { for (var i = a.length - 1; i > 0; i--) { var j = Math.floor(Math.random() * (i + 1)); var tmp = a[i]; a[i] = a[j]; a[j] = tmp; } return a; }
+			function buildBigGraph(section) {
+				var svg = section.querySelector('#big-graph');
+				if (svg.dataset.built) return;
+				svg.dataset.built = '1';
+				var ns = 'http://www.w3.org/2000/svg';
+				var W = 900, H = 470, N = 450, K = 9;
+				var nodes = [], i, j;
+				for (i = 0; i < N; i++) nodes.push({ x: 25 + Math.random() * (W - 50), y: 25 + Math.random() * (H - 50), adj: [] });
+				var edges = [];
+				for (i = 0; i < N; i++) {
+					var d = [];
+					for (j = 0; j < N; j++) { if (j !== i) { var dx = nodes[i].x - nodes[j].x, dy = nodes[i].y - nodes[j].y; d.push([dx * dx + dy * dy, j]); } }
+					d.sort(function (a, b) { return a[0] - b[0]; });
+					for (var m = 0; m < K; m++) { var jj = d[m][1]; if (nodes[i].adj.indexOf(jj) < 0) { nodes[i].adj.push(jj); nodes[jj].adj.push(i); edges.push([i, jj]); } }
+				}
+				var seeds = []; for (i = 0; i < 10; i++) seeds.push(i);
+				var hop = new Array(N).fill(-1);
+				seeds.forEach(function (s) { hop[s] = 0; });
+				var frontier = seeds.slice();
+				for (var h = 1; h <= 2; h++) {
+					var next = [];
+					frontier.forEach(function (u) { nodes[u].adj.forEach(function (v) { if (hop[v] < 0) { hop[v] = h; next.push(v); } }); });
+					frontier = next;
+				}
+				// top up the 2-hop neighbourhood to ~65% of all nodes (nearest grey nodes first)
+				var inN = hop.filter(function (x) { return x >= 0; }).length;
+				var target = Math.round(N * 0.80);
+				if (inN < target) {
+					var grey = [];
+					for (i = 0; i < N; i++) {
+						if (hop[i] < 0) {
+							var best = Infinity;
+							for (var q = 0; q < N; q++) { if (hop[q] >= 0) { var gx = nodes[i].x - nodes[q].x, gy = nodes[i].y - nodes[q].y, gd = gx * gx + gy * gy; if (gd < best) best = gd; } }
+							grey.push([best, i]);
+						}
+					}
+					grey.sort(function (a, b) { return a[0] - b[0]; });
+					for (var gi = 0; gi < grey.length && inN < target; gi++) { hop[grey[gi][1]] = 2; inN++; }
+				}
+				var gE = document.createElementNS(ns, 'g');
+				edges.forEach(function (e) { var ln = document.createElementNS(ns, 'line'); ln.setAttribute('x1', nodes[e[0]].x); ln.setAttribute('y1', nodes[e[0]].y); ln.setAttribute('x2', nodes[e[1]].x); ln.setAttribute('y2', nodes[e[1]].y); ln.setAttribute('stroke', '#2c2c2c'); ln.setAttribute('stroke-width', '0.6'); gE.appendChild(ln); });
+				svg.appendChild(gE);
+				var gN = document.createElementNS(ns, 'g');
+				nodes.forEach(function (nd, idx) {
+					var c = document.createElementNS(ns, 'circle');
+					c.setAttribute('cx', nd.x); c.setAttribute('cy', nd.y);
+					c.setAttribute('r', 3.8);
+					c.setAttribute('fill', '#555');
+					c.style.transition = 'fill 0.18s, r 0.18s';
+					nd.el = c; gN.appendChild(c);
+				});
+				svg.appendChild(gN);
+				section._graph = { nodes: nodes, seeds: seeds, hop: hop };
+			}
+			// staged reveal: n<0 all grey, n>=0 seeds red, n>=1 neighborhood blue, n>=2 sampling runs
+			function bgRender(section, n) {
+				bgTimers.forEach(clearTimeout); bgTimers = [];
+				var g = section._graph; if (!g) return;
+				g.nodes.forEach(function (nd, idx) {
+					var fill = '#555', r = 3.8;
+					if (n >= 0 && g.hop[idx] === 0) { fill = '#e63946'; r = 5.5; }
+					else if (n >= 1 && g.hop[idx] > 0) { fill = '#90e0ef'; }
+					nd.el.setAttribute('fill', fill);
+					nd.el.setAttribute('r', r);
+				});
+				if (n >= 2) sampleBigGraph(section);
+			}
+			function sampleBigGraph(section) {
+				var g = section._graph; if (!g) return;
+				var nodes = g.nodes, fan = [4, 3], sampled = {}, order = [];
+				g.seeds.forEach(function (s) { sampled[s] = true; });
+				var frontier = g.seeds.slice();
+				for (var h = 0; h < 2; h++) {
+					var next = [];
+					frontier.forEach(function (u) {
+						var cand = nodes[u].adj.filter(function (v) { return g.hop[v] >= 0; });
+						bgShuffle(cand).slice(0, fan[h]).forEach(function (v) { if (!sampled[v]) { sampled[v] = true; order.push(v); next.push(v); } });
+					});
+					frontier = next;
+				}
+				order.forEach(function (v, i) {
+					bgTimers.push(setTimeout(function () { nodes[v].el.setAttribute('fill', '#ffd60a'); nodes[v].el.setAttribute('r', '6'); }, i * 55));
+				});
+			}
+			Reveal.on('ready', function (e) { if (e.currentSlide && e.currentSlide.id === 'big-graph-slide') buildBigGraph(e.currentSlide); });
+			Reveal.on('slidechanged', function (e) { if (e.currentSlide && e.currentSlide.id === 'big-graph-slide') buildBigGraph(e.currentSlide); });
+			Reveal.on('fragmentshown', function (e) { if (e.fragment.classList.contains('bg-step')) bgRender(e.fragment.closest('section'), parseInt(e.fragment.dataset.bgStep, 10)); });
+			Reveal.on('fragmenthidden', function (e) { if (e.fragment.classList.contains('bg-step')) bgRender(e.fragment.closest('section'), parseInt(e.fragment.dataset.bgStep, 10) - 1); });
+		</script>
+	</body>
+</html>
