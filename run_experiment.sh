@@ -225,11 +225,10 @@ phase_1_neo4j_setup() {
 
         # Accept license non-interactively
         export DEBIAN_FRONTEND=noninteractive
-        echo "neo4j-enterprise neo4j/license note" | debconf-set-selections
-        echo "neo4j-enterprise neo4j/license boolean true" | debconf-set-selections
-
+        export NEO4J_ACCEPT_COMMERCIAL_LICENSE=yes
+        
         apt-get update -qq
-        apt-get install -y -qq neo4j-enterprise
+        apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" neo4j-enterprise
 
         log "Neo4j installed via apt"
     fi
