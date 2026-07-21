@@ -111,6 +111,14 @@ if [[ -z "$RAM_TIER" ]]; then
     exit 1
 fi
 
+# Fix PATH for sudo: add the original user's ~/.local/bin so we can find uv
+if [[ -n "${SUDO_USER:-}" ]]; then
+    REAL_HOME=$(eval echo "~$SUDO_USER")
+    if [[ -d "$REAL_HOME/.local/bin" ]]; then
+        export PATH="$REAL_HOME/.local/bin:$PATH"
+    fi
+fi
+
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # ===========================================================================
