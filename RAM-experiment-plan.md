@@ -32,7 +32,7 @@ gcloud compute instances create papers100m-bench-128 \
     --machine-type=n2-highmem-16 \
     --image-family=debian-13 \
     --image-project=debian-cloud \
-    --boot-disk-size=20GB \
+    --boot-disk-size=10GB \
     --local-ssd=interface=nvme
 ```
 
@@ -46,10 +46,18 @@ git clone <repo-url> ~/neo4j-mpgnn-thesis
 cd ~/neo4j-mpgnn-thesis
 ```
 
+**Note:** The boot disk is small (10 GB). The script will automatically move the repo to the SSD during Phase 0. After running the script once, the repo will be at `/mnt/ssd/neo4j-mpgnn-thesis`.
+
 ### 3. Run Experiment
 
 ```bash
 sudo ./run_experiment.sh --ram-tier 128
+```
+
+**Important:** The script moves the repo to the SSD on first run. If you need to re-run after the move, use:
+```bash
+cd /mnt/ssd/neo4j-mpgnn-thesis
+sudo ./run_experiment.sh --ram-tier 128 --skip-to 1
 ```
 
 The script:

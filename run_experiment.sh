@@ -24,17 +24,17 @@ set -euo pipefail
 # Configuration
 # ===========================================================================
 NEO4J_VERSION="2025.12.1"
-PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DATA_DIR="${PROJECT_DIR}/data/ogbn-papers100M"
-RESULTS_DIR="${PROJECT_DIR}/experiment_results/gcp_benchmark"
-VENV_DIR="${PROJECT_DIR}/.venv"
-PY="${VENV_DIR}/bin/python"
+RESULTS_DIR="experiment_results/gcp_benchmark"
+VENV_DIR=".venv"
+PY=".venv/bin/python"
 
 # Defaults — overridden by --ram-tier
 RAM_TIER=""
 SKIP_TO=0
 SSD_DEV="/dev/sdb"
 SSD_MOUNT="/mnt/ssd"
+PROJECT_DIR=""  # set after SSD mount
+DATA_DIR=""     # set after SSD mount
 NEO4J_DATA_DIR=""   # set after SSD mount
 NEO4J_RAW_DIR=""    # set after SSD mount
 NEO4J_PAGECACHE=""
@@ -78,6 +78,8 @@ apply_tier() {
     NEO4J_PAGECACHE="${TIER_PAGECACHE[$tier]}"
     NEO4J_HEAP="${TIER_HEAP[$tier]}"
     SWAP_GB="${TIER_SWAP[$tier]}"
+    PROJECT_DIR="${SSD_MOUNT}/neo4j-mpgnn-thesis"
+    DATA_DIR="${PROJECT_DIR}/data/ogbn-papers100M"
     NEO4J_DATA_DIR="${SSD_MOUNT}/neo4j/data"
     NEO4J_RAW_DIR="${SSD_MOUNT}/neo4j/data/ogbn-papers100M"
 }
@@ -147,6 +149,19 @@ phase_0_system_setup() {
     # --- Create directories on SSD ---
     mkdir -p "${SSD_MOUNT}/neo4j/data"
     mkdir -p "${SSD_MOUNT}/swap"
+
+    # --- Move repo to SSD ---
+    local script_dir
+    script_dir="$(cd "$(dirname "$0")" && pwd)"
+    if [[ "$script_dir" != "${PROJECT_DIR}" ]]; then
+        if [[ -d "${PROJECT_DIR}" ]]; then
+            log "Repo already on SSD at ${PROJECT_DIR}"
+        else
+            log "Moving repo to SSD: ${script_dir} → ${PROJECT_DIR}"
+            mv "$script_dir" "${PROJECT_DIR}"
+            log "Repo moved. Continue from: cd ${PROJECT_DIR}"
+        fi
+    fi
 
     # --- Create swap on SSD ---
     local swap_file="${SSD_MOUNT}/swap/swapfile"
