@@ -223,16 +223,12 @@ phase_1_neo4j_setup() {
         # Neo4j apt repo uses "latest" for current releases (2026.06.0 is in "latest")
         echo "deb [signed-by=/etc/apt/keyrings/neo4j.gpg] https://debian.neo4j.com stable latest" > /etc/apt/sources.list.d/neo4j.list
 
-        # Accept license non-interactively
+        # Accept license non-interactively via debconf
         export DEBIAN_FRONTEND=noninteractive
-        export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-
-        # Pre-create config to accept license before installation
-        mkdir -p /etc/neo4j
-        echo "server.license.accepted=true" > /etc/neo4j/neo4j.conf
+        echo "neo4j-enterprise neo4j-enterprise/license-agreement boolean true" | debconf-set-selections
 
         apt-get update -qq
-        apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" neo4j-enterprise
+        apt-get install -y neo4j-enterprise
 
         log "Neo4j installed via apt"
     fi
