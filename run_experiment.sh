@@ -122,7 +122,7 @@ phase_0_system_setup() {
     # --- Base packages ---
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted
+    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted gnupg
 
     # --- Format and mount SSD ---
     if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
@@ -220,7 +220,8 @@ phase_1_neo4j_setup() {
         wget -qO - https://debian.neo4j.com/neotechnology.gpg.key | gpg --dearmor -o /etc/apt/keyrings/neo4j.gpg
 
         # Add Neo4j repository with signed-by
-        echo "deb [signed-by=/etc/apt/keyrings/neo4j.gpg] https://debian.neo4j.com stable ${NEO4J_VERSION%.*}" > /etc/apt/sources.list.d/neo4j.list
+        # Neo4j apt repo uses "latest" for current releases (2026.06.0 is in "latest")
+        echo "deb [signed-by=/etc/apt/keyrings/neo4j.gpg] https://debian.neo4j.com stable latest" > /etc/apt/sources.list.d/neo4j.list
 
         # Accept license non-interactively
         export DEBIAN_FRONTEND=noninteractive
