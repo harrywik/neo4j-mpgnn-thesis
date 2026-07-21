@@ -225,7 +225,7 @@ phase_1_neo4j_setup() {
 
         # Accept license non-interactively
         export DEBIAN_FRONTEND=noninteractive
-        export NEO4J_ACCEPT_COMMERCIAL_LICENSE=yes
+        export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
         
         apt-get update -qq
         apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" neo4j-enterprise
