@@ -23,7 +23,7 @@ set -euo pipefail
 # ===========================================================================
 # Configuration
 # ===========================================================================
-NEO4J_VERSION="2025.12.1"
+NEO4J_VERSION="2026.06.0"
 RESULTS_DIR="experiment_results/gcp_benchmark"
 VENV_DIR=".venv"
 PY=".venv/bin/python"
@@ -122,7 +122,7 @@ phase_0_system_setup() {
     # --- Base packages ---
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq tmux curl wget git openjdk-17-jdk maven procps htop parted
+    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted
 
     # --- Format and mount SSD ---
     if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then

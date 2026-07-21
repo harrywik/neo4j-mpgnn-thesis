@@ -18,7 +18,7 @@
     </description>
 
     <properties>
-        <neo4j.version>2025.12.1</neo4j.version>
+        <neo4j.version>2026.06.0</neo4j.version>
         <java.version>17</java.version>
         <maven.compiler.source>${java.version}</maven.compiler.source>
         <maven.compiler.target>${java.version}</maven.compiler.target>
