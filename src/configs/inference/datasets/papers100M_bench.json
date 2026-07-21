@@ -1,0 +1,22 @@
+{
+  "dataset_name": "papers100M",
+  "training_dataset_config": "papers100M_bench",
+  "training_implementation_config": "java_neo4j",
+  "ogb_name": "ogbn-papers100M",
+  "ogb_root": "data/ogbn-papers100M",
+  "node_label": "Paper",
+  "edge_type": "CITES",
+  "feature_property": "feature_vector_floats",
+  "feature_property_type": "float64[]",
+  "target_property": "subject",
+  "nodeid_property": "id",
+  "split_property_name": "split",
+  "split_property_type": "str",
+  "feature_dim": 128,
+  "nbr_classes": 172,
+  "node_counts": [2048],
+  "nbr_runs": [5],
+  "inference_batch_size": 4096,
+  "num_neighbors": [10, 5],
+  "num_hops": 2
+}
