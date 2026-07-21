@@ -226,7 +226,11 @@ phase_1_neo4j_setup() {
         # Accept license non-interactively
         export DEBIAN_FRONTEND=noninteractive
         export NEO4J_ACCEPT_LICENSE_AGREEMENT=yes
-        
+
+        # Pre-create config to accept license before installation
+        mkdir -p /etc/neo4j
+        echo "server.license.accepted=true" > /etc/neo4j/neo4j.conf
+
         apt-get update -qq
         apt-get install -y -qq -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" neo4j-enterprise
 
