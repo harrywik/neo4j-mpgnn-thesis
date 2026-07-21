@@ -215,11 +215,12 @@ phase_1_neo4j_setup() {
     else
         log "Installing Neo4j Enterprise via apt..."
 
-        # Add Neo4j GPG key
-        wget -qO - https://debian.neo4j.com/neotechnology.gpg.key | apt-key add -
+        # Add Neo4j GPG key (modern approach for Debian 13)
+        mkdir -p /etc/apt/keyrings
+        wget -qO - https://debian.neo4j.com/neotechnology.gpg.key | gpg --dearmor -o /etc/apt/keyrings/neo4j.gpg
 
-        # Add Neo4j repository (Enterprise requires license acceptance)
-        echo "deb https://debian.neo4j.com stable ${NEO4J_VERSION%.*}" > /etc/apt/sources.list.d/neo4j.list
+        # Add Neo4j repository with signed-by
+        echo "deb [signed-by=/etc/apt/keyrings/neo4j.gpg] https://debian.neo4j.com stable ${NEO4J_VERSION%.*}" > /etc/apt/sources.list.d/neo4j.list
 
         # Accept license non-interactively
         export DEBIAN_FRONTEND=noninteractive
