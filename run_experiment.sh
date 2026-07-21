@@ -111,13 +111,15 @@ if [[ -z "$RAM_TIER" ]]; then
     exit 1
 fi
 
-# Fix PATH for sudo: add the original user's ~/.local/bin so we can find uv
-if [[ -n "${SUDO_USER:-}" ]]; then
-    REAL_HOME=$(eval echo "~$SUDO_USER")
-    if [[ -d "$REAL_HOME/.local/bin" ]]; then
-        export PATH="$REAL_HOME/.local/bin:$PATH"
+# Fix PATH: uv installs to ~/.local/bin which may not be on root's PATH when using sudo.
+# Check both the invoking user's home and root's home.
+for _candidate in "${SUDO_USER:+$(eval echo "~$SUDO_USER")/.local/bin}" "$HOME/.local/bin" "/home/${SUDO_USER:-}/.local/bin"; do
+    if [[ -d "$_candidate" ]]; then
+        export PATH="$_candidate:$PATH"
+        break
     fi
-fi
+done
+unset _candidate
 
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
