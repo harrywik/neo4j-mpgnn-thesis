@@ -30,7 +30,7 @@ We're benchmarking ogbn-papers100M (111M nodes, 1.6B edges) across different RAM
 gcloud compute instances create papers100m-bench-128 \
     --zone=us-central1-a \
     --machine-type=n2-highmem-16 \
-    --image-family=debian-12 \
+    --image-family=debian-13 \
     --image-project=debian-cloud \
     --boot-disk-size=20GB \
     --local-ssd=interface=nvme
