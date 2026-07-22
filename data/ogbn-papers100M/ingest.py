@@ -123,9 +123,9 @@ def ingest_papers100M(uri, user, password, skip_nodes: bool = False):
     num_edges = int(load_small_array(RAW_DIR / "data.npz", "num_edges_list")[0])
     print(f"Dataset: {num_nodes:,} nodes, {num_edges:,} edges")
 
-    # Load labels (~111 MB)
+    # Load labels (~111 MB) from separate file
     print("Loading node labels...")
-    labels = load_small_array(RAW_DIR / "data.npz", "node_label")
+    labels = load_small_array(RAW_DIR / "node-label.npz", "node_label")
 
     # int8 split lookup: 0=unknown, 1=train, 2=val, 3=test  (~106 MB)
     print("Building split lookup...")
