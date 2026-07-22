@@ -148,7 +148,7 @@ def ingest_papers100M(uri, user, password, skip_nodes: bool = False):
             batch = [
                 {
                     "id": int(i),
-                    "subject": int(labels[i]),
+                    "subject": -1 if np.isnan(labels[i]) else int(labels[i]),
                     "feature_vector": feat_chunk[i - feat_start].astype(np.float32).tobytes(),
                     "split": _SPLIT_NAMES[int(split[i])],
                 }
