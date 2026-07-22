@@ -9,7 +9,9 @@ from pathlib import Path
 from neo4j import GraphDatabase
 from dotenv import load_dotenv
 
-load_dotenv()
+# Load .env from project root (two levels up from this script)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+load_dotenv(PROJECT_ROOT / ".env")
 
 DATABASE = "papers100M"
 NODE_BATCH_SIZE = 50_000
@@ -121,6 +123,10 @@ def ingest_papers100M(uri, user, password, skip_nodes: bool = False):
     num_edges = int(load_small_array(RAW_DIR / "data.npz", "num_edges_list")[0])
     print(f"Dataset: {num_nodes:,} nodes, {num_edges:,} edges")
 
+    # Load labels (~111 MB)
+    print("Loading node labels...")
+    labels = load_small_array(RAW_DIR / "data.npz", "node_label")
+
     # int8 split lookup: 0=unknown, 1=train, 2=val, 3=test  (~106 MB)
     print("Building split lookup...")
     _SPLIT_NAMES = {0: "unknown", 1: "train", 2: "val", 3: "test"}
@@ -133,20 +139,20 @@ def ingest_papers100M(uri, user, password, skip_nodes: bool = False):
         session.run("CREATE INDEX paper_id IF NOT EXISTS FOR (p:Paper) ON (p.id)")
         print("Index on Paper.id ensured.")
 
-    # Ingest nodes in chunks
+    # Ingest nodes in chunks (stream features to avoid loading 57GB into RAM)
     print(f"Ingesting {num_nodes:,} nodes in batches of {NODE_BATCH_SIZE:,}...")
+    feature_chunks = stream_npy_chunks(RAW_DIR / "data.npz", "node_feat", NODE_BATCH_SIZE)
     with driver.session(database=DATABASE) as session:
-        # for start in range(0, num_nodes, NODE_BATCH_SIZE):
-        for start in range(num_edges - EDGE_BATCH_SIZE, -1, -EDGE_BATCH_SIZE):
-            end = min(start + NODE_BATCH_SIZE, num_nodes)
+        for feat_start, feat_chunk in feature_chunks:
+            end = min(feat_start + NODE_BATCH_SIZE, num_nodes)
             batch = [
                 {
                     "id": int(i),
                     "subject": int(labels[i]),
-                    "feature_vector": features[i].astype(np.float32).tobytes(),
+                    "feature_vector": feat_chunk[i - feat_start].astype(np.float32).tobytes(),
                     "split": _SPLIT_NAMES[int(split[i])],
                 }
-                for i in range(start, end)
+                for i in range(feat_start, end)
             ]
             session.run("""
             UNWIND $batch AS item
@@ -155,14 +161,17 @@ def ingest_papers100M(uri, user, password, skip_nodes: bool = False):
                 p.feature_vector = item.feature_vector,
                 p.split          = item.split
             """, batch=batch)
-            if start % 500_000 == 0:
-                print(f"  Nodes {start:,}–{end:,} done")
+            if feat_start % 500_000 == 0:
+                print(f"  Nodes {feat_start:,}–{end:,} done")
+
+    # Load edges (~25.8 GB uncompressed)
+    print("Loading edge index...")
+    src_arr, dst_arr, num_edges_actual = load_edge_arrays(RAW_DIR / "data.npz", "edge_index")
 
     # Ingest edges in chunks
     print(f"Ingesting {num_edges:,} edges in batches of {EDGE_BATCH_SIZE:,}...")
     with driver.session(database=DATABASE) as session:
-        # for start in range(0, num_edges_actual, EDGE_BATCH_SIZE):
-        for start in range(num_edges - EDGE_BATCH_SIZE, -1, -EDGE_BATCH_SIZE):
+        for start in range(0, num_edges_actual, EDGE_BATCH_SIZE):
             end = min(start + EDGE_BATCH_SIZE, num_edges_actual)
             edge_batch = [
                 {"src": int(src_arr[i]), "dst": int(dst_arr[i])}
