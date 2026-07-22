@@ -29,6 +29,36 @@ SRC_DIR = Path(__file__).resolve().parent / "src"
 PROJECT_ROOT = Path(__file__).resolve().parent
 
 
+def manage_neo4j(action):
+    """Start or stop Neo4j service to free/allocate RAM for experiments."""
+    try:
+        subprocess.run(
+            ["sudo", "systemctl", action, "neo4j"],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        print(f"  Neo4j {action}ed")
+        if action == "start":
+            # Wait for Neo4j to be ready
+            for _ in range(60):
+                try:
+                    result = subprocess.run(
+                        ["cypher-shell", "-u", "neo4j", "-p", "benchmark2026", "RETURN 1"],
+                        capture_output=True,
+                        timeout=5,
+                    )
+                    if result.returncode == 0:
+                        print(f"  Neo4j is ready")
+                        return
+                except Exception:
+                    pass
+                time.sleep(2)
+            print(f"  WARNING: Neo4j may not be fully ready")
+    except Exception as e:
+        print(f"  WARNING: Failed to {action} Neo4j: {e}")
+
+
 def run_cmd(cmd, timeout=None, env=None):
     """Run a command as a subprocess.
 
@@ -312,6 +342,8 @@ def main():
 
     # ---- Training: PyG in-memory ----
     if not args.skip_pyg_training:
+        print("\n[Stopping Neo4j to free RAM for PyG training...]")
+        manage_neo4j("stop")
         pyg_train_runs = []
         for i in range(n_runs):
             r = run_training_variant("baseline_pyg", dataset, i, results_dir)
@@ -324,6 +356,8 @@ def main():
         all_results["training"]["pyg_in_memory"] = {"summary": {"status": "SKIPPED"}}
 
     # ---- Training: Neo4j + PyG ----
+    print("\n[Starting Neo4j for Neo4j training...]")
+    manage_neo4j("start")
     neo4j_train_runs = []
     for i in range(n_runs):
         r = run_training_variant("java_neo4j", dataset, i, results_dir)
@@ -334,6 +368,8 @@ def main():
     }
 
     # ---- Inference: PyG in-memory ----
+    print("\n[Stopping Neo4j to free RAM for PyG inference...]")
+    manage_neo4j("stop")
     pyg_inf_runs = []
     for i in range(n_runs):
         r = run_pyg_inference(i, results_dir, n_nodes=args.n_nodes)
@@ -344,6 +380,8 @@ def main():
     }
 
     # ---- Inference: Neo4j (neighborhood_sampling + in_db_java) ----
+    print("\n[Starting Neo4j for Neo4j inference...]")
+    manage_neo4j("start")
     neo4j_inf_runs = []
     for i in range(n_runs):
         r = run_neo4j_inference(
