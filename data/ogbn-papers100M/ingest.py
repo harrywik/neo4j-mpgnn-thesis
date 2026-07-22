@@ -15,7 +15,7 @@ DATABASE = "papers100M"
 NODE_BATCH_SIZE = 50_000
 EDGE_BATCH_SIZE = 200_000
 TX_TIMEOUT_SECONDS = 3600
-SCRIPT_DIR = Path("/var/lib/neo4j/data/ogbn-papers100M")
+SCRIPT_DIR = Path(__file__).resolve().parent
 RAW_DIR = SCRIPT_DIR / "ogbn_papers100M" / "raw"
 SPLIT_DIR = SCRIPT_DIR / "ogbn_papers100M" / "split" / "time"
 
