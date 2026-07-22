@@ -121,6 +121,11 @@ for _candidate in "${SUDO_USER:+$(eval echo "~$SUDO_USER")/.local/bin}" "$HOME/.
 done
 unset _candidate
 
+# Fix TERM for tmux: some terminals (e.g. ghostty) aren't recognized by tmux
+if [[ "${TERM:-}" == xterm-ghostty ]]; then
+    export TERM=xterm-256color
+fi
+
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # ===========================================================================
@@ -262,6 +267,11 @@ phase_1_neo4j_setup() {
 
     # Transaction timeout (large ingestion needs long transactions)
     sed -i "s|^#* *dbms.transaction.timeout=.*|dbms.transaction.timeout=3600s|" "$NEO4J_CONF"
+
+    # Enable Java Vector API (required by GNN plugin for SIMD aggregation)
+    if ! grep -q 'jdk.incubator.vector' "$NEO4J_CONF"; then
+        echo 'server.jvm.additional=--add-modules=jdk.incubator.vector' >> "$NEO4J_CONF"
+    fi
 
     # --- Set initial password ---
     neo4j-admin dbms set-initial-password "benchmark2026" 2>/dev/null || true
