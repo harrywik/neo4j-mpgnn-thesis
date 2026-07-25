@@ -416,8 +416,9 @@ def main():
             status = summary.get("status", "")
             if status in ("OOM", "ERROR", "SKIPPED"):
                 print(f"    {variant}: {status}")
-            else:
-                m = summary.get("mean", "?")
+            elif "mean" in summary:
+                # Flat summary (training, pyg_inference)
+                m = summary.get("mean", 0)
                 s = summary.get("std", 0)
                 n = summary.get("n_ok", 0)
                 oom = summary.get("n_oom", 0)
@@ -426,6 +427,24 @@ def main():
                     line += f", {oom} OOM"
                 line += ")"
                 print(line)
+            else:
+                # Nested summary (neo4j inference with multiple strategies)
+                print(f"    {variant}:")
+                for strategy, strat_summary in summary.items():
+                    if isinstance(strat_summary, dict):
+                        s_status = strat_summary.get("status", "")
+                        if s_status in ("OOM", "ERROR", "SKIPPED"):
+                            print(f"      {strategy}: {s_status}")
+                        elif "mean" in strat_summary:
+                            m = strat_summary.get("mean", 0)
+                            s = strat_summary.get("std", 0)
+                            n = strat_summary.get("n_ok", 0)
+                            oom = strat_summary.get("n_oom", 0)
+                            line = f"      {strategy}: {m:.4f}s ± {s:.4f}s (n={n}"
+                            if oom:
+                                line += f", {oom} OOM"
+                            line += ")"
+                            print(line)
 
     print(f"\n  Results → {out_path}")
     print(f"  Finished: {datetime.now().isoformat()}")

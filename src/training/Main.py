@@ -232,12 +232,42 @@ def _run_standard(dataset_cfg, impl_cfg, measurer, feature_store, graph_store, s
 
 
 def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
-    """Baseline PyG / saint_pyg path — loads Planetoid from disk."""
-    planetoid_root = dataset_cfg.get("planetoid_root", "data/Planetoid")
-    planetoid_name = dataset_cfg.get("planetoid_name", dataset_cfg["name"].capitalize())
-    dataset = Planetoid(root=planetoid_root, name=planetoid_name)
-    graph = dataset[0]
-    train_indices = torch.where(graph.train_mask.reshape(-1))[0].tolist()
+    """Baseline PyG / saint_pyg path — loads dataset from disk."""
+    dataset_name = dataset_cfg.get("name", "").lower()
+    
+    # OGB datasets (papers100M, arxiv, products) use OGB loader
+    if "papers100m" in dataset_name or dataset_cfg.get("use_ogb", False):
+        from ogb.nodeproppred import NodePropPredDataset
+        ogb_root = dataset_cfg.get("ogb_root", "data/ogbn-papers100M")
+        
+        # Patch torch.load for OGB compatibility
+        _orig_load = torch.load
+        torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
+        try:
+            dataset = NodePropPredDataset(name="ogbn-papers100M", root=ogb_root)
+            graph, labels = dataset[0]
+            split_idx = dataset.get_idx_split()
+        finally:
+            torch.load = _orig_load
+        
+        from torch_geometric.data import Data
+        x = torch.tensor(graph["node_feat"], dtype=torch.float)
+        edge_index = torch.tensor(graph["edge_index"], dtype=torch.long)
+        y = torch.tensor(labels, dtype=torch.long).squeeze()
+        
+        num_nodes = x.shape[0]
+        train_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        train_mask[split_idx["train"]] = True
+        
+        graph = Data(x=x, edge_index=edge_index, y=y, train_mask=train_mask)
+        train_indices = split_idx["train"].tolist()
+    else:
+        # Planetoid datasets (Cora, CiteSeer, PubMed)
+        planetoid_root = dataset_cfg.get("planetoid_root", "data/Planetoid")
+        planetoid_name = dataset_cfg.get("planetoid_name", dataset_cfg["name"].capitalize())
+        dataset = Planetoid(root=planetoid_root, name=planetoid_name)
+        graph = dataset[0]
+        train_indices = torch.where(graph.train_mask.reshape(-1))[0].tolist()
 
     num_neighbors = impl_cfg.get("num_neighbors", [10, 5])
 
