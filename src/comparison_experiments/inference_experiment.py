@@ -293,6 +293,10 @@ class PyGGraphLoader:
     def _load_ogb(self) -> Data:
         """Load an OGB node-property-prediction dataset as a PyG Data object."""
         from ogb.nodeproppred import NodePropPredDataset
+        from pathlib import Path
+
+        # Ensure processed/ exists — OGB won't create it itself
+        Path(self.ogb_root, self.ogb_name.replace("-", "_"), "processed").mkdir(parents=True, exist_ok=True)
 
         # OGB uses torch.load internally; patch for PyTorch >= 2.6 compatibility.
         _orig_load = torch.load

@@ -273,6 +273,12 @@ phase_1_neo4j_setup() {
         echo 'server.jvm.additional=--add-modules=jdk.incubator.vector' >> "$NEO4J_CONF"
     fi
 
+    # GNN model directory — Java plugin reads this via System.getProperty
+    # (systemd services don't inherit shell env vars)
+    if ! grep -q 'NEO4J_GNN_MODEL_DIR' "$NEO4J_CONF"; then
+        echo "server.jvm.additional=-DNEO4J_GNN_MODEL_DIR=${NEO4J_GNN_MODEL_DIR}" >> "$NEO4J_CONF"
+    fi
+
     # --- Set initial password ---
     neo4j-admin dbms set-initial-password "benchmark2026" 2>/dev/null || true
 

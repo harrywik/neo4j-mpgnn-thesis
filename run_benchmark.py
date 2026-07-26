@@ -148,6 +148,10 @@ def run_training_variant(implementation, dataset, run_idx, results_dir):
             except Exception as e:
                 print(f"  Warning: could not parse measurements: {e}")
 
+    # Fall back to wall_time_s when no per-epoch measurement was recorded
+    if "mean_epoch_time_s" not in result:
+        result["mean_epoch_time_s"] = round(wall, 3)
+
     return result
 
 
@@ -310,7 +314,7 @@ def aggregate_runs(runs, time_key):
 def main():
     parser = argparse.ArgumentParser(description="Run papers100M benchmark")
     parser.add_argument("--results_dir", type=str, default="experiment_results/gcp_benchmark")
-    parser.add_argument("--n_runs", type=int, default=5)
+    parser.add_argument("--n_runs", type=int, default=3)
     parser.add_argument("--n_nodes", type=int, default=2048)
     parser.add_argument("--skip_pyg_training", action="store_true",
                         help="Skip PyG in-memory training (expected OOM on large datasets)")

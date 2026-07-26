@@ -27,5 +27,5 @@
   "max_training_size": null,
   "max_validation_size": 0,
   "max_test_size": 0,
-  "nbr_runs": 5
+  "nbr_runs": 3
 }

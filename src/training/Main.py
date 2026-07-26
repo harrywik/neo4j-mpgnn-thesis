@@ -239,7 +239,12 @@ def _run_in_memory(dataset_cfg, impl_cfg, measurer, model):
     if "papers100m" in dataset_name or dataset_cfg.get("use_ogb", False):
         from ogb.nodeproppred import NodePropPredDataset
         ogb_root = dataset_cfg.get("ogb_root", "data/ogbn-papers100M")
-        
+
+        # Ensure processed/ exists — OGB tries to write cached tensors there
+        # but won't create the parent directory itself.
+        processed_dir = Path(ogb_root) / "ogbn_papers100M" / "processed"
+        processed_dir.mkdir(parents=True, exist_ok=True)
+
         # Patch torch.load for OGB compatibility
         _orig_load = torch.load
         torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})

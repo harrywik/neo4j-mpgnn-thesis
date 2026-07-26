@@ -32,6 +32,10 @@ from neo4j_pyg.models.GCN import GCN
 def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
     """Load ogbn-papers100M as a PyG Data object."""
     from ogb.nodeproppred import NodePropPredDataset
+    from pathlib import Path
+
+    # Ensure processed/ exists — OGB won't create it itself
+    Path(root, "ogbn_papers100M", "processed").mkdir(parents=True, exist_ok=True)
 
     _orig_load = torch.load
     torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})

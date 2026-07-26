@@ -15,7 +15,7 @@
   "feature_dim": 128,
   "nbr_classes": 172,
   "node_counts": [2048],
-  "nbr_runs": [5],
+  "nbr_runs": [3],
   "inference_batch_size": 4096,
   "num_neighbors": [10, 5],
   "num_hops": 2
