@@ -31,6 +31,8 @@ PY=".venv/bin/python"
 # Defaults — overridden by --ram-tier
 RAM_TIER=""
 SKIP_TO=0
+SKIP_PHASES=""  # comma-separated list of phase numbers to skip (e.g., "4,5")
+SKIP_PYG_TRAINING=false
 SSD_DEV="/dev/sdb"
 SSD_MOUNT="/mnt/ssd"
 PROJECT_DIR=""  # set after SSD mount
@@ -91,8 +93,10 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --ram-tier)   apply_tier "$2"; shift 2 ;;
         --skip-to)    SKIP_TO="$2"; shift 2 ;;
+        --skip-phases) SKIP_PHASES="$2"; shift 2 ;;
+        --skip_pyg_training) SKIP_PYG_TRAINING=true; shift ;;
         -h|--help)
-            echo "Usage: $0 --ram-tier <128|96|72|48|32> [--skip-to N]"
+            echo "Usage: $0 --ram-tier <128|96|72|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training]"
             echo ""
             echo "RAM tier determines Neo4j memory allocation and swap size:"
             echo "  128  pagecache=85g  heap=20g  swap=100g"
@@ -428,7 +432,10 @@ phase_6_benchmark() {
     export URI USERNAME PASSWORD NEO4J_PLUGINS_DIR NEO4J_GNN_MODEL_DIR
     mkdir -p "$RESULTS_DIR"
 
-    local bench_cmd="PYTHONPATH=src ${PY} run_benchmark.py --results_dir ${RESULTS_DIR} --n_runs 5 --n_nodes 2048"
+    local bench_cmd="PYTHONPATH=src ${PY} run_benchmark.py --results_dir ${RESULTS_DIR} --n_runs 3 --n_nodes 2048"
+    if [[ "$SKIP_PYG_TRAINING" == "true" ]]; then
+        bench_cmd="${bench_cmd} --skip_pyg_training"
+    fi
 
     tmux new-session -d -s benchmark "cd ${PROJECT_DIR} && ${bench_cmd} 2>&1 | tee ${RESULTS_DIR}/benchmark.log"
     log "Benchmark started in tmux session 'benchmark' — monitor: tmux attach -t benchmark"
@@ -480,9 +487,21 @@ log "=============================================="
 
 phases=(phase_0_system_setup phase_1_neo4j_setup phase_2_python_env phase_3_build_plugin phase_4_download_dataset phase_5_ingest phase_6_benchmark)
 
+should_skip_phase() {
+    local phase_num=$1
+    if [[ ",$SKIP_PHASES," == *",$phase_num,"* ]]; then
+        return 0  # true, should skip
+    fi
+    return 1  # false, don't skip
+}
+
 for i in "${!phases[@]}"; do
-    if [[ $i -ge $SKIP_TO ]]; then
+    if [[ $i -ge $SKIP_TO ]] && ! should_skip_phase $i; then
         ${phases[$i]}
+    else
+        if should_skip_phase $i; then
+            log "Skipping phase $i: ${phases[$i]}"
+        fi
     fi
 done
 

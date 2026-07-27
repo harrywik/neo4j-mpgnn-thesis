@@ -20,12 +20,8 @@ fi
 
 df -h "$SSD_MOUNT"
 
-# --- Configure neo4j.conf if needed ---
-if ! grep -q 'NEO4J_GNN_MODEL_DIR' /etc/neo4j/neo4j.conf 2>/dev/null; then
-    echo 'server.jvm.additional=-DNEO4J_GNN_MODEL_DIR=/var/lib/neo4j/gnn_models' | sudo tee -a /etc/neo4j/neo4j.conf
-    echo "Added NEO4J_GNN_MODEL_DIR to neo4j.conf"
-fi
-
-# --- Run benchmark ---
+# --- Run setup + benchmark ---
+# SSD has data+repo already, so skip download (4) and ingest (5).
+# Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
-sudo ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-to 6 --skip_pyg_training
+sudo ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-to 1 --skip-phases 4,5 --skip_pyg_training
