@@ -143,9 +143,9 @@ phase_0_system_setup() {
     log "Phase 0: System setup (RAM tier: ${RAM_TIER} GB)"
 
     # --- Base packages ---
-    export DEBIAN_FRONTEND=interactive
+    export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted gnupg
+    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted gnupg debconf dialog debconf-utils
 
     # --- Format and mount SSD ---
     if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
@@ -246,8 +246,12 @@ phase_1_neo4j_setup() {
         # Neo4j apt repo uses "latest" for current releases (2026.06.0 is in "latest")
         echo "deb [signed-by=/etc/apt/keyrings/neo4j.gpg] https://debian.neo4j.com stable latest" > /etc/apt/sources.list.d/neo4j.list
 
+        # Pre-seed debconf to accept Neo4j Enterprise license non-interactively
+        echo "neo4j-enterprise neo4j/license select I ACCEPT the terms of the license agreement" | debconf-set-selections
+        echo "neo4j-enterprise neo4j/accepted_license_agreement boolean true" | debconf-set-selections
+
         apt-get update -qq
-        apt-get install -y neo4j-enterprise
+        DEBIAN_FRONTEND=noninteractive NEO4J_ACCEPT_LICENSE_AGREEMENT=eval apt-get install -y neo4j-enterprise
 
         log "Neo4j installed via apt"
     fi
