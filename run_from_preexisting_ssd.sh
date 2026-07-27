@@ -31,13 +31,14 @@ if [[ "$TERM" == "xterm-ghostty" ]]; then
     export TERM=xterm-256color
 fi
 
-# Run inside tmux to ensure interactive terminal is available for Neo4j license prompt
-if ! tmux info &>/dev/null; then
+# If already in tmux, run directly; otherwise create a new session
+if [[ -n "${TMUX:-}" ]]; then
+    echo "Already in tmux, running directly..."
+    export DEBIAN_FRONTEND=interactive
+    sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
+else
     echo "Starting tmux session for interactive installation..."
     tmux new-session -d -s setup "cd ${SSD_MOUNT}/neo4j-mpgnn-thesis && sudo -E ./run_experiment.sh --ram-tier $RAM_TIER --skip-phases 4,5 --skip_pyg_training"
     echo "Attaching to tmux session 'setup'..."
     tmux attach -t setup
-else
-    export DEBIAN_FRONTEND=interactive
-    sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
 fi
