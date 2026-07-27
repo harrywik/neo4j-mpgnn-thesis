@@ -26,19 +26,11 @@ df -h "$SSD_MOUNT"
 # Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
 
-# Fix terminal compatibility for tmux (ghostty not recognized)
+# Fix terminal compatibility (ghostty not recognized by some tools)
 if [[ "$TERM" == "xterm-ghostty" ]]; then
     export TERM=xterm-256color
 fi
 
-# If already in tmux, run directly; otherwise create a new session
-if [[ -n "${TMUX:-}" ]]; then
-    echo "Already in tmux, running directly..."
-    export DEBIAN_FRONTEND=interactive
-    sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
-else
-    echo "Starting tmux session for interactive installation..."
-    tmux new-session -d -s setup "cd ${SSD_MOUNT}/neo4j-mpgnn-thesis && sudo -E ./run_experiment.sh --ram-tier $RAM_TIER --skip-phases 4,5 --skip_pyg_training"
-    echo "Attaching to tmux session 'setup'..."
-    tmux attach -t setup
-fi
+# Run directly - user should already be in tmux or similar
+export DEBIAN_FRONTEND=interactive
+exec sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
