@@ -280,13 +280,13 @@ phase_1_neo4j_setup() {
     sed -i "s|^#* *dbms.transaction.timeout=.*|dbms.transaction.timeout=3600s|" "$NEO4J_CONF"
 
     # Enable Java Vector API (required by GNN plugin for SIMD aggregation)
-    if ! grep -q 'jdk.incubator.vector' "$NEO4J_CONF"; then
+    if ! grep -q '^server.jvm.additional=.*jdk.incubator.vector' "$NEO4J_CONF"; then
         echo 'server.jvm.additional=--add-modules=jdk.incubator.vector' >> "$NEO4J_CONF"
     fi
 
     # GNN model directory — Java plugin reads this via System.getProperty
     # (systemd services don't inherit shell env vars)
-    if ! grep -q 'NEO4J_GNN_MODEL_DIR' "$NEO4J_CONF"; then
+    if ! grep -q '^server.jvm.additional=.*NEO4J_GNN_MODEL_DIR' "$NEO4J_CONF"; then
         echo "server.jvm.additional=-DNEO4J_GNN_MODEL_DIR=${NEO4J_GNN_MODEL_DIR}" >> "$NEO4J_CONF"
     fi
 
