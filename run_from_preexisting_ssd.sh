@@ -22,6 +22,7 @@ df -h "$SSD_MOUNT"
 
 # --- Run setup + benchmark ---
 # SSD has data+repo already, so skip download (4) and ingest (5).
+# Phase 0 installs base packages (gnupg, tmux, etc.) and mounts SSD.
 # Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
-sudo ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-to 1 --skip-phases 4,5 --skip_pyg_training
+sudo ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
