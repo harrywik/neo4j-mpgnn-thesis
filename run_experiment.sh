@@ -49,6 +49,7 @@ NEO4J_CONF="/etc/neo4j/neo4j.conf"
 NEO4J_BIN="/usr/bin/neo4j"
 NEO4J_ADMIN="/usr/bin/neo4j-admin"
 NEO4J_SHELL="/usr/bin/cypher-shell"
+NEO4J_GNN_MODEL_DIR="${NEO4J_HOME}/gnn_models"
 
 # ===========================================================================
 # Per-tier memory configuration
