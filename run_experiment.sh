@@ -145,7 +145,7 @@ phase_0_system_setup() {
     # --- Base packages ---
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -qq
-    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted gnupg debconf dialog debconf-utils
+    apt-get install -y -qq tmux curl wget git default-jdk maven procps htop parted gnupg debconf dialog debconf-utils libterm-readline-gnu-perl
 
     # --- Format and mount SSD ---
     if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
@@ -251,7 +251,8 @@ phase_1_neo4j_setup() {
         echo "neo4j-enterprise neo4j/accepted_license_agreement boolean true" | debconf-set-selections
 
         apt-get update -qq
-        DEBIAN_FRONTEND=interactive NEO4J_ACCEPT_LICENSE_AGREEMENT=eval apt-get install -y neo4j-enterprise
+        export DEBIAN_FRONTEND=dialog
+        NEO4J_ACCEPT_LICENSE_AGREEMENT=eval apt-get install -y neo4j-enterprise
 
         log "Neo4j installed via apt"
     fi
