@@ -251,7 +251,7 @@ phase_1_neo4j_setup() {
         echo "neo4j-enterprise neo4j/accepted_license_agreement boolean true" | debconf-set-selections
 
         apt-get update -qq
-        DEBIAN_FRONTEND=noninteractive NEO4J_ACCEPT_LICENSE_AGREEMENT=eval apt-get install -y neo4j-enterprise
+        DEBIAN_FRONTEND=interactive NEO4J_ACCEPT_LICENSE_AGREEMENT=eval apt-get install -y neo4j-enterprise
 
         log "Neo4j installed via apt"
     fi
