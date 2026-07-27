@@ -26,6 +26,11 @@ df -h "$SSD_MOUNT"
 # Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
 
+# Fix terminal compatibility for tmux (ghostty not recognized)
+if [[ "$TERM" == "xterm-ghostty" ]]; then
+    export TERM=xterm-256color
+fi
+
 # Run inside tmux to ensure interactive terminal is available for Neo4j license prompt
 if ! tmux info &>/dev/null; then
     echo "Starting tmux session for interactive installation..."
