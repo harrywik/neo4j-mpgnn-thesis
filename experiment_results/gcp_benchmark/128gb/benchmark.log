@@ -1,0 +1,218 @@
+============================================================
+  papers100M Benchmark
+  Runs: 5  |  Inference nodes: 2048
+  Results dir: experiment_results/gcp_benchmark
+  Started: 2026-07-26T10:42:14.978092
+============================================================
+
+[Stopping Neo4j to free RAM for PyG training...]
+  Neo4j stoped
+
+============================================================
+  TRAINING [baseline_pyg] run 1
+============================================================
+  ✗ OOM killed after 1899.4s
+
+============================================================
+  TRAINING [baseline_pyg] run 2
+============================================================
+  ✗ Failed (rc=1) after 10.4s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  TRAINING [baseline_pyg] run 3
+============================================================
+  ✗ Failed (rc=1) after 6.3s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  TRAINING [baseline_pyg] run 4
+============================================================
+  ✗ Failed (rc=1) after 6.3s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  TRAINING [baseline_pyg] run 5
+============================================================
+  ✗ Failed (rc=1) after 6.2s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+[Starting Neo4j for Neo4j training...]
+  Neo4j started
+  Neo4j is ready
+
+============================================================
+  TRAINING [java_neo4j] run 1
+============================================================
+  ✓ Completed in 3696.8s
+
+============================================================
+  TRAINING [java_neo4j] run 2
+============================================================
+  ✓ Completed in 3475.2s
+
+============================================================
+  TRAINING [java_neo4j] run 3
+============================================================
+  ✓ Completed in 3402.2s
+
+============================================================
+  TRAINING [java_neo4j] run 4
+============================================================
+  ✓ Completed in 3431.4s
+
+============================================================
+  TRAINING [java_neo4j] run 5
+============================================================
+  ✓ Completed in 3493.0s
+
+[Stopping Neo4j to free RAM for PyG inference...]
+  Neo4j stoped
+
+============================================================
+  INFERENCE [pyg_in_memory] run 1 (2048 nodes)
+============================================================
+  ✗ Failed (rc=1) after 6.2s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  INFERENCE [pyg_in_memory] run 2 (2048 nodes)
+============================================================
+  ✗ Failed (rc=1) after 5.9s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  INFERENCE [pyg_in_memory] run 3 (2048 nodes)
+============================================================
+  ✗ Failed (rc=1) after 5.9s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  INFERENCE [pyg_in_memory] run 4 (2048 nodes)
+============================================================
+  ✗ Failed (rc=1) after 5.9s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+============================================================
+  INFERENCE [pyg_in_memory] run 5 (2048 nodes)
+============================================================
+  ✗ Failed (rc=1) after 5.9s
+  tail:                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1549, in load
+    return _legacy_load(
+           ^^^^^^^^^^^^^
+  File "/mnt/ssd/neo4j-mpgnn-thesis/.venv/lib/python3.12/site-packages/torch/serialization.py", line 1797, in _legacy_load
+    magic_number = pickle_module.load(f, **pickle_load_args)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+EOFError: Ran out of input
+
+
+[Starting Neo4j for Neo4j inference...]
+  Neo4j started
+  Neo4j is ready
+
+============================================================
+  INFERENCE [neo4j: neighborhood_sampling+in_db_java] run 1 (2048 nodes)
+============================================================
+  ✓ Completed in 112.5s
+
+============================================================
+  INFERENCE [neo4j: neighborhood_sampling+in_db_java] run 2 (2048 nodes)
+============================================================
+  ✓ Completed in 78.3s
+
+============================================================
+  INFERENCE [neo4j: neighborhood_sampling+in_db_java] run 3 (2048 nodes)
+============================================================
+  ✓ Completed in 79.9s
+
+============================================================
+  INFERENCE [neo4j: neighborhood_sampling+in_db_java] run 4 (2048 nodes)
+============================================================
+  ✓ Completed in 78.9s
+
+============================================================
+  INFERENCE [neo4j: neighborhood_sampling+in_db_java] run 5 (2048 nodes)
+============================================================
+  ✓ Completed in 78.0s
+
+============================================================
+  RESULTS SUMMARY
+============================================================
+
+  TRAINING:
+    pyg_in_memory: OOM
+    neo4j_java: 3499.7166s ± 115.8219s (n=5)
+
+  INFERENCE:
+    pyg_in_memory: ERROR
+    neo4j:
+      neighborhood_sampling: ERROR
+      in_db_java: ERROR
+
+  Results → experiment_results/gcp_benchmark/results_summary.json
+  Finished: 2026-07-26T16:14:54.901649
