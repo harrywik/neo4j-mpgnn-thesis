@@ -27,7 +27,7 @@ df -h "$SSD_MOUNT"
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
 
 # Run inside tmux to ensure interactive terminal is available for Neo4j license prompt
-if [ -z "$TMUX" ]; then
+if ! tmux info &>/dev/null; then
     echo "Starting tmux session for interactive installation..."
     tmux new-session -d -s setup "cd ${SSD_MOUNT}/neo4j-mpgnn-thesis && sudo -E ./run_experiment.sh --ram-tier $RAM_TIER --skip-phases 4,5 --skip_pyg_training"
     echo "Attaching to tmux session 'setup'..."
