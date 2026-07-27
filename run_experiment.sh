@@ -64,16 +64,18 @@ NEO4J_SHELL="/usr/bin/cypher-shell"
 # ===========================================================================
 declare -A TIER_PAGECACHE TIER_HEAP TIER_SWAP
 
+TIER_PAGECACHE[192]="130g"; TIER_HEAP[192]="30g"; TIER_SWAP[192]=60
 TIER_PAGECACHE[128]="85g";  TIER_HEAP[128]="20g";  TIER_SWAP[128]=100
 TIER_PAGECACHE[96]="58g";   TIER_HEAP[96]="16g";   TIER_SWAP[96]=150
 TIER_PAGECACHE[72]="40g";   TIER_HEAP[72]="14g";   TIER_SWAP[72]=200
+TIER_PAGECACHE[64]="30g";   TIER_HEAP[64]="12g";   TIER_SWAP[64]=220
 TIER_PAGECACHE[48]="24g";   TIER_HEAP[48]="10g";   TIER_SWAP[48]=250
 TIER_PAGECACHE[32]="12g";   TIER_HEAP[32]="6g";    TIER_SWAP[32]=250
 
 apply_tier() {
     local tier=$1
     if [[ -z "${TIER_PAGECACHE[$tier]+x}" ]]; then
-        echo "ERROR: unknown RAM tier '${tier}'. Valid: 128 96 72 48 32" >&2
+        echo "ERROR: unknown RAM tier '${tier}'. Valid: 192 128 96 72 64 48 32" >&2
         exit 1
     fi
     RAM_TIER=$tier
@@ -96,14 +98,16 @@ while [[ $# -gt 0 ]]; do
         --skip-phases) SKIP_PHASES="$2"; shift 2 ;;
         --skip_pyg_training) SKIP_PYG_TRAINING=true; shift ;;
         -h|--help)
-            echo "Usage: $0 --ram-tier <128|96|72|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training]"
+            echo "Usage: $0 --ram-tier <192|128|96|72|64|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training]"
             echo ""
             echo "RAM tier determines Neo4j memory allocation and swap size:"
-            echo "  128  pagecache=85g  heap=20g  swap=100g"
-            echo "   96  pagecache=58g  heap=16g  swap=150g"
-            echo "   72  pagecache=40g  heap=14g  swap=200g"
-            echo "   48  pagecache=24g  heap=10g  swap=250g"
-            echo "   32  pagecache=12g  heap= 6g  swap=250g"
+            echo "  192  pagecache=130g heap=30g  swap= 60g"
+            echo "  128  pagecache= 85g heap=20g  swap=100g"
+            echo "   96  pagecache= 58g heap=16g  swap=150g"
+            echo "   72  pagecache= 40g heap=14g  swap=200g"
+            echo "   64  pagecache= 30g heap=12g  swap=220g"
+            echo "   48  pagecache= 24g heap=10g  swap=250g"
+            echo "   32  pagecache= 12g heap= 6g  swap=250g"
             exit 0
             ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
