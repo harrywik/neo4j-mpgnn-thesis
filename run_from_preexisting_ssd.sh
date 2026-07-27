@@ -25,4 +25,14 @@ df -h "$SSD_MOUNT"
 # Phase 0 installs base packages (gnupg, tmux, etc.) and mounts SSD.
 # Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
-sudo ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
+
+# Run inside tmux to ensure interactive terminal is available for Neo4j license prompt
+if [ -z "$TMUX" ]; then
+    echo "Starting tmux session for interactive installation..."
+    tmux new-session -d -s setup "cd ${SSD_MOUNT}/neo4j-mpgnn-thesis && sudo -E ./run_experiment.sh --ram-tier $RAM_TIER --skip-phases 4,5 --skip_pyg_training"
+    echo "Attaching to tmux session 'setup'..."
+    tmux attach -t setup
+else
+    export DEBIAN_FRONTEND=interactive
+    sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
+fi
