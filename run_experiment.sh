@@ -412,6 +412,15 @@ phase_4_download_dataset() {
     log "Phase 4: Downloading ogbn-papers100M"
     mkdir -p "$DATA_DIR"
 
+    # Create temporary swap for dataset processing (prevents OOM)
+    local swap_file="${SSD_MOUNT}/temp_swap"
+    log "Creating 100GB temporary swap for dataset processing..."
+    fallocate -l 100G "$swap_file"
+    chmod 600 "$swap_file"
+    mkswap "$swap_file"
+    swapon "$swap_file"
+    log "Temporary swap enabled"
+
     if [[ -f "${DATA_DIR}/ogbn_papers100M/raw/data.npz" ]]; then
         log "Dataset already downloaded"
     else
@@ -426,6 +435,12 @@ dataset = NodePropPredDataset(name='ogbn-papers100M', root='data/ogbn-papers100M
 print(f'Downloaded: {dataset[0][0][\"num_nodes\"]} nodes')
 "
     fi
+
+    # Remove temporary swap after processing
+    log "Removing temporary swap..."
+    swapoff "$swap_file"
+    rm -f "$swap_file"
+    log "Temporary swap removed"
 
     # Symlink to Neo4j data dir on SSD for the ingest scripts
     if [[ ! -d "$NEO4J_RAW_DIR" ]]; then
