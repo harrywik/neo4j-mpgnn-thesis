@@ -227,6 +227,13 @@ phase_0_system_setup() {
         fi
     fi
 
+    # --- Update repo ---
+    if [[ -d "${PROJECT_DIR}/.git" ]]; then
+        log "Updating repo at ${PROJECT_DIR}..."
+        cd "$PROJECT_DIR"
+        git pull || log "WARNING: git pull failed, continuing with existing code"
+    fi
+
     # --- Install uv ---
     if ! command -v uv &>/dev/null; then
         curl -LsSf https://astral.sh/uv/install.sh | sh
