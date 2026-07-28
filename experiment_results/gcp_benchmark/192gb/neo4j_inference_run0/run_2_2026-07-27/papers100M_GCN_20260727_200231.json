@@ -1,0 +1,76 @@
+{
+  "config": {
+    "dataset_name": "papers100M",
+    "training_dataset_config": "papers100M_bench",
+    "training_implementation_config": "java_neo4j",
+    "ogb_name": "ogbn-papers100M",
+    "ogb_root": "data/ogbn-papers100M",
+    "node_label": "Paper",
+    "edge_type": "CITES",
+    "feature_property": "feature_vector",
+    "feature_property_type": "byte[]",
+    "target_property": "subject",
+    "nodeid_property": "id",
+    "split_property_name": "split",
+    "split_property_type": "str",
+    "feature_dim": 128,
+    "nbr_classes": 172,
+    "node_counts": [
+      2048
+    ],
+    "nbr_runs": [
+      3
+    ],
+    "inference_batch_size": 4096,
+    "num_neighbors": [
+      10,
+      5
+    ],
+    "num_hops": 2
+  },
+  "model": {
+    "model_class": "GCN",
+    "hidden_dim1": 192,
+    "hidden_dim2": 192,
+    "checkpoint_path": null,
+    "model_name": "experiment_gcn_papers100M",
+    "strategies": [
+      "neighborhood_sampling",
+      "in_db_java"
+    ]
+  },
+  "results": {
+    "2048": {
+      "in_db_java": {
+        "accuracy": {
+          "mean": 0.4296875,
+          "ci95": 0.0058475575274176085
+        },
+        "total_time_s": {
+          "mean": 1.1806314706652,
+          "ci95": 0.40449765026152346
+        },
+        "ms_per_node": {
+          "mean": 0.5764802102857421,
+          "ci95": 0.19750861829175947
+        },
+        "throughput_nodes_per_s": {
+          "mean": 1840.5859944031902,
+          "ci95": 601.9591880265999
+        },
+        "p50_batch_ms": {
+          "mean": 1180.5514453323365,
+          "ci95": 404.5086597001328
+        },
+        "p95_batch_ms": {
+          "mean": 1180.5514453323365,
+          "ci95": 404.5086597001328
+        },
+        "n_batches": {
+          "mean": 1.0,
+          "ci95": 0.0
+        }
+      }
+    }
+  }
+}
