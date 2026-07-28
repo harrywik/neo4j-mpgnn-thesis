@@ -78,7 +78,7 @@ TIER_PAGECACHE[16]="6g";    TIER_HEAP[16]="3g"
 apply_tier() {
     local tier=$1
     if [[ -z "${TIER_PAGECACHE[$tier]+x}" ]]; then
-        echo "ERROR: unknown RAM tier '${tier}'. Valid: 192 128 96 72 64 48 32" >&2
+        echo "ERROR: unknown RAM tier '${tier}'. Valid: 256 192 128 96 72 64 48 32 16" >&2
         exit 1
     fi
     RAM_TIER=$tier
@@ -101,9 +101,10 @@ while [[ $# -gt 0 ]]; do
         --skip_pyg_training) SKIP_PYG_TRAINING=true; shift ;;
         --inference-only) INFERENCE_ONLY=true; shift ;;
         -h|--help)
-            echo "Usage: $0 --ram-tier <192|128|96|72|64|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training] [--inference-only]"
+            echo "Usage: $0 --ram-tier <256|192|128|96|72|64|48|32|16> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training] [--inference-only]"
             echo ""
             echo "RAM tier determines Neo4j memory allocation:"
+            echo "  256  pagecache=180g heap=40g"
             echo "  192  pagecache=130g heap=30g"
             echo "  128  pagecache= 85g heap=20g"
             echo "   96  pagecache= 58g heap=16g"
@@ -111,6 +112,7 @@ while [[ $# -gt 0 ]]; do
             echo "   64  pagecache= 30g heap=12g"
             echo "   48  pagecache= 24g heap=10g"
             echo "   32  pagecache= 12g heap= 6g"
+            echo "   16  pagecache=  6g heap= 3g"
             exit 0
             ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -118,7 +120,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$RAM_TIER" ]]; then
-    echo "ERROR: --ram-tier is required.  Usage: $0 --ram-tier <128|96|72|48|32>" >&2
+    echo "ERROR: --ram-tier is required.  Usage: $0 --ram-tier <256|192|128|96|72|64|48|32|16>" >&2
     exit 1
 fi
 
