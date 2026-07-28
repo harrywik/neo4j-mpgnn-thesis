@@ -159,6 +159,53 @@ def run_training_variant(implementation, dataset, run_idx, results_dir):
 # Inference — PyG
 # ---------------------------------------------------------------------------
 
+def validate_ogb_cache():
+    """Check if OGB processed cache is valid. Returns True if valid, False if corrupted/missing."""
+    processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
+    if not processed_dir.exists():
+        return False
+    
+    # Check for the main data file
+    data_file = processed_dir / "data_processed"
+    if not data_file.exists() or data_file.stat().st_size == 0:
+        return False
+    
+    return True
+
+def reset_ogb_cache():
+    """Clear corrupted OGB cache and re-download with temporary swap."""
+    import shutil
+    
+    print("\n[OGB cache corrupted or missing — resetting...]")
+    processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
+    if processed_dir.exists():
+        shutil.rmtree(processed_dir)
+        print(f"  Cleared {processed_dir}")
+    
+    # Create temporary swap for reprocessing
+    swap_file = Path("/mnt/ssd/temp_swap")
+    print("  Creating 100GB temporary swap for reprocessing...")
+    subprocess.run(["fallocate", "-l", "100G", str(swap_file)], check=True)
+    subprocess.run(["chmod", "600", str(swap_file)], check=True)
+    subprocess.run(["mkswap", str(swap_file)], check=True)
+    subprocess.run(["swapon", str(swap_file)], check=True)
+    print("  Temporary swap enabled")
+    
+    # Re-download and process
+    try:
+        cmd = [
+            sys.executable, "-c",
+            "from ogb.nodeproppred import NodePropPredDataset; "
+            "NodePropPredDataset(name='ogbn-papers100M', root='data/ogbn-papers100M')"
+        ]
+        run_cmd(cmd, timeout=7200)
+        print("  Dataset reprocessed successfully")
+    finally:
+        # Always remove swap
+        subprocess.run(["swapoff", str(swap_file)], check=False)
+        swap_file.unlink(missing_ok=True)
+        print("  Temporary swap removed")
+
 def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
     """Run PyG-only inference on n_nodes seed nodes."""
     print(f"\n{'='*60}")
@@ -381,6 +428,11 @@ def main():
     # ---- Inference: PyG in-memory ----
     print("\n[Stopping Neo4j to free RAM for PyG inference...]")
     manage_neo4j("stop")
+    
+    # Validate OGB cache before PyG inference
+    if not validate_ogb_cache():
+        reset_ogb_cache()
+    
     pyg_inf_runs = []
     for i in range(n_runs):
         r = run_pyg_inference(i, results_dir, n_nodes=args.n_nodes)
