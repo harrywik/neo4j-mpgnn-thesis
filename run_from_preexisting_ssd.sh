@@ -57,6 +57,10 @@ df -h "$SSD_MOUNT"
 # Phases 1-3 install Neo4j, Python env, and build the plugin.
 cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
 
+# --- Update repo ---
+echo "Updating repo..."
+sudo git pull || echo "WARNING: git pull failed, continuing with existing code"
+
 # Fix terminal compatibility (ghostty not recognized by some tools)
 if [[ "$TERM" == "xterm-ghostty" ]]; then
     export TERM=xterm-256color
