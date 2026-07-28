@@ -59,6 +59,8 @@ cd "${SSD_MOUNT}/neo4j-mpgnn-thesis"
 
 # --- Update repo ---
 echo "Updating repo..."
+# Fix git ownership issue when running with sudo
+sudo git config --global --add safe.directory "${SSD_MOUNT}/neo4j-mpgnn-thesis" 2>/dev/null || true
 sudo git pull || echo "WARNING: git pull failed, continuing with existing code"
 
 # Fix terminal compatibility (ghostty not recognized by some tools)
