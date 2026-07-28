@@ -2,6 +2,7 @@
 set -euo pipefail
 
 RAM_TIER="${1:-128}"
+INFERENCE_ONLY="${2:-}"
 SSD_DEV="/dev/sdb1"
 SSD_MOUNT="/mnt/ssd"
 
@@ -33,4 +34,10 @@ fi
 
 # Run directly - user should already be in tmux or similar
 export DEBIAN_FRONTEND=interactive
-exec sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" --skip-phases 4,5 --skip_pyg_training
+
+EXTRA_ARGS="--skip-phases 4,5 --skip_pyg_training"
+if [[ "$INFERENCE_ONLY" == "inference-only" ]]; then
+    EXTRA_ARGS="$EXTRA_ARGS --inference-only"
+fi
+
+exec sudo -E ./run_experiment.sh --ram-tier "$RAM_TIER" $EXTRA_ARGS

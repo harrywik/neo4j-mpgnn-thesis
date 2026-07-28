@@ -2,7 +2,7 @@
 # run_experiment.sh — set up and run the papers100M benchmark on a fresh GCP Debian instance.
 #
 # Phases:
-#   0  System packages, disk setup (SSD), swap, uv
+#   0  System packages, disk setup (SSD), uv
 #   1  Neo4j install + configuration (per RAM tier)
 #   2  Python environment (uv sync)
 #   3  Build & deploy Java plugin
@@ -33,6 +33,7 @@ RAM_TIER=""
 SKIP_TO=0
 SKIP_PHASES=""  # comma-separated list of phase numbers to skip (e.g., "4,5")
 SKIP_PYG_TRAINING=false
+INFERENCE_ONLY=false
 SSD_DEV="/dev/sdb"
 SSD_MOUNT="/mnt/ssd"
 PROJECT_DIR=""  # set after SSD mount
@@ -41,7 +42,6 @@ NEO4J_DATA_DIR=""   # set after SSD mount
 NEO4J_RAW_DIR=""    # set after SSD mount
 NEO4J_PAGECACHE=""
 NEO4J_HEAP=""
-SWAP_GB=""
 
 # Neo4j paths (apt-installed)
 NEO4J_HOME="/var/lib/neo4j"
@@ -58,20 +58,22 @@ NEO4J_GNN_MODEL_DIR="${NEO4J_HOME}/gnn_models"
 #   - Reserve 2-3 GB for OS
 #   - Maximize Neo4j page cache (reclaimable by OS when Python needs RAM)
 #   - Give Neo4j heap enough for GNN stored procedures
-#   - Remaining RAM for Python; overflow goes to swap on SSD
+#   - Remaining RAM for Python
 #
 # Neo4j store after full ingestion: ~200 GB on disk.
 # Page cache can never cover it at these tiers — it's a best-effort cache.
 # ===========================================================================
-declare -A TIER_PAGECACHE TIER_HEAP TIER_SWAP
+declare -A TIER_PAGECACHE TIER_HEAP
 
-TIER_PAGECACHE[192]="130g"; TIER_HEAP[192]="30g"; TIER_SWAP[192]=60
-TIER_PAGECACHE[128]="85g";  TIER_HEAP[128]="20g";  TIER_SWAP[128]=100
-TIER_PAGECACHE[96]="58g";   TIER_HEAP[96]="16g";   TIER_SWAP[96]=150
-TIER_PAGECACHE[72]="40g";   TIER_HEAP[72]="14g";   TIER_SWAP[72]=200
-TIER_PAGECACHE[64]="30g";   TIER_HEAP[64]="12g";   TIER_SWAP[64]=220
-TIER_PAGECACHE[48]="24g";   TIER_HEAP[48]="10g";   TIER_SWAP[48]=250
-TIER_PAGECACHE[32]="12g";   TIER_HEAP[32]="6g";    TIER_SWAP[32]=250
+TIER_PAGECACHE[256]="180g"; TIER_HEAP[256]="40g"
+TIER_PAGECACHE[192]="130g"; TIER_HEAP[192]="30g"
+TIER_PAGECACHE[128]="85g";  TIER_HEAP[128]="20g"
+TIER_PAGECACHE[96]="58g";   TIER_HEAP[96]="16g"
+TIER_PAGECACHE[72]="40g";   TIER_HEAP[72]="14g"
+TIER_PAGECACHE[64]="30g";   TIER_HEAP[64]="12g"
+TIER_PAGECACHE[48]="24g";   TIER_HEAP[48]="10g"
+TIER_PAGECACHE[32]="12g";   TIER_HEAP[32]="6g"
+TIER_PAGECACHE[16]="6g";    TIER_HEAP[16]="3g"
 
 apply_tier() {
     local tier=$1
@@ -82,7 +84,6 @@ apply_tier() {
     RAM_TIER=$tier
     NEO4J_PAGECACHE="${TIER_PAGECACHE[$tier]}"
     NEO4J_HEAP="${TIER_HEAP[$tier]}"
-    SWAP_GB="${TIER_SWAP[$tier]}"
     PROJECT_DIR="${SSD_MOUNT}/neo4j-mpgnn-thesis"
     DATA_DIR="${PROJECT_DIR}/data/ogbn-papers100M"
     NEO4J_DATA_DIR="${SSD_MOUNT}/neo4j/data"
@@ -98,17 +99,18 @@ while [[ $# -gt 0 ]]; do
         --skip-to)    SKIP_TO="$2"; shift 2 ;;
         --skip-phases) SKIP_PHASES="$2"; shift 2 ;;
         --skip_pyg_training) SKIP_PYG_TRAINING=true; shift ;;
+        --inference-only) INFERENCE_ONLY=true; shift ;;
         -h|--help)
-            echo "Usage: $0 --ram-tier <192|128|96|72|64|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training]"
+            echo "Usage: $0 --ram-tier <192|128|96|72|64|48|32> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training] [--inference-only]"
             echo ""
-            echo "RAM tier determines Neo4j memory allocation and swap size:"
-            echo "  192  pagecache=130g heap=30g  swap= 60g"
-            echo "  128  pagecache= 85g heap=20g  swap=100g"
-            echo "   96  pagecache= 58g heap=16g  swap=150g"
-            echo "   72  pagecache= 40g heap=14g  swap=200g"
-            echo "   64  pagecache= 30g heap=12g  swap=220g"
-            echo "   48  pagecache= 24g heap=10g  swap=250g"
-            echo "   32  pagecache= 12g heap= 6g  swap=250g"
+            echo "RAM tier determines Neo4j memory allocation:"
+            echo "  192  pagecache=130g heap=30g"
+            echo "  128  pagecache= 85g heap=20g"
+            echo "   96  pagecache= 58g heap=16g"
+            echo "   72  pagecache= 40g heap=14g"
+            echo "   64  pagecache= 30g heap=12g"
+            echo "   48  pagecache= 24g heap=10g"
+            echo "   32  pagecache= 12g heap= 6g"
             exit 0
             ;;
         *) echo "Unknown option: $1" >&2; exit 1 ;;
@@ -138,7 +140,7 @@ fi
 log() { echo "[$(date '+%H:%M:%S')] $*"; }
 
 # ===========================================================================
-# Phase 0: System setup + disk + swap
+# Phase 0: System setup + disk
 # ===========================================================================
 phase_0_system_setup() {
     log "Phase 0: System setup (RAM tier: ${RAM_TIER} GB)"
@@ -172,7 +174,6 @@ phase_0_system_setup() {
 
     # --- Create directories on SSD ---
     mkdir -p "${SSD_MOUNT}/neo4j/data"
-    mkdir -p "${SSD_MOUNT}/swap"
 
     # --- Move repo to SSD ---
     local script_dir
@@ -185,26 +186,6 @@ phase_0_system_setup() {
             mv "$script_dir" "${PROJECT_DIR}"
             log "Repo moved. Continue from: cd ${PROJECT_DIR}"
         fi
-    fi
-
-    # --- Create swap on SSD ---
-    local swap_file="${SSD_MOUNT}/swap/swapfile"
-    local current_swap
-    current_swap=$(free -g | awk '/Swap:/{print $2}')
-    if [[ "$current_swap" -ge "$SWAP_GB" ]]; then
-        log "Swap already sufficient: ${current_swap}GB"
-    else
-        log "Creating ${SWAP_GB}GB swap file on SSD..."
-        # Remove old swapfile if it exists but is wrong size
-        [[ -f "$swap_file" ]] && swapoff "$swap_file" 2>/dev/null || true
-        fallocate -l "${SWAP_GB}G" "$swap_file"
-        chmod 600 "$swap_file"
-        mkswap "$swap_file"
-        swapon "$swap_file"
-        if ! grep -q "$swap_file" /etc/fstab; then
-            echo "${swap_file} none swap sw 0 0" >> /etc/fstab
-        fi
-        log "Swap active: ${SWAP_GB}GB on ${swap_file}"
     fi
 
     # --- Install uv ---
@@ -224,7 +205,7 @@ phase_0_system_setup() {
     sysctl -w vm.dirty_ratio=20 2>/dev/null || true
     sysctl -w vm.dirty_background_ratio=5 2>/dev/null || true
 
-    log "Phase 0 complete — swap=${SWAP_GB}GB, SSD=$(df -h "$SSD_MOUNT" | tail -1 | awk '{print $4}') free"
+    log "Phase 0 complete — SSD=$(df -h "$SSD_MOUNT" | tail -1 | awk '{print $4}') free"
 }
 
 # ===========================================================================
@@ -443,6 +424,9 @@ phase_6_benchmark() {
     if [[ "$SKIP_PYG_TRAINING" == "true" ]]; then
         bench_cmd="${bench_cmd} --skip_pyg_training"
     fi
+    if [[ "$INFERENCE_ONLY" == "true" ]]; then
+        bench_cmd="${bench_cmd} --inference_only"
+    fi
 
     tmux new-session -d -s benchmark "cd ${PROJECT_DIR} && ${bench_cmd} 2>&1 | tee ${RESULTS_DIR}/benchmark.log"
     log "Benchmark started in tmux session 'benchmark' — monitor: tmux attach -t benchmark"
@@ -488,7 +472,6 @@ log "  RAM tier:    ${RAM_TIER} GB"
 log "  Neo4j:       ${NEO4J_VERSION}"
 log "  pagecache:   ${NEO4J_PAGECACHE}"
 log "  heap:        ${NEO4J_HEAP}"
-log "  swap:        ${SWAP_GB} GB (on SSD)"
 log "  SSD:         ${SSD_DEV} → ${SSD_MOUNT}"
 log "=============================================="
 

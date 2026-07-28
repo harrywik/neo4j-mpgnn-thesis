@@ -318,6 +318,8 @@ def main():
     parser.add_argument("--n_nodes", type=int, default=2048)
     parser.add_argument("--skip_pyg_training", action="store_true",
                         help="Skip PyG in-memory training (expected OOM on large datasets)")
+    parser.add_argument("--inference_only", action="store_true",
+                        help="Skip all training; run only PyG and Neo4j inference")
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -344,32 +346,38 @@ def main():
         "inference": {},
     }
 
-    # ---- Training: PyG in-memory ----
-    if not args.skip_pyg_training:
-        print("\n[Stopping Neo4j to free RAM for PyG training...]")
-        manage_neo4j("stop")
-        pyg_train_runs = []
-        for i in range(n_runs):
-            r = run_training_variant("baseline_pyg", dataset, i, results_dir)
-            pyg_train_runs.append(r)
-        all_results["training"]["pyg_in_memory"] = {
-            "runs": pyg_train_runs,
-            "summary": aggregate_runs(pyg_train_runs, "mean_epoch_time_s"),
-        }
-    else:
+    # ---- Training ----
+    if args.inference_only:
+        print("\n[Inference-only mode — skipping all training]")
         all_results["training"]["pyg_in_memory"] = {"summary": {"status": "SKIPPED"}}
+        all_results["training"]["neo4j_java"] = {"summary": {"status": "SKIPPED"}}
+    else:
+        # ---- Training: PyG in-memory ----
+        if not args.skip_pyg_training:
+            print("\n[Stopping Neo4j to free RAM for PyG training...]")
+            manage_neo4j("stop")
+            pyg_train_runs = []
+            for i in range(n_runs):
+                r = run_training_variant("baseline_pyg", dataset, i, results_dir)
+                pyg_train_runs.append(r)
+            all_results["training"]["pyg_in_memory"] = {
+                "runs": pyg_train_runs,
+                "summary": aggregate_runs(pyg_train_runs, "mean_epoch_time_s"),
+            }
+        else:
+            all_results["training"]["pyg_in_memory"] = {"summary": {"status": "SKIPPED"}}
 
-    # ---- Training: Neo4j + PyG ----
-    print("\n[Starting Neo4j for Neo4j training...]")
-    manage_neo4j("start")
-    neo4j_train_runs = []
-    for i in range(n_runs):
-        r = run_training_variant("java_neo4j", dataset, i, results_dir)
-        neo4j_train_runs.append(r)
-    all_results["training"]["neo4j_java"] = {
-        "runs": neo4j_train_runs,
-        "summary": aggregate_runs(neo4j_train_runs, "mean_epoch_time_s"),
-    }
+        # ---- Training: Neo4j + PyG ----
+        print("\n[Starting Neo4j for Neo4j training...]")
+        manage_neo4j("start")
+        neo4j_train_runs = []
+        for i in range(n_runs):
+            r = run_training_variant("java_neo4j", dataset, i, results_dir)
+            neo4j_train_runs.append(r)
+        all_results["training"]["neo4j_java"] = {
+            "runs": neo4j_train_runs,
+            "summary": aggregate_runs(neo4j_train_runs, "mean_epoch_time_s"),
+        }
 
     # ---- Inference: PyG in-memory ----
     print("\n[Stopping Neo4j to free RAM for PyG inference...]")
