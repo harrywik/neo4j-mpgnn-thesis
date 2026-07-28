@@ -34,7 +34,7 @@ SKIP_TO=0
 SKIP_PHASES=""  # comma-separated list of phase numbers to skip (e.g., "4,5")
 SKIP_PYG_TRAINING=false
 INFERENCE_ONLY=false
-SSD_DEV="/dev/sdb"
+SSD_DEV=""  # auto-detected in phase 0
 SSD_MOUNT="/mnt/ssd"
 PROJECT_DIR=""  # set after SSD mount
 DATA_DIR=""     # set after SSD mount
@@ -146,6 +146,43 @@ log() { echo "[$(date '+%H:%M:%S')] $*"; }
 # ===========================================================================
 phase_0_system_setup() {
     log "Phase 0: System setup (RAM tier: ${RAM_TIER} GB)"
+
+    # --- Auto-detect 500G SSD ---
+    if [[ -z "$SSD_DEV" ]]; then
+        log "Auto-detecting 500G SSD..."
+        # Find non-boot disks between 400G and 600G
+        local boot_disk
+        boot_disk=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /)" 2>/dev/null || echo "")
+        
+        for disk in /dev/sda /dev/sdb /dev/nvme0n1 /dev/nvme1n1; do
+            if [[ -b "$disk" ]]; then
+                local disk_name
+                disk_name=$(basename "$disk")
+                # Skip boot disk
+                if [[ "$disk_name" == "$boot_disk" ]]; then
+                    continue
+                fi
+                # Check size (accept 400G-600G range)
+                local size_gb
+                size_gb=$(lsblk -bno SIZE "$disk" 2>/dev/null | head -1)
+                if [[ -n "$size_gb" ]]; then
+                    size_gb=$((size_gb / 1024 / 1024 / 1024))
+                    if [[ $size_gb -ge 400 && $size_gb -le 600 ]]; then
+                        SSD_DEV="$disk"
+                        log "Detected ${size_gb}G SSD at ${SSD_DEV}"
+                        break
+                    fi
+                fi
+            fi
+        done
+        
+        if [[ -z "$SSD_DEV" ]]; then
+            log "ERROR: No 500G SSD found (checked /dev/sda, /dev/sdb, /dev/nvme0n1, /dev/nvme1n1)" >&2
+            log "Available disks:" >&2
+            lsblk -o NAME,SIZE,TYPE,MOUNTPOINT >&2
+            exit 1
+        fi
+    fi
 
     # --- Base packages ---
     export DEBIAN_FRONTEND=noninteractive

@@ -3,8 +3,38 @@ set -euo pipefail
 
 RAM_TIER="${1:-128}"
 INFERENCE_ONLY="${2:-}"
-SSD_DEV="/dev/sdb1"
 SSD_MOUNT="/mnt/ssd"
+
+# --- Auto-detect 500G SSD partition ---
+echo "Auto-detecting 500G SSD..."
+BOOT_DISK=$(lsblk -no PKNAME "$(findmnt -n -o SOURCE /)" 2>/dev/null || echo "")
+SSD_DEV=""
+
+for disk in /dev/sda1 /dev/sdb1 /dev/nvme0n1p1 /dev/nvme1n1p1; do
+    if [[ -b "$disk" ]]; then
+        parent=$(basename "$(lsblk -no PKNAME "$disk" 2>/dev/null)")
+        # Skip boot disk
+        if [[ "$parent" == "$BOOT_DISK" ]]; then
+            continue
+        fi
+        # Check size (accept 400G-600G range)
+        size_gb=$(lsblk -bno SIZE "$disk" 2>/dev/null | head -1)
+        if [[ -n "$size_gb" ]]; then
+            size_gb=$((size_gb / 1024 / 1024 / 1024))
+            if [[ $size_gb -ge 400 && $size_gb -le 600 ]]; then
+                SSD_DEV="$disk"
+                echo "Detected ${size_gb}G SSD partition at ${SSD_DEV}"
+                break
+            fi
+        fi
+    fi
+done
+
+if [[ -z "$SSD_DEV" ]]; then
+    echo "ERROR: No 500G SSD partition found" >&2
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT >&2
+    exit 1
+fi
 
 # --- Mount SSD (already formatted, data intact) ---
 if mountpoint -q "$SSD_MOUNT" 2>/dev/null; then
