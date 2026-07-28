@@ -252,22 +252,21 @@ def run_neo4j_inference(run_idx, results_dir, strategies=None, n_nodes=2048):
 
     # Parse per-strategy results from the experiment output JSON
     if output_dir.exists():
-        jsons = sorted(output_dir.glob("*.json"))
+        jsons = sorted(output_dir.glob("*/papers100M_GCN_*.json"))
         for jf in jsons:
             try:
                 data = json.loads(jf.read_text())
-                for strategy in strategies:
-                    if strategy in data.get("results", {}):
-                        sdata = data["results"][strategy]
-                        # Look up the entry for our node count
-                        for entry in sdata:
-                            if entry.get("n_nodes") == n_nodes:
-                                times = entry.get("times_s", [])
-                                if times:
-                                    result[f"{strategy}_time_s"] = round(mean(times), 4)
-                                    if len(times) > 1:
-                                        result[f"{strategy}_std_s"] = round(stdev(times), 4)
-                                break
+                results = data.get("results", {})
+                # Structure: results[node_count_str][strategy]["total_time_s"]["mean"]
+                node_key = str(n_nodes)
+                if node_key in results:
+                    for strategy in strategies:
+                        if strategy in results[node_key]:
+                            sdata = results[node_key][strategy]
+                            total_time = sdata.get("total_time_s", {})
+                            if "mean" in total_time:
+                                result[f"{strategy}_time_s"] = round(total_time["mean"], 4)
+                            break
             except Exception:
                 pass
 
