@@ -47,9 +47,10 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
         torch.load = _orig_load
 
     from torch_geometric.data import Data
-    x = torch.tensor(graph["node_feat"], dtype=torch.float)
-    edge_index = torch.tensor(graph["edge_index"], dtype=torch.long)
-    y = torch.tensor(labels, dtype=torch.long).squeeze()
+    # Use from_numpy to avoid copying — shares memory with OGB's numpy arrays
+    x = torch.from_numpy(graph["node_feat"]).float()
+    edge_index = torch.from_numpy(graph["edge_index"]).long()
+    y = torch.from_numpy(labels).long().squeeze()
 
     num_nodes = x.shape[0]
     test_mask = torch.zeros(num_nodes, dtype=torch.bool)
