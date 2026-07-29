@@ -30,53 +30,93 @@ from neo4j_pyg.models.GCN import GCN
 
 
 def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
-    """Load ogbn-papers100M as a PyG Data object."""
-    from ogb.nodeproppred import NodePropPredDataset
+    """Load ogbn-papers100M as a PyG Data object with pre-caching to avoid repeated OOM.
+    
+    First checks for pre-processed cache. If not found, runs OGB with temporary swap.
+    """
+    import subprocess
     from pathlib import Path
-
-    # Ensure processed/ exists — OGB won't create it itself
-    Path(root, "ogbn_papers100M", "processed").mkdir(parents=True, exist_ok=True)
-
-    _orig_load = torch.load
-    torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
+    
+    cache_file = Path(root) / "papers100M_preprocessed.pt"
+    
+    # Check for pre-processed cache
+    if cache_file.exists():
+        print(f"[pyg_inference] Loading from pre-processed cache: {cache_file}")
+        data = torch.load(cache_file)
+        # Reconstruct split_idx from test_mask
+        split_idx = {"test": data.test_mask.nonzero(as_tuple=False).squeeze(-1)}
+        return data, split_idx
+    
+    # No cache — need to process with swap
+    print("[pyg_inference] No pre-processed cache found — processing with temporary swap...")
+    
+    # Create temporary swap
+    swap_file = Path("/mnt/ssd/ogb_processing_swap")
+    subprocess.run(["sudo", "fallocate", "-l", "100G", str(swap_file)], check=True)
+    subprocess.run(["sudo", "chmod", "600", str(swap_file)], check=True)
+    subprocess.run(["sudo", "mkswap", str(swap_file)], check=True)
+    subprocess.run(["sudo", "swapon", str(swap_file)], check=True)
+    print("  Temporary swap enabled")
+    
     try:
-        dataset = NodePropPredDataset(name="ogbn-papers100M", root=root)
-        graph, labels = dataset[0]
-        split_idx = dataset.get_idx_split()
+        from ogb.nodeproppred import NodePropPredDataset
+
+        # Ensure processed/ exists — OGB won't create it itself
+        Path(root, "ogbn_papers100M", "processed").mkdir(parents=True, exist_ok=True)
+
+        _orig_load = torch.load
+        torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
+        try:
+            dataset = NodePropPredDataset(name="ogbn-papers100M", root=root)
+            graph, labels = dataset[0]
+            split_idx = dataset.get_idx_split()
+        finally:
+            torch.load = _orig_load
+
+        from torch_geometric.data import Data
+        import numpy as np
+
+        # Check dtypes to avoid unnecessary copies
+        print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
+        print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
+
+        # Only convert if dtype doesn't match to avoid copying
+        x_np = graph["node_feat"]
+        if x_np.dtype == np.float32:
+            x = torch.from_numpy(x_np)  # Zero-copy
+        else:
+            x = torch.from_numpy(x_np).float()  # Creates copy
+
+        edge_np = graph["edge_index"]
+        if edge_np.dtype == np.int64:
+            edge_index = torch.from_numpy(edge_np)  # Zero-copy
+        else:
+            edge_index = torch.from_numpy(edge_np).long()  # Creates copy
+
+        y_np = labels
+        if y_np.dtype == np.int64:
+            y = torch.from_numpy(y_np).squeeze()  # Zero-copy
+        else:
+            y = torch.from_numpy(y_np).long().squeeze()  # Creates copy
+
+        num_nodes = x.shape[0]
+        test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+        test_mask[split_idx["test"]] = True
+
+        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
+        
+        # Save pre-processed cache
+        print(f"[pyg_inference] Saving pre-processed cache to {cache_file}...")
+        torch.save(data, cache_file)
+        print(f"[pyg_inference] Cache saved ({cache_file.stat().st_size / 1e9:.1f} GB)")
+        
+        return data, split_idx
+        
     finally:
-        torch.load = _orig_load
-
-    from torch_geometric.data import Data
-    import numpy as np
-    
-    # Check dtypes to avoid unnecessary copies
-    print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
-    print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
-    
-    # Only convert if dtype doesn't match to avoid copying
-    x_np = graph["node_feat"]
-    if x_np.dtype == np.float32:
-        x = torch.from_numpy(x_np)  # Zero-copy
-    else:
-        x = torch.from_numpy(x_np).float()  # Creates copy
-    
-    edge_np = graph["edge_index"]
-    if edge_np.dtype == np.int64:
-        edge_index = torch.from_numpy(edge_np)  # Zero-copy
-    else:
-        edge_index = torch.from_numpy(edge_np).long()  # Creates copy
-    
-    y_np = labels
-    if y_np.dtype == np.int64:
-        y = torch.from_numpy(y_np).squeeze()  # Zero-copy
-    else:
-        y = torch.from_numpy(y_np).long().squeeze()  # Creates copy
-
-    num_nodes = x.shape[0]
-    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
-    test_mask[split_idx["test"]] = True
-
-    return Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask), split_idx
+        # Always remove swap
+        subprocess.run(["sudo", "swapoff", str(swap_file)], check=False)
+        swap_file.unlink(missing_ok=True)
+        print("  Temporary swap removed")
 
 
 def main():
