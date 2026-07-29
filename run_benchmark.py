@@ -163,14 +163,23 @@ def validate_ogb_cache():
     """Check if OGB processed cache is valid. Returns True if valid, False if corrupted/missing."""
     processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
     if not processed_dir.exists():
+        print(f"  validate_ogb_cache: {processed_dir} does not exist")
         return False
     
-    # Check for the main data file
-    data_file = processed_dir / "data_processed"
-    if not data_file.exists() or data_file.stat().st_size == 0:
+    # Check for any .pt or .pyg files (OGB's actual cache format)
+    files = list(processed_dir.glob("*.pt")) + list(processed_dir.glob("*.pyg"))
+    if not files:
+        print(f"  validate_ogb_cache: no .pt or .pyg files in {processed_dir}")
         return False
     
-    return True
+    # Check that at least one file is non-empty
+    for f in files:
+        if f.stat().st_size > 0:
+            print(f"  validate_ogb_cache: found {f.name} ({f.stat().st_size} bytes)")
+            return True
+    
+    print(f"  validate_ogb_cache: all cache files are empty")
+    return False
 
 def reset_ogb_cache():
     """Clear corrupted OGB cache and re-download with temporary swap."""
@@ -230,6 +239,7 @@ def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
 
     if oom:
         print(f"  ✗ OOM killed after {wall:.1f}s")
+        print(f"  Subprocess stdout (last 2000 chars):\n{stdout[-2000:]}")
         return {"status": "OOM", "wall_time_s": round(wall, 2)}
     if rc != 0:
         print(f"  ✗ Failed (rc={rc}) after {wall:.1f}s")
@@ -237,6 +247,7 @@ def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
         # Check if this is EOFError (cache corruption)
         if "EOFError" in tail or "Ran out of input" in tail:
             print("  ⚠ Cache corruption detected (EOFError) — will reset for next run")
+        print(f"  Subprocess stdout (last 2000 chars):\n{stdout[-2000:]}")
         print(f"  tail: {tail}")
         return {"status": "ERROR", "return_code": rc, "wall_time_s": round(wall, 2), "tail": tail}
 
