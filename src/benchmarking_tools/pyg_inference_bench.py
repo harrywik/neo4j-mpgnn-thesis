@@ -47,10 +47,30 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
         torch.load = _orig_load
 
     from torch_geometric.data import Data
-    # Use from_numpy to avoid copying — shares memory with OGB's numpy arrays
-    x = torch.from_numpy(graph["node_feat"]).float()
-    edge_index = torch.from_numpy(graph["edge_index"]).long()
-    y = torch.from_numpy(labels).long().squeeze()
+    import numpy as np
+    
+    # Check dtypes to avoid unnecessary copies
+    print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
+    print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
+    
+    # Only convert if dtype doesn't match to avoid copying
+    x_np = graph["node_feat"]
+    if x_np.dtype == np.float32:
+        x = torch.from_numpy(x_np)  # Zero-copy
+    else:
+        x = torch.from_numpy(x_np).float()  # Creates copy
+    
+    edge_np = graph["edge_index"]
+    if edge_np.dtype == np.int64:
+        edge_index = torch.from_numpy(edge_np)  # Zero-copy
+    else:
+        edge_index = torch.from_numpy(edge_np).long()  # Creates copy
+    
+    y_np = labels
+    if y_np.dtype == np.int64:
+        y = torch.from_numpy(y_np).squeeze()  # Zero-copy
+    else:
+        y = torch.from_numpy(y_np).long().squeeze()  # Creates copy
 
     num_nodes = x.shape[0]
     test_mask = torch.zeros(num_nodes, dtype=torch.bool)

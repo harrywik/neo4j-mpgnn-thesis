@@ -212,6 +212,11 @@ def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
     print(f"  INFERENCE [pyg_in_memory] run {run_idx + 1} ({n_nodes} nodes)")
     print(f"{'='*60}")
 
+    # Validate cache before each run
+    if not validate_ogb_cache():
+        print("  Cache corrupted/missing — resetting before this run...")
+        reset_ogb_cache()
+
     out_json = results_dir / f"pyg_inference_run{run_idx}.json"
     cmd = [
         sys.executable, "-m", "benchmarking_tools.pyg_inference_bench",
@@ -229,6 +234,9 @@ def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
     if rc != 0:
         print(f"  ✗ Failed (rc={rc}) after {wall:.1f}s")
         tail = (stderr or stdout or "")[-500:]
+        # Check if this is EOFError (cache corruption)
+        if "EOFError" in tail or "Ran out of input" in tail:
+            print("  ⚠ Cache corruption detected (EOFError) — will reset for next run")
         print(f"  tail: {tail}")
         return {"status": "ERROR", "return_code": rc, "wall_time_s": round(wall, 2), "tail": tail}
 
