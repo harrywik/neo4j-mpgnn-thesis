@@ -47,9 +47,11 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M", loading_mode: str =
     # Check if OGB's processed data exists
     if not processed_file.exists():
         print(f"[pyg_inference] OGB processed data not found — processing with temporary swap...")
-        
-        # Create temporary swap
+
+        # Create temporary swap (clean up any leftover from previous OOM)
         swap_file = Path("/mnt/ssd/ogb_processing_swap")
+        subprocess.run(["sudo", "swapoff", str(swap_file)], check=False)
+        swap_file.unlink(missing_ok=True)
         subprocess.run(["sudo", "fallocate", "-l", "100G", str(swap_file)], check=True)
         subprocess.run(["sudo", "chmod", "600", str(swap_file)], check=True)
         subprocess.run(["sudo", "mkswap", str(swap_file)], check=True)
