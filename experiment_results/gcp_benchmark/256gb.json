@@ -1,0 +1,172 @@
+{
+  "metadata": {
+    "started": "2026-08-01T12:35:08.265763",
+    "n_runs": 10,
+    "n_inference_nodes": 2048,
+    "dataset": "papers100M_bench",
+    "inference_warmup_excluded": 1,
+    "finished": "2026-08-01T13:08:07.662492"
+  },
+  "training": {
+    "pyg_in_memory": {
+      "summary": {
+        "status": "SKIPPED"
+      }
+    },
+    "neo4j_java": {
+      "summary": {
+        "status": "SKIPPED"
+      }
+    }
+  },
+  "inference": {
+    "pyg_in_memory": {
+      "runs": [
+        {
+          "status": "OK",
+          "wall_time_s": 136.06,
+          "inference_time_s": 0.0357,
+          "ms_per_node": 0.0174,
+          "throughput_nodes_per_s": 57398.82
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 197.51,
+          "inference_time_s": 0.0156,
+          "ms_per_node": 0.0076,
+          "throughput_nodes_per_s": 130880.47
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 127.38,
+          "inference_time_s": 0.0373,
+          "ms_per_node": 0.0182,
+          "throughput_nodes_per_s": 54943.41
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 209.44,
+          "inference_time_s": 0.0302,
+          "ms_per_node": 0.0148,
+          "throughput_nodes_per_s": 67728.22
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 126.02,
+          "inference_time_s": 0.0266,
+          "ms_per_node": 0.013,
+          "throughput_nodes_per_s": 76978.36
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 139.01,
+          "inference_time_s": 0.0372,
+          "ms_per_node": 0.0181,
+          "throughput_nodes_per_s": 55122.77
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 132.23,
+          "inference_time_s": 0.0337,
+          "ms_per_node": 0.0165,
+          "throughput_nodes_per_s": 60708.03
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 122.74,
+          "inference_time_s": 0.0368,
+          "ms_per_node": 0.0179,
+          "throughput_nodes_per_s": 55725.96
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 117.62,
+          "inference_time_s": 0.0248,
+          "ms_per_node": 0.0121,
+          "throughput_nodes_per_s": 82437.09
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 123.32,
+          "inference_time_s": 0.0168,
+          "ms_per_node": 0.0082,
+          "throughput_nodes_per_s": 121739.29
+        }
+      ],
+      "summary": {
+        "mean": 0.0288,
+        "n_ok": 9,
+        "n_oom": 0,
+        "n_error": 0,
+        "std": 0.0085
+      }
+    },
+    "neo4j": {
+      "runs": [
+        {
+          "status": "OK",
+          "wall_time_s": 81.91,
+          "in_db_java_time_s": 3.4553
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 47.95,
+          "in_db_java_time_s": 0.1821
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 46.91,
+          "in_db_java_time_s": 0.1583
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 47.27,
+          "in_db_java_time_s": 0.1714
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 50.32,
+          "in_db_java_time_s": 0.1657
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 47.79,
+          "in_db_java_time_s": 0.1643
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 47.12,
+          "in_db_java_time_s": 0.158
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 47.05,
+          "in_db_java_time_s": 0.1582
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 46.95,
+          "in_db_java_time_s": 0.1587
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 46.97,
+          "in_db_java_time_s": 0.1628
+        }
+      ],
+      "summary": {
+        "neighborhood_sampling": {
+          "status": "ERROR",
+          "n_error": 0
+        },
+        "in_db_java": {
+          "mean": 0.1644,
+          "n_ok": 9,
+          "n_oom": 0,
+          "n_error": 0,
+          "std": 0.008
+        }
+      }
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # Cloud
 ips.txt
+ips.tsv
+ips.csv
 
 # Python bytecode
 __pycache__/
