@@ -34,6 +34,7 @@ SKIP_TO=0
 SKIP_PHASES=""  # comma-separated list of phase numbers to skip (e.g., "4,5")
 SKIP_PYG_TRAINING=false
 INFERENCE_ONLY=false
+PYG_LOADING_MODE=""  # full_ram or mmap (passed to run_benchmark.py)
 SSD_DEV=""  # auto-detected in phase 0
 SSD_MOUNT="/mnt/ssd"
 PROJECT_DIR=""  # set after SSD mount
@@ -100,6 +101,7 @@ while [[ $# -gt 0 ]]; do
         --skip-phases) SKIP_PHASES="$2"; shift 2 ;;
         --skip_pyg_training) SKIP_PYG_TRAINING=true; shift ;;
         --inference-only) INFERENCE_ONLY=true; shift ;;
+        --pyg_loading_mode) PYG_LOADING_MODE="$2"; shift 2 ;;
         -h|--help)
             echo "Usage: $0 --ram-tier <256|192|128|96|72|64|48|32|16> [--skip-to N] [--skip-phases 4,5] [--skip_pyg_training] [--inference-only]"
             echo ""
@@ -487,6 +489,9 @@ phase_6_benchmark() {
     fi
     if [[ "$INFERENCE_ONLY" == "true" ]]; then
         bench_cmd="${bench_cmd} --inference_only"
+    fi
+    if [[ -n "${PYG_LOADING_MODE:-}" ]]; then
+        bench_cmd="${bench_cmd} --pyg_loading_mode ${PYG_LOADING_MODE}"
     fi
 
     tmux new-session -d -s benchmark "cd ${PROJECT_DIR} && ${bench_cmd} 2>&1 | tee ${RESULTS_DIR}/benchmark.log"

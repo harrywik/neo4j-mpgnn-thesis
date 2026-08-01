@@ -29,8 +29,12 @@ if str(SRC_DIR) not in sys.path:
 from neo4j_pyg.models.GCN import GCN
 
 
-def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
+def load_ogbn_papers100M(root: str = "data/ogbn-papers100M", loading_mode: str = "full_ram"):
     """Load ogbn-papers100M as a PyG Data object with pre-caching to avoid repeated OOM.
+    
+    Args:
+        root: Data directory
+        loading_mode: "full_ram" (load everything into RAM) or "mmap" (memory-mapped)
     
     First checks for pre-processed cache. If not found, runs OGB with temporary swap.
     Saves components separately to avoid massive single-file serialization.
@@ -47,11 +51,23 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
     
     # Check for pre-processed cache
     if all(f.exists() for f in [x_file, edge_index_file, y_file, test_mask_file]):
-        print(f"[pyg_inference] Loading from pre-processed cache: {cache_dir}")
-        x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
-        edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
-        y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
-        test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        print(f"[pyg_inference] Loading from pre-processed cache: {cache_dir} (mode={loading_mode})")
+        
+        if loading_mode == "mmap":
+            # Memory-mapped: data stays on disk, loaded on-demand
+            x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
+            edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
+            y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
+            test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        else:
+            # Full RAM: load everything into memory
+            print(f"  Loading features into RAM...")
+            x = torch.from_numpy(np.load(x_file))
+            print(f"  Loading edges into RAM...")
+            edge_index = torch.from_numpy(np.load(edge_index_file))
+            print(f"  Loading labels into RAM...")
+            y = torch.from_numpy(np.load(y_file))
+            test_mask = torch.from_numpy(np.load(test_mask_file))
         
         from torch_geometric.data import Data
         data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
@@ -59,7 +75,7 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
         return data, split_idx
     
     # No cache — need to process with swap
-    print("[pyg_inference] No pre-processed cache found — processing with temporary swap...")
+    print(f"[pyg_inference] No pre-processed cache found — processing with temporary swap...")
     
     # Create temporary swap
     swap_file = Path("/mnt/ssd/ogb_processing_swap")
@@ -114,10 +130,16 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
         print(f"[pyg_inference] Cache saved")
         
         # Now load from cache
-        x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
-        edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
-        y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
-        test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        if loading_mode == "mmap":
+            x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
+            edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
+            y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
+            test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        else:
+            x = torch.from_numpy(np.load(x_file))
+            edge_index = torch.from_numpy(np.load(edge_index_file))
+            y = torch.from_numpy(np.load(y_file))
+            test_mask = torch.from_numpy(np.load(test_mask_file))
         
         from torch_geometric.data import Data
         data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
@@ -138,11 +160,14 @@ def main():
     parser.add_argument("--data_root", type=str, default="data/ogbn-papers100M")
     parser.add_argument("--batch_size", type=int, default=512)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--loading_mode", type=str, default="full_ram",
+                        choices=["full_ram", "mmap"],
+                        help="full_ram: load all data into RAM (default), mmap: memory-mapped from disk")
     args = parser.parse_args()
 
-    print(f"[pyg_inference] Loading ogbn-papers100M...")
+    print(f"[pyg_inference] Loading ogbn-papers100M (mode={args.loading_mode})...")
     t_load = time.monotonic()
-    data, split_idx = load_ogbn_papers100M(args.data_root)
+    data, split_idx = load_ogbn_papers100M(args.data_root, loading_mode=args.loading_mode)
     load_time = time.monotonic() - t_load
     print(f"[pyg_inference] Loaded {data.num_nodes} nodes, {data.num_edges} edges in {load_time:.1f}s")
 

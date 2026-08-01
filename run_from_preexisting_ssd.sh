@@ -3,6 +3,7 @@ set -euo pipefail
 
 RAM_TIER="${1:-128}"
 INFERENCE_ONLY="${2:-}"
+PYG_LOADING_MODE="${3:-full_ram}"
 SSD_MOUNT="/mnt/ssd"
 
 # --- Auto-detect 500G SSD partition ---
@@ -71,7 +72,7 @@ fi
 # Run directly - user should already be in tmux or similar
 export DEBIAN_FRONTEND=interactive
 
-EXTRA_ARGS="--skip-phases 4,5 --skip_pyg_training"
+EXTRA_ARGS="--skip-phases 4,5 --skip_pyg_training --pyg_loading_mode $PYG_LOADING_MODE"
 if [[ "$INFERENCE_ONLY" == "inference-only" ]]; then
     EXTRA_ARGS="$EXTRA_ARGS --inference-only"
 fi

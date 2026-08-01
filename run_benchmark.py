@@ -226,10 +226,10 @@ def reset_ogb_cache():
         swap_file.unlink(missing_ok=True)
         print("  Temporary swap removed")
 
-def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
+def run_pyg_inference(run_idx, results_dir, n_nodes=2048, loading_mode="full_ram"):
     """Run PyG-only inference on n_nodes seed nodes."""
     print(f"\n{'='*60}")
-    print(f"  INFERENCE [pyg_in_memory] run {run_idx + 1} ({n_nodes} nodes)")
+    print(f"  INFERENCE [pyg_in_memory:{loading_mode}] run {run_idx + 1} ({n_nodes} nodes)")
     print(f"{'='*60}")
 
     # Validate cache before each run
@@ -242,6 +242,7 @@ def run_pyg_inference(run_idx, results_dir, n_nodes=2048):
         sys.executable, "-m", "benchmarking_tools.pyg_inference_bench",
         "--n_nodes", str(n_nodes),
         "--output_json", str(out_json),
+        "--loading_mode", loading_mode,
     ]
 
     t0 = time.monotonic()
@@ -396,6 +397,9 @@ def main():
                         help="Skip PyG in-memory training (expected OOM on large datasets)")
     parser.add_argument("--inference_only", action="store_true",
                         help="Skip all training; run only PyG and Neo4j inference")
+    parser.add_argument("--pyg_loading_mode", type=str, default="full_ram",
+                        choices=["full_ram", "mmap"],
+                        help="PyG data loading mode: full_ram (default) or mmap (memory-mapped)")
     args = parser.parse_args()
 
     results_dir = Path(args.results_dir)
@@ -465,7 +469,7 @@ def main():
     
     pyg_inf_runs = []
     for i in range(n_runs):
-        r = run_pyg_inference(i, results_dir, n_nodes=args.n_nodes)
+        r = run_pyg_inference(i, results_dir, n_nodes=args.n_nodes, loading_mode=args.pyg_loading_mode)
         pyg_inf_runs.append(r)
     all_results["inference"]["pyg_in_memory"] = {
         "runs": pyg_inf_runs,
