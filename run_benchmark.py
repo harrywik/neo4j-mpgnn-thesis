@@ -341,15 +341,19 @@ def run_neo4j_inference(run_idx, results_dir, strategies=None, n_nodes=2048):
 # Aggregation
 # ---------------------------------------------------------------------------
 
-def aggregate_runs(runs, time_key):
+def aggregate_runs(runs, time_key, skip_first_n=0):
     """Compute mean ± std from a list of run dicts.
+
+    skip_first_n: number of initial runs to exclude from aggregation (e.g. warmup).
+                  They are still counted in n_oom/n_error if they failed.
 
     Returns {"mean": ..., "std": ..., "n_ok": ..., "n_oom": ..., "n_error": ...}
     or {"status": "OOM"/"ERROR"} if no runs succeeded.
     """
-    ok = [r for r in runs if r.get("status") == "OK" and time_key in r]
-    n_oom = sum(1 for r in runs if r.get("status") == "OOM")
-    n_err = sum(1 for r in runs if r.get("status") == "ERROR")
+    eligible = runs[skip_first_n:]
+    ok = [r for r in eligible if r.get("status") == "OK" and time_key in r]
+    n_oom = sum(1 for r in eligible if r.get("status") == "OOM")
+    n_err = sum(1 for r in eligible if r.get("status") == "ERROR")
 
     if not ok:
         if n_oom > 0:
@@ -407,6 +411,7 @@ def main():
             "n_runs": n_runs,
             "n_inference_nodes": args.n_nodes,
             "dataset": dataset,
+            "inference_warmup_excluded": 1,
         },
         "training": {},
         "inference": {},
@@ -457,9 +462,10 @@ def main():
     for i in range(n_runs):
         r = run_pyg_inference(i, results_dir, n_nodes=args.n_nodes, loading_mode=args.pyg_loading_mode)
         pyg_inf_runs.append(r)
+    print(f"  Excluding first PyG inference run as warmup")
     all_results["inference"]["pyg_in_memory"] = {
         "runs": pyg_inf_runs,
-        "summary": aggregate_runs(pyg_inf_runs, "inference_time_s"),
+        "summary": aggregate_runs(pyg_inf_runs, "inference_time_s", skip_first_n=1),
     }
 
     # ---- Inference: Neo4j (neighborhood_sampling + in_db_java) ----
@@ -473,11 +479,12 @@ def main():
             n_nodes=args.n_nodes,
         )
         neo4j_inf_runs.append(r)
+    print(f"  Excluding first Neo4j inference run as warmup")
     all_results["inference"]["neo4j"] = {
         "runs": neo4j_inf_runs,
         "summary": {
-            "neighborhood_sampling": aggregate_runs(neo4j_inf_runs, "neighborhood_sampling_time_s"),
-            "in_db_java": aggregate_runs(neo4j_inf_runs, "in_db_java_time_s"),
+            "neighborhood_sampling": aggregate_runs(neo4j_inf_runs, "neighborhood_sampling_time_s", skip_first_n=1),
+            "in_db_java": aggregate_runs(neo4j_inf_runs, "in_db_java_time_s", skip_first_n=1),
         },
     }
 

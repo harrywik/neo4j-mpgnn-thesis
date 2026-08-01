@@ -483,7 +483,7 @@ phase_6_benchmark() {
     export URI USERNAME PASSWORD NEO4J_PLUGINS_DIR NEO4J_GNN_MODEL_DIR
     mkdir -p "$RESULTS_DIR"
 
-    local bench_cmd="PYTHONPATH=src ${PY} run_benchmark.py --results_dir ${RESULTS_DIR} --n_runs 3 --n_nodes 2048"
+    local bench_cmd="PYTHONPATH=src ${PY} run_benchmark.py --results_dir ${RESULTS_DIR} --n_runs 10 --n_nodes 2048"
     if [[ "$SKIP_PYG_TRAINING" == "true" ]]; then
         bench_cmd="${bench_cmd} --skip_pyg_training"
     fi
