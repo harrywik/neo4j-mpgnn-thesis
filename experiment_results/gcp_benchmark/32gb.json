@@ -1,0 +1,157 @@
+{
+  "metadata": {
+    "started": "2026-08-01T13:36:33.045894",
+    "n_runs": 10,
+    "n_inference_nodes": 2048,
+    "dataset": "papers100M_bench",
+    "inference_warmup_excluded": 1,
+    "finished": "2026-08-01T15:43:06.770862"
+  },
+  "training": {
+    "pyg_in_memory": {
+      "summary": {
+        "status": "SKIPPED"
+      }
+    },
+    "neo4j_java": {
+      "summary": {
+        "status": "SKIPPED"
+      }
+    }
+  },
+  "inference": {
+    "pyg_in_memory": {
+      "runs": [
+        {
+          "status": "OOM",
+          "wall_time_s": 1187.67
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 9.46,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.66,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.79,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.62,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 9.1,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.84,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 9.09,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.57,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        },
+        {
+          "status": "ERROR",
+          "return_code": 1,
+          "wall_time_s": 8.84,
+          "tail": "ssd/neo4j-mpgnn-thesis/src/benchmarking_tools/pyg_inference_bench.py\", line 53, in load_ogbn_papers100M\n    subprocess.run([\"sudo\", \"fallocate\", \"-l\", \"100G\", str(swap_file)], check=True)\n  File \"/root/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/subprocess.py\", line 571, in run\n    raise CalledProcessError(retcode, process.args,\nsubprocess.CalledProcessError: Command '['sudo', 'fallocate', '-l', '100G', '/mnt/ssd/ogb_processing_swap']' returned non-zero exit status 1.\n"
+        }
+      ],
+      "summary": {
+        "status": "ERROR",
+        "n_error": 9
+      }
+    },
+    "neo4j": {
+      "runs": [
+        {
+          "status": "OK",
+          "wall_time_s": 137.78,
+          "in_db_java_time_s": 5.1372
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 111.55,
+          "in_db_java_time_s": 1.2623
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 105.88,
+          "in_db_java_time_s": 0.7161
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 97.2,
+          "in_db_java_time_s": 0.8162
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 89.15,
+          "in_db_java_time_s": 0.781
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 85.16,
+          "in_db_java_time_s": 0.8736
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 86.3,
+          "in_db_java_time_s": 0.9363
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 78.87,
+          "in_db_java_time_s": 0.5337
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 78.9,
+          "in_db_java_time_s": 0.3493
+        },
+        {
+          "status": "OK",
+          "wall_time_s": 77.12,
+          "in_db_java_time_s": 0.3848
+        }
+      ],
+      "summary": {
+        "neighborhood_sampling": {
+          "status": "ERROR",
+          "n_error": 0
+        },
+        "in_db_java": {
+          "mean": 0.7393,
+          "n_ok": 9,
+          "n_oom": 0,
+          "n_error": 0,
+          "std": 0.2869
+        }
+      }
+    }
+  }
+}
