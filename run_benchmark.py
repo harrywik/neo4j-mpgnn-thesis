@@ -161,24 +161,21 @@ def run_training_variant(implementation, dataset, run_idx, results_dir):
 
 def validate_ogb_cache():
     """Check if OGB processed cache is valid. Returns True if valid, False if corrupted/missing."""
-    processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
-    if not processed_dir.exists():
-        print(f"  validate_ogb_cache: {processed_dir} does not exist")
-        return False
-    
-    # Check for any .pt or .pyg files (OGB's actual cache format)
-    files = list(processed_dir.glob("*.pt")) + list(processed_dir.glob("*.pyg"))
-    if not files:
-        print(f"  validate_ogb_cache: no .pt or .pyg files in {processed_dir}")
-        return False
-    
-    # Check that at least one file is non-empty
-    for f in files:
-        if f.stat().st_size > 0:
-            print(f"  validate_ogb_cache: found {f.name} ({f.stat().st_size} bytes)")
+    # Check for new numpy-based cache
+    cache_dir = Path("data/ogbn-papers100M/preprocessed_cache")
+    if cache_dir.exists():
+        required_files = ["x.npy", "edge_index.npy", "y.npy", "test_mask.npy"]
+        if all((cache_dir / f).exists() for f in required_files):
+            print(f"  validate_ogb_cache: found numpy cache in {cache_dir}")
             return True
     
-    print(f"  validate_ogb_cache: all cache files are empty")
+    # Check for old torch cache
+    old_cache = Path("data/ogbn-papers100M/papers100M_preprocessed.pt")
+    if old_cache.exists() and old_cache.stat().st_size > 0:
+        print(f"  validate_ogb_cache: found old torch cache")
+        return True
+    
+    print(f"  validate_ogb_cache: no valid cache found")
     return False
 
 def reset_ogb_cache():
@@ -186,6 +183,20 @@ def reset_ogb_cache():
     import shutil
     
     print("\n[OGB cache corrupted or missing — resetting...]")
+    
+    # Clear new numpy cache
+    cache_dir = Path("data/ogbn-papers100M/preprocessed_cache")
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+        print(f"  Cleared {cache_dir}")
+    
+    # Clear old torch cache
+    old_cache = Path("data/ogbn-papers100M/papers100M_preprocessed.pt")
+    if old_cache.exists():
+        old_cache.unlink()
+        print(f"  Cleared {old_cache}")
+    
+    # Clear OGB processed directory
     processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
     if processed_dir.exists():
         shutil.rmtree(processed_dir)

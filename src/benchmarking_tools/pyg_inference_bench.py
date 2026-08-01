@@ -33,18 +33,29 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
     """Load ogbn-papers100M as a PyG Data object with pre-caching to avoid repeated OOM.
     
     First checks for pre-processed cache. If not found, runs OGB with temporary swap.
+    Saves components separately to avoid massive single-file serialization.
     """
     import subprocess
+    import numpy as np
     from pathlib import Path
     
-    cache_file = Path(root) / "papers100M_preprocessed.pt"
+    cache_dir = Path(root) / "preprocessed_cache"
+    x_file = cache_dir / "x.npy"
+    edge_index_file = cache_dir / "edge_index.npy"
+    y_file = cache_dir / "y.npy"
+    test_mask_file = cache_dir / "test_mask.npy"
     
     # Check for pre-processed cache
-    if cache_file.exists():
-        print(f"[pyg_inference] Loading from pre-processed cache: {cache_file}")
-        data = torch.load(cache_file)
-        # Reconstruct split_idx from test_mask
-        split_idx = {"test": data.test_mask.nonzero(as_tuple=False).squeeze(-1)}
+    if all(f.exists() for f in [x_file, edge_index_file, y_file, test_mask_file]):
+        print(f"[pyg_inference] Loading from pre-processed cache: {cache_dir}")
+        x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
+        edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
+        y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
+        test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        
+        from torch_geometric.data import Data
+        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
+        split_idx = {"test": test_mask.nonzero(as_tuple=False).squeeze(-1)}
         return data, split_idx
     
     # No cache — need to process with swap
@@ -73,42 +84,43 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M"):
         finally:
             torch.load = _orig_load
 
-        from torch_geometric.data import Data
-        import numpy as np
-
         # Check dtypes to avoid unnecessary copies
         print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
         print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
-
-        # Only convert if dtype doesn't match to avoid copying
-        x_np = graph["node_feat"]
-        if x_np.dtype == np.float32:
-            x = torch.from_numpy(x_np)  # Zero-copy
-        else:
-            x = torch.from_numpy(x_np).float()  # Creates copy
-
-        edge_np = graph["edge_index"]
-        if edge_np.dtype == np.int64:
-            edge_index = torch.from_numpy(edge_np)  # Zero-copy
-        else:
-            edge_index = torch.from_numpy(edge_np).long()  # Creates copy
-
-        y_np = labels
-        if y_np.dtype == np.int64:
-            y = torch.from_numpy(y_np).squeeze()  # Zero-copy
-        else:
-            y = torch.from_numpy(y_np).long().squeeze()  # Creates copy
-
-        num_nodes = x.shape[0]
-        test_mask = torch.zeros(num_nodes, dtype=torch.bool)
-        test_mask[split_idx["test"]] = True
-
-        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
         
-        # Save pre-processed cache
-        print(f"[pyg_inference] Saving pre-processed cache to {cache_file}...")
-        torch.save(data, cache_file)
-        print(f"[pyg_inference] Cache saved ({cache_file.stat().st_size / 1e9:.1f} GB)")
+        # Save components separately to avoid massive serialization
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        print(f"[pyg_inference] Saving components to {cache_dir}...")
+        
+        # Save features
+        print(f"  Saving features ({graph['node_feat'].nbytes / 1e9:.1f} GB)...")
+        np.save(x_file, graph["node_feat"])
+        
+        # Save edges
+        print(f"  Saving edges ({graph['edge_index'].nbytes / 1e9:.1f} GB)...")
+        np.save(edge_index_file, graph["edge_index"])
+        
+        # Save labels
+        print(f"  Saving labels...")
+        np.save(y_file, labels.squeeze())
+        
+        # Save test mask
+        num_nodes = graph["node_feat"].shape[0]
+        test_mask = np.zeros(num_nodes, dtype=bool)
+        test_mask[split_idx["test"]] = True
+        print(f"  Saving test mask...")
+        np.save(test_mask_file, test_mask)
+        
+        print(f"[pyg_inference] Cache saved")
+        
+        # Now load from cache
+        x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
+        edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
+        y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
+        test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
+        
+        from torch_geometric.data import Data
+        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
         
         return data, split_idx
         
