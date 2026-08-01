@@ -161,18 +161,10 @@ def run_training_variant(implementation, dataset, run_idx, results_dir):
 
 def validate_ogb_cache():
     """Check if OGB processed cache is valid. Returns True if valid, False if corrupted/missing."""
-    # Check for new numpy-based cache
-    cache_dir = Path("data/ogbn-papers100M/preprocessed_cache")
-    if cache_dir.exists():
-        required_files = ["x.npy", "edge_index.npy", "y.npy", "test_mask.npy"]
-        if all((cache_dir / f).exists() for f in required_files):
-            print(f"  validate_ogb_cache: found numpy cache in {cache_dir}")
-            return True
-    
-    # Check for old torch cache
-    old_cache = Path("data/ogbn-papers100M/papers100M_preprocessed.pt")
-    if old_cache.exists() and old_cache.stat().st_size > 0:
-        print(f"  validate_ogb_cache: found old torch cache")
+    # Check for OGB's native processed file
+    processed_file = Path("data/ogbn-papers100M/ogbn_papers100M/processed/data_processed")
+    if processed_file.exists() and processed_file.stat().st_size > 0:
+        print(f"  validate_ogb_cache: found OGB processed data ({processed_file.stat().st_size / 1e9:.1f} GB)")
         return True
     
     print(f"  validate_ogb_cache: no valid cache found")
@@ -184,23 +176,17 @@ def reset_ogb_cache():
     
     print("\n[OGB cache corrupted or missing — resetting...]")
     
-    # Clear new numpy cache
-    cache_dir = Path("data/ogbn-papers100M/preprocessed_cache")
-    if cache_dir.exists():
-        shutil.rmtree(cache_dir)
-        print(f"  Cleared {cache_dir}")
-    
-    # Clear old torch cache
-    old_cache = Path("data/ogbn-papers100M/papers100M_preprocessed.pt")
-    if old_cache.exists():
-        old_cache.unlink()
-        print(f"  Cleared {old_cache}")
-    
     # Clear OGB processed directory
     processed_dir = Path("data/ogbn-papers100M/ogbn_papers100M/processed")
     if processed_dir.exists():
         shutil.rmtree(processed_dir)
         print(f"  Cleared {processed_dir}")
+    
+    # Clear our custom cache (if exists)
+    cache_dir = Path("data/ogbn-papers100M/preprocessed_cache")
+    if cache_dir.exists():
+        shutil.rmtree(cache_dir)
+        print(f"  Cleared {cache_dir}")
     
     # Create temporary swap for reprocessing
     swap_file = Path("/mnt/ssd/temp_swap")

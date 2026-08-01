@@ -30,67 +30,58 @@ from neo4j_pyg.models.GCN import GCN
 
 
 def load_ogbn_papers100M(root: str = "data/ogbn-papers100M", loading_mode: str = "full_ram"):
-    """Load ogbn-papers100M as a PyG Data object with pre-caching to avoid repeated OOM.
+    """Load ogbn-papers100M as a PyG Data object.
     
     Args:
         root: Data directory
         loading_mode: "full_ram" (load everything into RAM) or "mmap" (memory-mapped)
     
-    First checks for pre-processed cache. If not found, runs OGB with temporary swap.
-    Saves components separately to avoid massive single-file serialization.
+    Uses OGB's native processed cache. If not found, processes with temporary swap.
     """
     import subprocess
     import numpy as np
     from pathlib import Path
     
-    cache_dir = Path(root) / "preprocessed_cache"
-    x_file = cache_dir / "x.npy"
-    edge_index_file = cache_dir / "edge_index.npy"
-    y_file = cache_dir / "y.npy"
-    test_mask_file = cache_dir / "test_mask.npy"
+    processed_file = Path(root) / "ogbn_papers100M" / "processed" / "data_processed"
     
-    # Check for pre-processed cache
-    if all(f.exists() for f in [x_file, edge_index_file, y_file, test_mask_file]):
-        print(f"[pyg_inference] Loading from pre-processed cache: {cache_dir} (mode={loading_mode})")
+    # Check if OGB's processed data exists
+    if not processed_file.exists():
+        print(f"[pyg_inference] OGB processed data not found — processing with temporary swap...")
         
-        if loading_mode == "mmap":
-            # Memory-mapped: data stays on disk, loaded on-demand
-            x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
-            edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
-            y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
-            test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
-        else:
-            # Full RAM: load everything into memory
-            print(f"  Loading features into RAM...")
-            x = torch.from_numpy(np.load(x_file))
-            print(f"  Loading edges into RAM...")
-            edge_index = torch.from_numpy(np.load(edge_index_file))
-            print(f"  Loading labels into RAM...")
-            y = torch.from_numpy(np.load(y_file))
-            test_mask = torch.from_numpy(np.load(test_mask_file))
+        # Create temporary swap
+        swap_file = Path("/mnt/ssd/ogb_processing_swap")
+        subprocess.run(["sudo", "fallocate", "-l", "100G", str(swap_file)], check=True)
+        subprocess.run(["sudo", "chmod", "600", str(swap_file)], check=True)
+        subprocess.run(["sudo", "mkswap", str(swap_file)], check=True)
+        subprocess.run(["sudo", "swapon", str(swap_file)], check=True)
+        print("  Temporary swap enabled")
         
-        from torch_geometric.data import Data
-        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
-        split_idx = {"test": test_mask.nonzero(as_tuple=False).squeeze(-1)}
-        return data, split_idx
-    
-    # No cache — need to process with swap
-    print(f"[pyg_inference] No pre-processed cache found — processing with temporary swap...")
-    
-    # Create temporary swap
-    swap_file = Path("/mnt/ssd/ogb_processing_swap")
-    subprocess.run(["sudo", "fallocate", "-l", "100G", str(swap_file)], check=True)
-    subprocess.run(["sudo", "chmod", "600", str(swap_file)], check=True)
-    subprocess.run(["sudo", "mkswap", str(swap_file)], check=True)
-    subprocess.run(["sudo", "swapon", str(swap_file)], check=True)
-    print("  Temporary swap enabled")
-    
-    try:
+        try:
+            from ogb.nodeproppred import NodePropPredDataset
+
+            # Ensure processed/ exists — OGB won't create it itself
+            Path(root, "ogbn_papers100M", "processed").mkdir(parents=True, exist_ok=True)
+
+            _orig_load = torch.load
+            torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
+            try:
+                dataset = NodePropPredDataset(name="ogbn-papers100M", root=root)
+                graph, labels = dataset[0]
+                split_idx = dataset.get_idx_split()
+            finally:
+                torch.load = _orig_load
+            
+            print(f"[pyg_inference] OGB processing complete")
+            
+        finally:
+            # Always remove swap
+            subprocess.run(["sudo", "swapoff", str(swap_file)], check=False)
+            swap_file.unlink(missing_ok=True)
+            print("  Temporary swap removed")
+    else:
+        print(f"[pyg_inference] Loading from OGB processed cache: {processed_file}")
         from ogb.nodeproppred import NodePropPredDataset
-
-        # Ensure processed/ exists — OGB won't create it itself
-        Path(root, "ogbn_papers100M", "processed").mkdir(parents=True, exist_ok=True)
-
+        
         _orig_load = torch.load
         torch.load = lambda *a, **kw: _orig_load(*a, **{**kw, "weights_only": False})
         try:
@@ -100,57 +91,44 @@ def load_ogbn_papers100M(root: str = "data/ogbn-papers100M", loading_mode: str =
         finally:
             torch.load = _orig_load
 
-        # Check dtypes to avoid unnecessary copies
-        print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
-        print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
-        
-        # Save components separately to avoid massive serialization
-        cache_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[pyg_inference] Saving components to {cache_dir}...")
-        
-        # Save features
-        print(f"  Saving features ({graph['node_feat'].nbytes / 1e9:.1f} GB)...")
-        np.save(x_file, graph["node_feat"])
-        
-        # Save edges
-        print(f"  Saving edges ({graph['edge_index'].nbytes / 1e9:.1f} GB)...")
-        np.save(edge_index_file, graph["edge_index"])
-        
-        # Save labels
-        print(f"  Saving labels...")
-        np.save(y_file, labels.squeeze())
-        
-        # Save test mask
-        num_nodes = graph["node_feat"].shape[0]
-        test_mask = np.zeros(num_nodes, dtype=bool)
-        test_mask[split_idx["test"]] = True
-        print(f"  Saving test mask...")
-        np.save(test_mask_file, test_mask)
-        
-        print(f"[pyg_inference] Cache saved")
-        
-        # Now load from cache
-        if loading_mode == "mmap":
-            x = torch.from_numpy(np.load(x_file, mmap_mode='r'))
-            edge_index = torch.from_numpy(np.load(edge_index_file, mmap_mode='r'))
-            y = torch.from_numpy(np.load(y_file, mmap_mode='r'))
-            test_mask = torch.from_numpy(np.load(test_mask_file, mmap_mode='r'))
-        else:
-            x = torch.from_numpy(np.load(x_file))
-            edge_index = torch.from_numpy(np.load(edge_index_file))
-            y = torch.from_numpy(np.load(y_file))
-            test_mask = torch.from_numpy(np.load(test_mask_file))
-        
-        from torch_geometric.data import Data
-        data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
-        
-        return data, split_idx
-        
-    finally:
-        # Always remove swap
-        subprocess.run(["sudo", "swapoff", str(swap_file)], check=False)
-        swap_file.unlink(missing_ok=True)
-        print("  Temporary swap removed")
+    # Check dtypes to avoid unnecessary copies
+    print(f"  node_feat dtype: {graph['node_feat'].dtype}, shape: {graph['node_feat'].shape}")
+    print(f"  edge_index dtype: {graph['edge_index'].dtype}, shape: {graph['edge_index'].shape}")
+    
+    # Convert to torch tensors
+    if loading_mode == "mmap":
+        # For mmap mode, we need to save to disk and load with mmap
+        # But OGB already loaded into memory, so we can't avoid the copy here
+        # This mode is mainly useful if we had pre-saved numpy files
+        print(f"  Warning: mmap mode not fully supported with OGB native loading, using full_ram")
+    
+    # Zero-copy conversion if dtypes match
+    x_np = graph["node_feat"]
+    if x_np.dtype == np.float32:
+        x = torch.from_numpy(x_np)  # Zero-copy
+    else:
+        x = torch.from_numpy(x_np).float()  # Creates copy
+    
+    edge_np = graph["edge_index"]
+    if edge_np.dtype == np.int64:
+        edge_index = torch.from_numpy(edge_np)  # Zero-copy
+    else:
+        edge_index = torch.from_numpy(edge_np).long()  # Creates copy
+    
+    y_np = labels
+    if y_np.dtype == np.int64:
+        y = torch.from_numpy(y_np).squeeze()  # Zero-copy
+    else:
+        y = torch.from_numpy(y_np).long().squeeze()  # Creates copy
+
+    num_nodes = x.shape[0]
+    test_mask = torch.zeros(num_nodes, dtype=torch.bool)
+    test_mask[split_idx["test"]] = True
+
+    from torch_geometric.data import Data
+    data = Data(x=x, edge_index=edge_index, y=y, test_mask=test_mask)
+    
+    return data, split_idx
 
 
 def main():
